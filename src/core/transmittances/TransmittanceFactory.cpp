@@ -8,6 +8,7 @@
 #include "LinearTransmittance.hpp"
 #include "DavisTransmittance.hpp"
 #include "PulseTransmittance.hpp"
+#include "TabulatedTransmittance.hpp"
 
 namespace Tungsten {
 
@@ -21,6 +22,7 @@ DEFINE_STRINGABLE_ENUM(TransmittanceFactory, "transmittance", ({
     {"davis_weinstein", std::make_shared<DavisWeinsteinTransmittance>},
     {"pulse", std::make_shared<PulseTransmittance>},
     {"interpolated", std::make_shared<InterpolatedTransmittance>},
+    {"tabulated", std::make_shared<TabulatedTransmittance>},
 }))
 
 }
