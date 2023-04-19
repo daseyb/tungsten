@@ -117,6 +117,21 @@ std::shared_ptr<Primitive> Scene::fetchPrimitive(JsonPtr value) const
     return instantiate<Primitive>(value, *this);
 }
 
+std::shared_ptr<MeanFunction> Scene::fetchMeanFunction(JsonPtr value) const
+{
+    return instantiate<MeanFunction>(value, *this);
+}
+
+std::shared_ptr<CovarianceFunction> Scene::fetchCovarianceFunction(JsonPtr value) const
+{
+    return instantiate<CovarianceFunction>(value, *this);
+}
+
+std::shared_ptr<GaussianProcess> Scene::fetchGaussianProcess(JsonPtr value) const
+{
+    return instantiate<GaussianProcess>(value, *this);
+}
+
 std::shared_ptr<Bsdf> Scene::fetchBsdf(JsonPtr value) const
 {
     using namespace std::placeholders;

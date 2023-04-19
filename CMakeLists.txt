@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.11)
+cmake_minimum_required(VERSION 2.8.12)
 project(Tungsten)
 
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
@@ -81,21 +81,16 @@ add_library(thirdparty STATIC
 		src/thirdparty/skylight/ArHosekSkyModel.cpp
 		src/thirdparty/tribox/tribox.cpp)
 
+add_subdirectory(src/thirdparty/eigen)
+#include_directories(${EIGEN3_INCLUDE_DIR})
+
 if (CMAKE_COMPILER_IS_GNUCXX)
     set(CXX_WARNINGS "-Wall -Wextra -Wpointer-arith -Wcast-align -fstrict-aliasing -Wno-unused-local-typedefs -Wno-misleading-indentation -Wno-maybe-uninitialized -Wno-int-in-bool-context -Wno-implicit-fallthrough -Wno-class-memaccess")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARNINGS} -fvisibility-inlines-hidden")
 endif()
-set(core_libs core thirdparty embree)
+set(core_libs core thirdparty embree Eigen3::Eigen)
 
-include_directories(src/core src/thirdparty src/thirdparty/embree/include src)
-
-find_package(Eigen3)
-if (EIGEN3_FOUND)
-    include_directories(${EIGEN3_INCLUDE_DIR})
-    message(STATUS "Eigen3 detected. denoiser will be built")
-else()
-    message(STATUS "No Eigen3 detected. denoiser will not be built")
-endif()
+include_directories(src/core src/thirdparty src/thirdparty/embree/include src src/thirdparty/eigen/)
 
 find_package(OpenEXR)
 if (OPENEXR_FOUND)

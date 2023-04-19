@@ -4,6 +4,7 @@
 #include "AtmosphericMedium.hpp"
 #include "ExponentialMedium.hpp"
 #include "VoxelMedium.hpp"
+#include "GaussianProcessMedium.hpp"
 
 namespace Tungsten {
 
@@ -12,6 +13,7 @@ DEFINE_STRINGABLE_ENUM(MediumFactory, "medium", ({
     {"atmosphere", std::make_shared<AtmosphericMedium>},
     {"exponential", std::make_shared<ExponentialMedium>},
     {"voxel", std::make_shared<VoxelMedium>},
+    {"gaussian_process", std::make_shared<GaussianProcessMedium>},
 }))
 
 }

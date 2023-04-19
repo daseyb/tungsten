@@ -15,6 +15,8 @@
 
 #include "transmittances/Transmittance.hpp"
 
+#include "math/GaussianProcess.hpp"
+
 #include "phasefunctions/PhaseFunction.hpp"
 
 #include "integrators/Integrator.hpp"
@@ -75,6 +77,10 @@ public:
     std::shared_ptr<Primitive> fetchPrimitive(JsonPtr value) const;
     std::shared_ptr<Bsdf> fetchBsdf(JsonPtr value) const;
     std::shared_ptr<Texture> fetchTexture(JsonPtr value, TexelConversion conversion) const;
+    std::shared_ptr<MeanFunction> fetchMeanFunction(JsonPtr value) const;
+    std::shared_ptr<CovarianceFunction> fetchCovarianceFunction(JsonPtr value) const;
+    std::shared_ptr<GaussianProcess> fetchGaussianProcess(JsonPtr value) const;
+
     PathPtr fetchResource(const std::string &path) const;
     PathPtr fetchResource(JsonPtr v) const;
 
