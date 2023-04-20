@@ -121,19 +121,16 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
     if (ray.farT() == Ray::infinity())
         return Vec3f(0.0f);
 
-    std::vector<Vec3f> points;
-    points.reserve(20);
+    std::array<Vec3f, 40> points;
+    std::array<Derivative, 40> derivs;
 
-    std::vector<Derivative> derivs;
-    derivs.reserve(20);
-
-    for (int i = 0; i < 20; i++) {
-        float t = lerp(ray.nearT(), ray.farT(),  i / 20.f);
-        points.push_back(ray.pos() + t * ray.dir());
-        derivs.push_back(Derivative::None);
+    for (int i = 0; i < points.size(); i++) {
+        float t = lerp(ray.nearT(), ray.farT(),  float(i) / points.size());
+        points[i] = ray.pos() + t * ray.dir();
+        derivs[i] = Derivative::None;
     }
 
-    Eigen::MatrixXf gpSamples = _gp->sample(points, derivs, {}, {}, {}, ray.dir(), 1, sampler);
+    Eigen::MatrixXf gpSamples = _gp->sample(points.data(), derivs.data(), points.size(), {}, {}, {}, ray.dir(), 1, sampler);
 
     int madeItCnt = 0;
     for (int s = 0; s < gpSamples.cols(); s++) {

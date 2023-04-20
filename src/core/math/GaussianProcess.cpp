@@ -23,17 +23,17 @@ rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
     };
 }
 
-Eigen::MatrixXf GaussianProcess::sample(const std::vector<Vec3f>& points, const std::vector<Derivative>& derivative_types,
+Eigen::MatrixXf GaussianProcess::sample(const Vec3f* points, const Derivative* derivative_types, int numPts,
     const std::vector<Vec3f>& cond_points, const std::vector<float>& cond_values, const std::vector<Derivative>& cond_derivative_types, Vec3f deriv_dir, int samples,
     PathSampleGenerator& sampler) {
 
-    Eigen::VectorXf ps_mean(points.size());
-    Eigen::MatrixXf ps_cov(points.size(), points.size());
+    Eigen::VectorXf ps_mean(numPts);
+    Eigen::MatrixXf ps_cov(numPts, numPts);
 
-    for (size_t i = 0; i < points.size(); i++) {
+    for (size_t i = 0; i < numPts; i++) {
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
 
-        for (size_t j = 0; j < points.size(); j++) {
+        for (size_t j = 0; j < numPts; j++) {
             ps_cov(i, j) = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j]);
         }
     }
@@ -41,7 +41,6 @@ Eigen::MatrixXf GaussianProcess::sample(const std::vector<Vec3f>& points, const 
     Eigen::MatrixXf s = sample_multivariate_normal(ps_mean, ps_cov, samples, sampler);
 
     return s;
-
 }
 
 
@@ -103,19 +102,22 @@ Vec2f GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) {
 
 Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(const Eigen::VectorXf& mean, const Eigen::MatrixXf& cov, int samples, PathSampleGenerator& sampler) {
 
-    // Generate a vector of standard normal variates with the same dimension as the mean
-    Eigen::MatrixXf z = Eigen::MatrixXf::Zero(mean.size(), samples);
-    for (int j = 0; j < samples; j++) {
-        for (int i = 0; i < mean.size(); i += 2) {
-            Vec2f norm_samp = { (float)random_standard_normal(sampler), (float)random_standard_normal(sampler) };
-            z(i, j) = norm_samp.x();
-            z(i + 1, j) = norm_samp.y();
-        }
-    }
-
     // Use the Cholesky decomposition to transform the standard normal vector to the desired multivariate normal distribution
     Eigen::LLT<Eigen::MatrixXf> chol(cov);
-    Eigen::MatrixXf sample = mean.replicate(1, samples) + chol.matrixL() * z * 0.01f;
+
+    // Generate a vector of standard normal variates with the same dimension as the mean
+    Eigen::VectorXf z = Eigen::VectorXf::Zero(mean.size());
+    Eigen::MatrixXf sample(mean.size(), samples);
+
+    for (int j = 0; j < samples; j++) {
+        for (int i = 0; i < mean.size(); i += 2) {
+            Vec2f norm_samp = rand_normal_2(sampler);  //{ (float)random_standard_normal(sampler), (float)random_standard_normal(sampler) };
+            z(i) = norm_samp.x();
+            z(i + 1) = norm_samp.y();
+        }
+
+        sample.col(j) = mean + chol.matrixL() * z * 0.01f;
+    }
 
     return sample;
 }

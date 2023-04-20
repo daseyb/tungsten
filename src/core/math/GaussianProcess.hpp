@@ -167,7 +167,7 @@ namespace Tungsten {
         virtual void fromJson(JsonPtr value, const Scene& scene) override;
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
 
-        Eigen::MatrixXf sample(const std::vector<Vec3f>& points, const std::vector<Derivative>& derivative_types,
+        Eigen::MatrixXf sample(const Vec3f* points, const Derivative* derivative_types, int numPts,
             const std::vector<Vec3f>& cond_points, const std::vector<float>& cond_values, const std::vector<Derivative>& cond_derivative_types, Vec3f deriv_dir, int samples,
             PathSampleGenerator& sampler);
 
