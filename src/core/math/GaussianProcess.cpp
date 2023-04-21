@@ -104,6 +104,22 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(const Eigen::VectorX
 
     // Use the Cholesky decomposition to transform the standard normal vector to the desired multivariate normal distribution
     Eigen::LLT<Eigen::MatrixXf> chol(cov);
+    Eigen::MatrixXf normTransform;
+
+    // We can only use the cholesky decomposition if 
+      // the covariance matrix is symmetric, pos-definite.
+      // But a covariance matrix might be pos-semi-definite.
+      // In that case, we'll go to an EigenSolver
+    if (chol.info() == Eigen::Success) {
+        // Use cholesky solver
+        normTransform = chol.matrixL();
+    }
+    else {
+        // Use eigen solver
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> eigenSolver(cov);
+        normTransform = eigenSolver.eigenvectors()
+            * eigenSolver.eigenvalues().cwiseMax(0).cwiseSqrt().asDiagonal();
+    }
 
     // Generate a vector of standard normal variates with the same dimension as the mean
     Eigen::VectorXf z = Eigen::VectorXf::Zero(mean.size());
@@ -111,12 +127,12 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(const Eigen::VectorX
 
     for (int j = 0; j < samples; j++) {
         for (int i = 0; i < mean.size(); i += 2) {
-            Vec2f norm_samp = rand_normal_2(sampler);  //{ (float)random_standard_normal(sampler), (float)random_standard_normal(sampler) };
+            Vec2f norm_samp = rand_normal_2(sampler); // { (float)random_standard_normal(sampler), (float)random_standard_normal(sampler) };
             z(i) = norm_samp.x();
             z(i + 1) = norm_samp.y();
         }
 
-        sample.col(j) = mean + chol.matrixL() * z * 0.01f;
+        sample.col(j) = mean + normTransform * z;
     }
 
     return sample;

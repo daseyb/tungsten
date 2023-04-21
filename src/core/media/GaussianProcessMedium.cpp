@@ -90,22 +90,36 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
         int component = sampler.nextDiscrete(3);
         float sigmaTc = _sigmaT[component];
 
-        float t = _transmittance->sample(sampler, state.firstScatter)/sigmaTc;
+        float t = maxT;
+        {
+            std::array<Vec3f, 80> points;
+            std::array<Derivative, 80> derivs;
+
+            for (int i = 0; i < points.size(); i++) {
+                float t = lerp(ray.nearT(), ray.farT(), (i + sampler.next1D()) / points.size());
+                points[i] = ray.pos() + t * ray.dir();
+                derivs[i] = Derivative::None;
+            }
+
+            Eigen::MatrixXf gpSamples = _gp->sample(points.data(), derivs.data(), points.size(), {}, {}, {}, ray.dir(), 1, sampler);
+
+            float prevV = gpSamples(0, 0);
+            for (int p = 0; p < gpSamples.rows(); p++) {
+                float currV = gpSamples(p, 0);
+                if (currV <= 0) {
+                    float offsetT = prevV / (prevV - currV);
+                    t = lerp(ray.nearT(), ray.farT(), float(p - 1 + offsetT) / points.size());
+                    break;
+                }
+                prevV = currV;
+            }
+        }
+
         sample.t = min(t, maxT);
         sample.continuedT = t;
         sample.exited = (t >= maxT);
-        Vec3f tau = sample.t*_sigmaT;
-        Vec3f continuedTau = sample.continuedT*_sigmaT;
-        sample.weight = _transmittance->eval(tau, state.firstScatter, sample.exited);
-        sample.continuedWeight = _transmittance->eval(continuedTau, state.firstScatter, sample.exited);
-        if (sample.exited) {
-            sample.pdf = _transmittance->surfaceProbability(tau, state.firstScatter).avg();
-        } else {
-            sample.pdf = (_sigmaT*_transmittance->mediumPdf(tau, state.firstScatter)).avg();
-            sample.weight *= _sigmaS*_transmittance->sigmaBar();
-        }
-        sample.weight /= sample.pdf;
-        sample.continuedWeight = _sigmaS*_transmittance->sigmaBar()*sample.continuedWeight/(_sigmaT*_transmittance->mediumPdf(continuedTau, state.firstScatter)).avg();
+        sample.weight = Vec3f(1.);
+        sample.pdf = 1;
 
         state.advance();
     }
@@ -121,16 +135,16 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
     if (ray.farT() == Ray::infinity())
         return Vec3f(0.0f);
 
-    std::array<Vec3f, 40> points;
-    std::array<Derivative, 40> derivs;
+    std::array<Vec3f, 80> points;
+    std::array<Derivative, 80> derivs;
 
     for (int i = 0; i < points.size(); i++) {
-        float t = lerp(ray.nearT(), ray.farT(),  float(i) / points.size());
+        float t = lerp(ray.nearT(), ray.farT(),  (i + sampler.next1D()) / points.size());
         points[i] = ray.pos() + t * ray.dir();
         derivs[i] = Derivative::None;
     }
 
-    Eigen::MatrixXf gpSamples = _gp->sample(points.data(), derivs.data(), points.size(), {}, {}, {}, ray.dir(), 1, sampler);
+    Eigen::MatrixXf gpSamples = _gp->sample(points.data(), derivs.data(), points.size(), {}, {}, {}, ray.dir(), 10, sampler);
 
     int madeItCnt = 0;
     for (int s = 0; s < gpSamples.cols(); s++) {
@@ -151,15 +165,7 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
 
 float GaussianProcessMedium::pdf(PathSampleGenerator &/*sampler*/, const Ray &ray, bool startOnSurface, bool endOnSurface) const
 {
-    if (_absorptionOnly) {
-        return 1.0f;
-    } else {
-        Vec3f tau = ray.farT()*_sigmaT;
-        if (endOnSurface)
-            return _transmittance->surfaceProbability(tau, startOnSurface).avg();
-        else
-            return (_sigmaT*_transmittance->mediumPdf(tau, startOnSurface)).avg();
-    }
+    return 1.0f;
 }
 
 }
