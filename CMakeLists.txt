@@ -1,16 +1,11 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.20)
 project(Tungsten)
 
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
-include(CXX11)
-check_for_cxx11_compiler(CXX11_COMPILER)
-
-if(CXX11_COMPILER)
-    enable_cxx11()
-else()
-    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} seems to have no C++11 support. Please try again with a more recent compiler version.")
-endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED On)
+set(CMAKE_CXX_EXTENSIONS Off)
 
 # AVX does not do much benefit at the moment, but breaks compilation on some platforms.
 # Disabled for now until AVX becomes important enough to reconsider.

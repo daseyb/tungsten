@@ -23,34 +23,89 @@ rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
     };
 }
 
-Eigen::MatrixXf GaussianProcess::sample(const Vec3f* points, const Derivative* derivative_types, int numPts,
-    const std::vector<Vec3f>& cond_points, const std::vector<float>& cond_values, const std::vector<Derivative>& cond_derivative_types, Vec3f deriv_dir, int samples,
-    PathSampleGenerator& sampler) {
-
+std::tuple<Eigen::VectorXf, Eigen::MatrixXf> GaussianProcess::mean_and_cov(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const {
     Eigen::VectorXf ps_mean(numPts);
     Eigen::MatrixXf ps_cov(numPts, numPts);
 
     for (size_t i = 0; i < numPts; i++) {
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
 
-        for (size_t j = 0; j < numPts; j++) {
-            ps_cov(i, j) = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j]);
+        for (size_t j = 0; j <= i; j++) {
+            ps_cov(j, i) = ps_cov(i, j) = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j]);
         }
     }
 
-    Eigen::MatrixXf s = sample_multivariate_normal(ps_mean, ps_cov, samples, sampler);
+    return { ps_mean, ps_cov };
+}
+
+Eigen::VectorXf GaussianProcess::mean(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const {
+    Eigen::VectorXf ps_mean(numPts);
+    for (size_t i = 0; i < numPts; i++) {
+        ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
+    }
+    return ps_mean;
+}
+
+Eigen::MatrixXf GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, int numPtsA, int numPtsB) const {
+    Eigen::MatrixXf ps_cov(numPtsA, numPtsB);
+
+    for (size_t i = 0; i < numPtsA; i++) {
+        for (size_t j = 0; j < numPtsB; j++) {
+            ps_cov(i, j) = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j]);
+        }
+    }
+
+    return ps_cov;
+}
+
+Eigen::MatrixXf GaussianProcess::sample(
+    const Vec3f* points, const Derivative* derivative_types, int numPts, 
+    const Constraint* constraints, int numConstraints, 
+    Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const {
+
+    auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dir, numPts);
+
+    Eigen::MatrixXf s = sample_multivariate_normal(ps_mean, ps_cov, constraints, numConstraints, samples, sampler);
+
+    return s;
+}
+
+Eigen::MatrixXf GaussianProcess::sample_cond(
+    const Vec3f* points, const Derivative* derivative_types, int numPts,
+    const Vec3f* cond_points, const float* cond_values, const Derivative* cond_derivative_types, int numCondPts,
+    const Constraint* constraints, int numConstraints,
+    Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const {
+
+
+    auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dir, numPts);
+
+   // Eigen::MatrixXf s11 = cov(cond_points, cond_points, cond_derivative_types, cond_derivative_types, numCondPts, numCondPts);
+    //Eigen::MatrixXf s12 = cov(cond_points, points, cond_derivative_types, derivative_types, numCondPts, numPts);
+
+    //Eigen::LDLT<Eigen::MatrixXf> solver(s11);
+   // Eigen::MatrixXf solved = solver.solve(s12).transpose();
+
+    //Eigen::Map<const Eigen::VectorXf> cond_values_view(cond_values, numCondPts);
+    //Eigen::VectorXf m2 = mean(points, derivative_types, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, deriv_dir, numCondPts)));
+
+   // Eigen::MatrixXf s22 = cov(points, points, derivative_types, derivative_types, numPts, numPts);
+
+    //Eigen::MatrixXf s2 = s22 - (solved * s12);
+
+    Eigen::MatrixXf s = sample_multivariate_normal(ps_mean, ps_cov, constraints, numConstraints, samples, sampler);
 
     return s;
 }
 
 
+
 // Get me some bits
-uint64_t GaussianProcess::vec2uint(Vec2f v) {
+uint64_t GaussianProcess::vec2uint(Vec2f v) const {
     return ((uint64_t)BitManip::floatBitsToUint(v.x())) | ((uint64_t)BitManip::floatBitsToUint(v.y()) << 32);
 }
 
 // From numpy
-double GaussianProcess::random_standard_normal(PathSampleGenerator& sampler) {
+double GaussianProcess::random_standard_normal(PathSampleGenerator& sampler) const {
     uint64_t r;
     int sign;
     uint64_t rabs;
@@ -87,7 +142,7 @@ double GaussianProcess::random_standard_normal(PathSampleGenerator& sampler) {
 }
 
 // Box muller transform
-Vec2f GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) {
+Vec2f GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
     float x, y, r;
     do {
         Vec2f sampl = sampler.next2D();
@@ -100,7 +155,10 @@ Vec2f GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) {
     return { x * d, y * d };
 }
 
-Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(const Eigen::VectorXf& mean, const Eigen::MatrixXf& cov, int samples, PathSampleGenerator& sampler) {
+Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
+    const Eigen::VectorXf& mean, const Eigen::MatrixXf& cov,
+    const Constraint* constraints, int numConstraints,
+    int samples, PathSampleGenerator& sampler) const {
 
     // Use the Cholesky decomposition to transform the standard normal vector to the desired multivariate normal distribution
     Eigen::LLT<Eigen::MatrixXf> chol(cov);
@@ -125,14 +183,46 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(const Eigen::VectorX
     Eigen::VectorXf z = Eigen::VectorXf::Zero(mean.size());
     Eigen::MatrixXf sample(mean.size(), samples);
 
-    for (int j = 0; j < samples; j++) {
+    int numTries = 0;
+    for (int j = 0; j < samples; /*only advance sample idx if the sample passes all constraints*/) {
+
+        numTries++;
+
         for (int i = 0; i < mean.size(); i += 2) {
             Vec2f norm_samp = rand_normal_2(sampler); // { (float)random_standard_normal(sampler), (float)random_standard_normal(sampler) };
             z(i) = norm_samp.x();
             z(i + 1) = norm_samp.y();
         }
 
-        sample.col(j) = mean + normTransform * z;
+        Eigen::VectorXf currSample = mean + normTransform * z;
+
+        // Check constraints
+        bool passedConstraints = true;
+        for (int cIdx = 0; cIdx < numConstraints; cIdx++) {
+            const Constraint& con = constraints[cIdx];
+
+            for (int i = con.startIdx; i <= con.endIdx; i++) {
+                if (currSample(i) < con.minV || currSample(i) > con.maxV) {
+                    currSample *= -1;
+                    passedConstraints = false;
+                    break;
+                }
+            }
+
+            if (!passedConstraints) {
+                break;
+            }
+        }
+
+        sample.col(j) = currSample;
+        j++;
+
+        /*if (passedConstraints || numTries > 10) {
+            sample.col(j) = currSample;
+            j++;
+            numTries = 0;
+        }*/
+
     }
 
     return sample;

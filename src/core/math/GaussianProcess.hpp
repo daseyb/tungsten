@@ -145,32 +145,51 @@ namespace Tungsten {
     };
 
     class GaussianProcess : public JsonSerializable {
-
-        // Get me some bits
-        uint64_t vec2uint(Vec2f v);
-
-        // From numpy
-        double random_standard_normal(PathSampleGenerator& sampler);
-
-        // Box muller transform
-        Vec2f rand_normal_2(PathSampleGenerator& sampler);
-
-        Eigen::MatrixXf sample_multivariate_normal(const Eigen::VectorXf& mean, const Eigen::MatrixXf& cov, int samples, PathSampleGenerator& sampler);
-
-        std::shared_ptr<MeanFunction> _mean;
-        std::shared_ptr<CovarianceFunction> _cov;
-
     public:
+
+        struct Constraint {
+            int startIdx, endIdx;
+            float minV, maxV;
+        };
+
         GaussianProcess() : _mean(std::make_shared<HomogeneousMean>()), _cov(std::make_shared<SquaredExponentialCovariance>()) { }
         GaussianProcess(std::shared_ptr<MeanFunction> mean, std::shared_ptr<CovarianceFunction> cov) : _mean(mean), _cov(cov){ }
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override;
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
 
-        Eigen::MatrixXf sample(const Vec3f* points, const Derivative* derivative_types, int numPts,
-            const std::vector<Vec3f>& cond_points, const std::vector<float>& cond_values, const std::vector<Derivative>& cond_derivative_types, Vec3f deriv_dir, int samples,
-            PathSampleGenerator& sampler);
+        std::tuple<Eigen::VectorXf, Eigen::MatrixXf> mean_and_cov(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const;
+        Eigen::VectorXf mean(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const;
+        Eigen::MatrixXf cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, int numPtsA, int numPtsB) const;
 
+        Eigen::MatrixXf sample(
+            const Vec3f* points, const Derivative* derivative_types, int numPts,
+            const Constraint* constraints, int numConstraints, 
+            Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const;
+
+        Eigen::MatrixXf sample_cond(
+            const Vec3f* points, const Derivative* derivative_types, int numPts,
+            const Vec3f* cond_points, const float* cond_values, const Derivative* cond_derivative_types, int numCondPts,
+            const Constraint* constraints, int numConstraints,
+            Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const;
+
+    private:
+        // Get me some bits
+        uint64_t vec2uint(Vec2f v) const;
+
+        // From numpy
+        double random_standard_normal(PathSampleGenerator& sampler) const;
+
+        // Box muller transform
+        Vec2f rand_normal_2(PathSampleGenerator& sampler) const;
+
+        Eigen::MatrixXf sample_multivariate_normal(
+            const Eigen::VectorXf& mean, const Eigen::MatrixXf& cov,
+            const Constraint* constraints, int numConstraints,
+            int samples, PathSampleGenerator& sampler) const;
+
+        std::shared_ptr<MeanFunction> _mean;
+        std::shared_ptr<CovarianceFunction> _cov;
     };
 }
 

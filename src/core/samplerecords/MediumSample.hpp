@@ -18,6 +18,7 @@ struct MediumSample
     Vec3f emission;
     float pdf;
     bool exited;
+    Vec3f aniso;
 };
 
 }
