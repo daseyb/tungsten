@@ -96,9 +96,11 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
         {
             std::array<Vec3f, NUM_SAMPLE_POINTS*2> points;
             std::array<Derivative, NUM_SAMPLE_POINTS*2> derivs;
+            std::array<float, NUM_SAMPLE_POINTS> ts;
 
             for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
                 float t = lerp(ray.nearT(), ray.farT(), (i + sampler.next1D()) / NUM_SAMPLE_POINTS);
+                ts[i] = t;
                 points[i*2] = points[i] = ray.pos() + t * ray.dir();
                 derivs[i] = Derivative::None;
                 derivs[i*2] = Derivative::First;
@@ -128,15 +130,18 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
             
 
             float prevV = gpSamples(0, 0);
-            for (int p = 0; p < gpSamples.rows(); p++) {
+            float prevT = ts[0];
+            for (int p = 1; p < NUM_SAMPLE_POINTS; p++) {
                 float currV = gpSamples(p, 0);
-                if (currV <= 0) {
+                float currT = ts[p];
+                if (currV < 0) {
                     float offsetT = prevV / (prevV - currV);
-                    t = lerp(ray.nearT(), ray.farT(), float(p - 1 + offsetT) / points.size());
+                    t = currT; // lerp(prevT, currT, offsetT);
                     //sample.aniso = gpSamples(p * 2, 0);
                     break;
                 }
                 prevV = currV;
+                prevT = currT;
             }
         }
 
@@ -144,6 +149,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
         sample.continuedT = t;
         sample.exited = (t >= maxT);
         sample.weight = Vec3f(1.);
+        sample.continuedWeight = Vec3f(1.);
         sample.pdf = 1;
         
         state.advance();
@@ -160,8 +166,8 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
     if (ray.farT() == Ray::infinity())
         return Vec3f(0.0f);
 
-    std::array<Vec3f, NUM_SAMPLE_POINTS> points;
-    std::array<Derivative, NUM_SAMPLE_POINTS> derivs;
+    std::array<Vec3f, NUM_SAMPLE_POINTS+1> points;
+    std::array<Derivative, NUM_SAMPLE_POINTS+1> derivs;
 
     for (int i = 0; i < points.size(); i++) {
         float t = lerp(ray.nearT(), ray.farT(),  (i + sampler.next1D()) / NUM_SAMPLE_POINTS);
@@ -169,13 +175,16 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
         derivs[i] = Derivative::None;
     }
 
+    points[NUM_SAMPLE_POINTS] = points[0];
+    derivs[NUM_SAMPLE_POINTS] = Derivative::First;
+
 
     Eigen::MatrixXf gpSamples;
 
     if (startOnSurface) {
         std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
         gpSamples = _gp->sample(
-            points.data(), derivs.data(), points.size(),
+            points.data(), derivs.data(), points.size()-1,
             constraints.data(), constraints.size(),
             ray.dir(), 10, sampler);
     }
@@ -183,8 +192,7 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
         std::array<Vec3f, 1> cond_pts = { points[0] };
         std::array<Derivative, 1> cond_deriv = { Derivative::None };
         std::array<float, 1> cond_vs = { 0 };
-        //std::array<GaussianProcess::Constraint, 1> constraints = { {NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 0, FLT_MAX } };
-        std::array<GaussianProcess::Constraint, 0> constraints = { };
+        std::array<GaussianProcess::Constraint, 1> constraints = { {NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 0, FLT_MAX } };
 
         gpSamples = _gp->sample_cond(
             points.data(), derivs.data(), points.size(),
@@ -197,8 +205,8 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
     for (int s = 0; s < gpSamples.cols(); s++) {
         
         bool madeIt = true;
-        for (int p = 0; p < gpSamples.rows(); p++) {
-            if (gpSamples(p, s) <= 0) {
+        for (int p = 0; p < NUM_SAMPLE_POINTS; p++) {
+            if (gpSamples(p, s) < 0) {
                 madeIt = false;
                 break;
             }

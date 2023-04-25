@@ -42,6 +42,9 @@ namespace Tungsten {
 
     class SquaredExponentialCovariance : public CovarianceFunction {
     public:
+
+        SquaredExponentialCovariance(float sigma = 1.f, float l = 1.) : _sigma(sigma), _l(l) {}
+
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             CovarianceFunction::fromJson(value, scene);
             value.getField("sigma", _sigma);
@@ -64,7 +67,7 @@ namespace Tungsten {
         virtual float dcov_da(Vec3f a, Vec3f b) const override {
             float absq = (a - b).lengthSq();
             float ab = sqrtf(absq);
-            return -((exp(-(absq / (2 * sqr(_l)))) * ab * sqr(_sigma)) / sqr(_l));
+            return ((exp(-(absq / (2 * sqr(_l)))) * ab * sqr(_sigma)) / sqr(_l));
         }
 
         virtual float dcov_db(Vec3f a, Vec3f b) const override {
@@ -117,6 +120,9 @@ namespace Tungsten {
 
     class SphericalMean : public MeanFunction {
     public:
+
+        SphericalMean(Vec3f c = Vec3f(0.f), float r = 1.) : _c(c), _r(r) {}
+
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             MeanFunction::fromJson(value, scene);
             value.getField("center", _c);
@@ -133,8 +139,8 @@ namespace Tungsten {
 
     private:
         Vec3f _c;
-
         float _r;
+
         virtual float mean(Vec3f a) const override {
             return (a-_c).length() - _r;
         }
@@ -173,7 +179,7 @@ namespace Tungsten {
             const Constraint* constraints, int numConstraints,
             Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const;
 
-    private:
+    public:
         // Get me some bits
         uint64_t vec2uint(Vec2f v) const;
 

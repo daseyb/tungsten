@@ -30,8 +30,8 @@ std::tuple<Eigen::VectorXf, Eigen::MatrixXf> GaussianProcess::mean_and_cov(const
     for (size_t i = 0; i < numPts; i++) {
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
 
-        for (size_t j = 0; j <= i; j++) {
-            ps_cov(j, i) = ps_cov(i, j) = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j]);
+        for (size_t j = 0; j < numPts; j++) {
+            ps_cov(i, j) = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j]);
         }
     }
 
@@ -76,25 +76,20 @@ Eigen::MatrixXf GaussianProcess::sample_cond(
     const Constraint* constraints, int numConstraints,
     Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
+    Eigen::MatrixXf s11 = cov(cond_points, cond_points, cond_derivative_types, cond_derivative_types, numCondPts, numCondPts);
+    Eigen::MatrixXf s12 = cov(cond_points, points, cond_derivative_types, derivative_types, numCondPts, numPts);
 
-    auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dir, numPts);
+    Eigen::LDLT<Eigen::MatrixXf> solver(s11);
+    Eigen::MatrixXf solved = solver.solve(s12).transpose();
 
-   // Eigen::MatrixXf s11 = cov(cond_points, cond_points, cond_derivative_types, cond_derivative_types, numCondPts, numCondPts);
-    //Eigen::MatrixXf s12 = cov(cond_points, points, cond_derivative_types, derivative_types, numCondPts, numPts);
+    Eigen::Map<const Eigen::VectorXf> cond_values_view(cond_values, numCondPts);
+    Eigen::VectorXf m2 = mean(points, derivative_types, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, deriv_dir, numCondPts)));
 
-    //Eigen::LDLT<Eigen::MatrixXf> solver(s11);
-   // Eigen::MatrixXf solved = solver.solve(s12).transpose();
+    Eigen::MatrixXf s22 = cov(points, points, derivative_types, derivative_types, numPts, numPts);
 
-    //Eigen::Map<const Eigen::VectorXf> cond_values_view(cond_values, numCondPts);
-    //Eigen::VectorXf m2 = mean(points, derivative_types, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, deriv_dir, numCondPts)));
+    Eigen::MatrixXf s2 = s22 - (solved * s12);
 
-   // Eigen::MatrixXf s22 = cov(points, points, derivative_types, derivative_types, numPts, numPts);
-
-    //Eigen::MatrixXf s2 = s22 - (solved * s12);
-
-    Eigen::MatrixXf s = sample_multivariate_normal(ps_mean, ps_cov, constraints, numConstraints, samples, sampler);
-
-    return s;
+    return sample_multivariate_normal(m2, s2, constraints, numConstraints, samples, sampler);
 }
 
 
@@ -143,16 +138,17 @@ double GaussianProcess::random_standard_normal(PathSampleGenerator& sampler) con
 
 // Box muller transform
 Vec2f GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
-    float x, y, r;
-    do {
-        Vec2f sampl = sampler.next2D();
-        x = sampl.x() * 2 - 1;
-        y = sampl.y() * 2 - 1;
-        r = sampl.lengthSq();
-    } while (r >= 1.0f || r == 0.0f);
+    float u1 = sampler.next1D();
+    float u2 = sampler.next1D();
 
-    float d = (float)sqrtf(-2.0f * log(r) / r);
-    return { x * d, y * d };
+    float r = sqrtf(-2 * log(u1));
+    float x = cos(2 * PI * u2);
+    float y = sin(2 * PI * u2);
+    float z1 = r * x;
+    float z2 = r * y;
+
+    return Vec2f(z1, z2);
+
 }
 
 Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
@@ -180,7 +176,7 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
     }
 
     // Generate a vector of standard normal variates with the same dimension as the mean
-    Eigen::VectorXf z = Eigen::VectorXf::Zero(mean.size());
+    Eigen::VectorXf z = Eigen::VectorXf(mean.size());
     Eigen::MatrixXf sample(mean.size(), samples);
 
     int numTries = 0;
@@ -188,10 +184,17 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
 
         numTries++;
 
-        for (int i = 0; i < mean.size(); i += 2) {
+        // We're always getting two samples, so make use of that
+        for (int i = 0; i < mean.size() / 2; i++) {
             Vec2f norm_samp = rand_normal_2(sampler); // { (float)random_standard_normal(sampler), (float)random_standard_normal(sampler) };
-            z(i) = norm_samp.x();
-            z(i + 1) = norm_samp.y();
+            z(i*2) = norm_samp.x();
+            z(i*2 + 1) = norm_samp.y();
+        }
+
+        // Fill up the last one for an uneven number of samples
+        if (mean.size() % 2) {
+            Vec2f norm_samp = rand_normal_2(sampler);
+            z(mean.size()-1) = norm_samp.x();
         }
 
         Eigen::VectorXf currSample = mean + normTransform * z;

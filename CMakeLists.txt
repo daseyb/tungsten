@@ -149,6 +149,9 @@ endif()
 add_executable(tungsten src/tungsten/tungsten.cpp)
 target_link_libraries(tungsten ${core_libs})
 
+add_executable(tungsten-test src/tungsten-test/mvn-test.cpp)
+target_link_libraries(tungsten-test ${core_libs})
+
 if (WIN32)
     set(socket_libs wsock32 Ws2_32)
 else()
