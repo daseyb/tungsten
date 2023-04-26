@@ -1,7 +1,7 @@
 #ifndef GAUSSIANPROCESS_HPP_
 #define GAUSSIANPROCESS_HPP_
 #include "sampling/PathSampleGenerator.hpp"
-#include "Eigen/dense"
+#include "Eigen/Dense"
 #include "BitManip.hpp"
 #include "math/Vec.hpp"
 #include "math/MathUtil.hpp"
