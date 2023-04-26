@@ -11,7 +11,7 @@
 
 namespace Tungsten {
 
-    constexpr size_t NUM_SAMPLE_POINTS = 32;
+    constexpr size_t NUM_SAMPLE_POINTS = 128;
 
     GaussianProcessMedium::GaussianProcessMedium()
 : _materialSigmaA(0.0f),
@@ -125,7 +125,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                     points.data(), derivs.data(), points.size(),
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
                     nullptr, 0,
-                    ray.dir(), 1, sampler);
+                    ray.dir(), 10, sampler);
             }
             
 
