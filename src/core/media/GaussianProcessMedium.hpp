@@ -17,6 +17,8 @@ class GaussianProcessMedium : public Medium
     Vec3f _sigmaT;
     bool _absorptionOnly;
 
+    int _samplePoints;
+
     std::shared_ptr<GaussianProcess> _gp;
 
 public:

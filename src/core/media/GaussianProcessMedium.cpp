@@ -11,13 +11,13 @@
 
 namespace Tungsten {
 
-    constexpr size_t NUM_SAMPLE_POINTS = 128;
 
     GaussianProcessMedium::GaussianProcessMedium()
 : _materialSigmaA(0.0f),
   _materialSigmaS(0.0f),
   _density(1.0f),
-  _gp(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(), std::make_shared<SquaredExponentialCovariance>()))
+  _gp(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(), std::make_shared<SquaredExponentialCovariance>())),
+  _samplePoints(32)
 {
 }
 
@@ -27,6 +27,7 @@ void GaussianProcessMedium::fromJson(JsonPtr value, const Scene &scene)
     value.getField("sigma_a", _materialSigmaA);
     value.getField("sigma_s", _materialSigmaS);
     value.getField("density", _density);
+    value.getField("sample_points", _samplePoints);
 
     if (auto gp = value["gaussian_process"])
         _gp = scene.fetchGaussianProcess(gp);
@@ -40,6 +41,7 @@ rapidjson::Value GaussianProcessMedium::toJson(Allocator &allocator) const
         "sigma_a", _materialSigmaA,
         "sigma_s", _materialSigmaS,
         "density", _density,
+        "sample_points", _samplePoints,
         "gaussian_process", *_gp
     };
 }
@@ -91,12 +93,12 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
     } else {
         float t = maxT;
         {
-            std::array<Vec3f, NUM_SAMPLE_POINTS> points;
-            std::array<Derivative, NUM_SAMPLE_POINTS> derivs;
-            std::array<float, NUM_SAMPLE_POINTS> ts;
+            std::vector<Vec3f> points(_samplePoints);
+            std::vector<Derivative> derivs(_samplePoints);
+            std::vector<float> ts(_samplePoints);
 
-            for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
-                float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i - sampler.next1D()) / NUM_SAMPLE_POINTS, 0.f, 1.f));
+            for (int i = 0; i < _samplePoints; i++) {
+                float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i - sampler.next1D()) / _samplePoints, 0.f, 1.f));
                 ts[i] = t;
                 /*points[i * 2] = */ points[i] = ray.pos() + t * ray.dir();
                 derivs[i] = Derivative::None;
@@ -131,7 +133,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
 
             float prevV = gpSamples(0, 0);
             float prevT = ts[0];
-            for (int p = 1; p < NUM_SAMPLE_POINTS; p++) {
+            for (int p = 1; p < _samplePoints; p++) {
                 float currV = gpSamples(p, 0);
                 float currT = ts[p];
                 if (currV < 0) {
@@ -166,11 +168,11 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
     if (ray.farT() == Ray::infinity())
         return Vec3f(0.0f);
 
-    std::array<Vec3f, NUM_SAMPLE_POINTS> points;
-    std::array<Derivative, NUM_SAMPLE_POINTS> derivs;
+    std::vector<Vec3f> points(_samplePoints);
+    std::vector<Derivative> derivs(_samplePoints);
 
     for (int i = 0; i < points.size(); i++) {
-        float t = lerp(ray.nearT(), ray.farT(),  (i + sampler.next1D()) / NUM_SAMPLE_POINTS);
+        float t = lerp(ray.nearT(), ray.farT(),  (i + sampler.next1D()) / _samplePoints);
         points[i] = ray.pos() + t * ray.dir();
         derivs[i] = Derivative::None;
     }
@@ -204,7 +206,7 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
     for (int s = 0; s < gpSamples.cols(); s++) {
         
         bool madeIt = true;
-        for (int p = 0; p < NUM_SAMPLE_POINTS; p++) {
+        for (int p = 0; p < _samplePoints; p++) {
             if (gpSamples(p, s) < 0) {
                 madeIt = false;
                 break;
