@@ -9,8 +9,8 @@ constexpr size_t NUM_SAMPLE_POINTS = 64;
 
 int main() {
 
-	GaussianProcess gp(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>());
-
+	GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(5.f, 0.5f, 0.f), 4.f), std::make_shared<SquaredExponentialCovariance>(0.1f, 0.1f));
+    
     UniformPathSampler sampler(0);
 
     Ray ray(Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), 0.0f, 10.0f);
@@ -34,7 +34,7 @@ int main() {
     {
         std::vector<float> normalSamples;
         // Box muller transform
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 10000; i++) {
             Vec2f samples = gp.rand_normal_2(sampler);
             normalSamples.push_back(samples.x());
             normalSamples.push_back(samples.y());
@@ -74,16 +74,49 @@ int main() {
     }
 
     {
-        Eigen::MatrixXf samples = gp.sample(points.data(), derivs.data(), points.size() - 1, nullptr, 0, ray.dir(), 50, sampler);
-        std::ofstream xfile("samples-nod.bin", std::ios::out | std::ios::binary);
+        std::array<GaussianProcess::Constraint, 1> constraints = { { 0, 0, 0, FLT_MAX } };
+        Eigen::MatrixXf samples = gp.sample(points.data(), derivs.data(), points.size(), constraints.data(), constraints.size(), ray.dir(), 50, sampler);
+        std::ofstream xfile("samples-free-space.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)samples.data(), sizeof(float) * samples.rows() * samples.cols());
         xfile.close();
     }
 
     {
-        std::array<Vec3f, 1> cond_pts = { points[0] };
-        std::array<Derivative, 1> cond_deriv = { Derivative::None };
-        std::array<float, 1> cond_vs = { 0 };
+        std::array<GaussianProcess::Constraint, 1> constraints = { { 0, 0, 0, FLT_MAX } };
+
+        Eigen::MatrixXf samples = gp.sample(
+            points.data(), derivs.data(), points.size(),
+            constraints.data(), constraints.size(),
+            ray.dir(), 50000, sampler);
+
+        std::vector<float> sampleTs;
+        for (int s = 0; s < samples.cols(); s++) {
+            float prevV = samples(0, s);
+            float prevT = ts[0];
+            for (int p = 1; p < NUM_SAMPLE_POINTS; p++) {
+                float currV = samples(p, s);
+                float currT = ts[p];
+                if (currV < 0) {
+                    float offsetT = prevV / (prevV - currV);
+                    float t = lerp(prevT, currT, offsetT);
+                    sampleTs.push_back(t);
+                    //sample.aniso = gpSamples(p * 2, 0);
+                    break;
+                }
+                prevV = currV;
+                prevT = currT;
+            }
+        }
+
+        std::ofstream xfile("dist-samples-free.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)sampleTs.data(), sizeof(float) * sampleTs.size());
+        xfile.close();
+    }
+
+    {
+        std::array<Vec3f, 2> cond_pts = { points[0]};
+        std::array<Derivative, 2> cond_deriv = { Derivative::None };
+        std::array<float, 2> cond_vs = { 0 };
 
         Eigen::MatrixXf samples = gp.sample_cond(
             points.data(), derivs.data(), points.size(),
@@ -97,10 +130,11 @@ int main() {
     }
 
     {
-        std::array<Vec3f, 1> cond_pts = { points[0] };
-        std::array<Derivative, 1> cond_deriv = { Derivative::None };
-        std::array<float, 1> cond_vs = { 0 };
-        std::array<GaussianProcess::Constraint, 1> constraints = { {NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 0, FLT_MAX } };
+        std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
+        std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
+        std::array<float, 2> cond_vs = { 0, 1 };
+        std::array<GaussianProcess::Constraint, 0> constraints = {  };
+
 
         Eigen::MatrixXf samples = gp.sample_cond(
             points.data(), derivs.data(), points.size(),
@@ -114,10 +148,10 @@ int main() {
     }
 
     {
-        std::array<Vec3f, 1> cond_pts = { points[0] };
-        std::array<Derivative, 1> cond_deriv = { Derivative::None };
-        std::array<float, 1> cond_vs = { 0 };
-        std::array<GaussianProcess::Constraint, 1> constraints = { {NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 0, FLT_MAX } };
+        std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
+        std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
+        std::array<float, 2> cond_vs = { 0, 1 };
+        std::array<GaussianProcess::Constraint, 0> constraints = {  };
 
         Eigen::MatrixXf samples = gp.sample_cond(
             points.data(), derivs.data(), points.size(),
@@ -134,7 +168,7 @@ int main() {
                 float currT = ts[p];
                 if (currV < 0) {
                     float offsetT = prevV / (prevV - currV);
-                    float t = currT; // lerp(prevT, currT, offsetT);
+                    float t = lerp(prevT, currT, offsetT);
                     sampleTs.push_back(t);
                     //sample.aniso = gpSamples(p * 2, 0);
                     break;

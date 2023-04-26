@@ -58,6 +58,14 @@ Eigen::MatrixXf GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_
     return ps_cov;
 }
 
+float GaussianProcess::sample_start_value(Vec3f p, PathSampleGenerator& sampler) const {
+    float m = (*_mean)(Derivative::None, p, Vec3f(0.f));
+    float sigma = (*_cov)(Derivative::None, Derivative::None, p, p);
+
+    return rand_truncated_normal(m, sigma, 0, sampler);
+}
+
+
 Eigen::MatrixXf GaussianProcess::sample(
     const Vec3f* points, const Derivative* derivative_types, int numPts, 
     const Constraint* constraints, int numConstraints, 
@@ -79,8 +87,8 @@ Eigen::MatrixXf GaussianProcess::sample_cond(
     Eigen::MatrixXf s11 = cov(cond_points, cond_points, cond_derivative_types, cond_derivative_types, numCondPts, numCondPts);
     Eigen::MatrixXf s12 = cov(cond_points, points, cond_derivative_types, derivative_types, numCondPts, numPts);
 
-    Eigen::LDLT<Eigen::MatrixXf> solver(s11);
-    Eigen::MatrixXf solved = solver.solve(s12).transpose();
+    //Eigen::LLT<Eigen::MatrixXf> solver(s11);
+    Eigen::MatrixXf solved = s11.colPivHouseholderQr().solve(s12).transpose(); //  solver.solve(s12).transpose();
 
     Eigen::Map<const Eigen::VectorXf> cond_values_view(cond_values, numCondPts);
     Eigen::VectorXf m2 = mean(points, derivative_types, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, deriv_dir, numCondPts)));
@@ -151,6 +159,24 @@ Vec2f GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
 
 }
 
+// Box muller transform
+float GaussianProcess::rand_truncated_normal(float mean, float sigma, float a, PathSampleGenerator& sampler) const {
+    float a_bar = (a - mean) / sigma;
+    float x_bar;
+
+    while (true) {
+        float u = sampler.next1D();
+        x_bar = sqrtf(a_bar * a_bar - 2 * log(1 - u));
+        float v = sampler.next1D();
+        
+        if (v < x_bar / a_bar) {
+            break;
+        }
+    }
+
+    return sigma * x_bar + mean;
+}
+
 Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
     const Eigen::VectorXf& mean, const Eigen::MatrixXf& cov,
     const Constraint* constraints, int numConstraints,
@@ -206,7 +232,7 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
 
             for (int i = con.startIdx; i <= con.endIdx; i++) {
                 if (currSample(i) < con.minV || currSample(i) > con.maxV) {
-                    currSample *= -1;
+                    //currSample *= -1;
                     passedConstraints = false;
                     break;
                 }
@@ -217,15 +243,14 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
             }
         }
 
-        sample.col(j) = currSample;
-        j++;
+        //sample.col(j) = currSample;
+        //j++;
 
-        /*if (passedConstraints || numTries > 10) {
+        if (passedConstraints) {
             sample.col(j) = currSample;
             j++;
             numTries = 0;
-        }*/
-
+        }
     }
 
     return sample;

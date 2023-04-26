@@ -99,7 +99,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
             std::array<float, NUM_SAMPLE_POINTS> ts;
 
             for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
-                float t = lerp(ray.nearT(), ray.farT(), (i + sampler.next1D()) / NUM_SAMPLE_POINTS);
+                float t = lerp(ray.nearT(), ray.farT(), clamp((i - sampler.next1D()) / NUM_SAMPLE_POINTS, 0.f, 1.f));
                 ts[i] = t;
                 points[i*2] = points[i] = ray.pos() + t * ray.dir();
                 derivs[i] = Derivative::None;
@@ -116,15 +116,14 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                     ray.dir(), 1, sampler);
             }
             else {
-                std::array<Vec3f, 1> cond_pts = { points[0] };
-                std::array<Derivative, 1> cond_deriv = { Derivative::None };
-                std::array<float, 1> cond_vs = { 0 };
-                std::array<GaussianProcess::Constraint, 1> constraints = { {NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 0, FLT_MAX } };
+                std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
+                std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
+                std::array<float, 2> cond_vs = { 0, _gp->rand_truncated_normal(0, 1., 0, sampler) };
 
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), points.size(),
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
-                    constraints.data(), constraints.size(),
+                    nullptr, 0,
                     ray.dir(), 1, sampler);
             }
             
@@ -136,7 +135,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                 float currT = ts[p];
                 if (currV < 0) {
                     float offsetT = prevV / (prevV - currV);
-                    t = currT; // lerp(prevT, currT, offsetT);
+                    t = lerp(prevT, currT, offsetT);
                     //sample.aniso = gpSamples(p * 2, 0);
                     break;
                 }
@@ -166,18 +165,14 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
     if (ray.farT() == Ray::infinity())
         return Vec3f(0.0f);
 
-    std::array<Vec3f, NUM_SAMPLE_POINTS+1> points;
-    std::array<Derivative, NUM_SAMPLE_POINTS+1> derivs;
+    std::array<Vec3f, NUM_SAMPLE_POINTS> points;
+    std::array<Derivative, NUM_SAMPLE_POINTS> derivs;
 
     for (int i = 0; i < points.size(); i++) {
         float t = lerp(ray.nearT(), ray.farT(),  (i + sampler.next1D()) / NUM_SAMPLE_POINTS);
         points[i] = ray.pos() + t * ray.dir();
         derivs[i] = Derivative::None;
     }
-
-    points[NUM_SAMPLE_POINTS] = points[0];
-    derivs[NUM_SAMPLE_POINTS] = Derivative::First;
-
 
     Eigen::MatrixXf gpSamples;
 
@@ -189,16 +184,15 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
             ray.dir(), 10, sampler);
     }
     else {
-        std::array<Vec3f, 1> cond_pts = { points[0] };
-        std::array<Derivative, 1> cond_deriv = { Derivative::None };
-        std::array<float, 1> cond_vs = { 0 };
-        std::array<GaussianProcess::Constraint, 1> constraints = { {NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 0, FLT_MAX } };
+        std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
+        std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
+        std::array<float, 2> cond_vs = { 0, _gp->rand_truncated_normal(0, 1., 0, sampler) };
 
         gpSamples = _gp->sample_cond(
             points.data(), derivs.data(), points.size(),
             cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
-            constraints.data(), constraints.size(),
-            ray.dir(), 10, sampler);
+            nullptr, 0,
+            ray.dir(), 1, sampler);
     }
 
     int madeItCnt = 0;

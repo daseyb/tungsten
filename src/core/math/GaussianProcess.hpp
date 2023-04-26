@@ -168,6 +168,8 @@ namespace Tungsten {
         Eigen::VectorXf mean(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const;
         Eigen::MatrixXf cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, int numPtsA, int numPtsB) const;
 
+        float sample_start_value(Vec3f p, PathSampleGenerator& sampler) const;
+
         Eigen::MatrixXf sample(
             const Vec3f* points, const Derivative* derivative_types, int numPts,
             const Constraint* constraints, int numConstraints, 
@@ -188,6 +190,7 @@ namespace Tungsten {
 
         // Box muller transform
         Vec2f rand_normal_2(PathSampleGenerator& sampler) const;
+        float rand_truncated_normal(float mean, float sigma, float a, PathSampleGenerator& sampler) const;
 
         Eigen::MatrixXf sample_multivariate_normal(
             const Eigen::VectorXf& mean, const Eigen::MatrixXf& cov,
