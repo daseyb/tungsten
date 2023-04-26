@@ -62,7 +62,7 @@ float GaussianProcess::sample_start_value(Vec3f p, PathSampleGenerator& sampler)
     float m = (*_mean)(Derivative::None, p, Vec3f(0.f));
     float sigma = (*_cov)(Derivative::None, Derivative::None, p, p);
 
-    return rand_truncated_normal(m, sigma, 0, sampler);
+    return max(0.f, rand_truncated_normal(m, sigma, 0, sampler));
 }
 
 
@@ -161,6 +161,19 @@ Vec2f GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
 
 // Box muller transform
 float GaussianProcess::rand_truncated_normal(float mean, float sigma, float a, PathSampleGenerator& sampler) const {
+    if (abs(a - mean) < 0.00001) {
+        return abs(mean + sigma * rand_normal_2(sampler).x());
+    }
+
+    if (a < mean) {
+        while (true) {
+            float x = mean + sigma * rand_normal_2(sampler).x();
+            if (x >= a) {
+                return x;
+            }
+        }
+    }
+
     float a_bar = (a - mean) / sigma;
     float x_bar;
 
@@ -176,6 +189,30 @@ float GaussianProcess::rand_truncated_normal(float mean, float sigma, float a, P
 
     return sigma * x_bar + mean;
 }
+
+//float GaussianProcess::rand_truncated_normal(float mean, float sigma, float a, PathSampleGenerator& sampler) const {
+//    if (abs(a - mean) < 0.00001) {
+//        return abs(mean + sigma * rand_normal_2(sampler).x());
+//    }
+//
+//    float a_bar = (a - mean) / sigma;
+//    if (!std::isfinite(a_bar)) {
+//        std::cout << a << " " << mean << " " << sigma << "\n";
+//    }
+//    float y_bar;
+//
+//    while (true) {
+//        float u = sampler.next1D();
+//        y_bar = -1 / a_bar * log(1 - u);
+//        float v = sampler.next1D();
+//
+//        if (v < expf(-y_bar*y_bar/2)) {
+//            break;
+//        }
+//    }
+//
+//    return sigma * (y_bar + a_bar) + mean;
+//}
 
 Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
     const Eigen::VectorXf& mean, const Eigen::MatrixXf& cov,
@@ -246,7 +283,10 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
         //sample.col(j) = currSample;
         //j++;
 
-        if (passedConstraints) {
+        if (passedConstraints || numTries > 100000) {
+            if (numTries > 100000) {
+                std::cout << "Constraint not satisfied. " << mean(0) << "\n";
+            }
             sample.col(j) = currSample;
             j++;
             numTries = 0;

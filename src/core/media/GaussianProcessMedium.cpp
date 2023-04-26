@@ -11,7 +11,7 @@
 
 namespace Tungsten {
 
-    constexpr size_t NUM_SAMPLE_POINTS = 16;
+    constexpr size_t NUM_SAMPLE_POINTS = 32;
 
     GaussianProcessMedium::GaussianProcessMedium()
 : _materialSigmaA(0.0f),
@@ -89,31 +89,32 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
         sample.pdf = 1.0f;
         sample.exited = true;
     } else {
-        int component = sampler.nextDiscrete(3);
-        float sigmaTc = _sigmaT[component];
-
         float t = maxT;
         {
-            std::array<Vec3f, NUM_SAMPLE_POINTS*2> points;
-            std::array<Derivative, NUM_SAMPLE_POINTS*2> derivs;
+            std::array<Vec3f, NUM_SAMPLE_POINTS> points;
+            std::array<Derivative, NUM_SAMPLE_POINTS> derivs;
             std::array<float, NUM_SAMPLE_POINTS> ts;
 
             for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
-                float t = lerp(ray.nearT(), ray.farT(), clamp((i - sampler.next1D()) / NUM_SAMPLE_POINTS, 0.f, 1.f));
+                float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i - sampler.next1D()) / NUM_SAMPLE_POINTS, 0.f, 1.f));
                 ts[i] = t;
-                points[i*2] = points[i] = ray.pos() + t * ray.dir();
+                /*points[i * 2] = */ points[i] = ray.pos() + t * ray.dir();
                 derivs[i] = Derivative::None;
-                derivs[i*2] = Derivative::First;
+                //derivs[i*2] = Derivative::First;
             }
 
             Eigen::MatrixXf gpSamples;
 
             if (state.firstScatter) {
+                std::array<Vec3f, 1> cond_pts = { points[0] };
+                std::array<Derivative, 1> cond_deriv = { Derivative::None };
+                std::array<float, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
                 std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
-                gpSamples = _gp->sample(
+                gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), points.size(),
+                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
                     constraints.data(), constraints.size(),
-                    ray.dir(), 1, sampler);
+                    ray.dir(), 10, sampler);
             }
             else {
                 std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
@@ -147,8 +148,8 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
         sample.t = min(t, maxT);
         sample.continuedT = t;
         sample.exited = (t >= maxT);
-        sample.weight = Vec3f(1.);
-        sample.continuedWeight = Vec3f(1.);
+        sample.weight = sigmaS(ray.pos() + sample.t * ray.dir()) / sigmaT(ray.pos() + sample.t * ray.dir());
+        sample.continuedWeight = sigmaS(ray.pos() + sample.continuedT * ray.dir()) / sigmaT(ray.pos() + sample.continuedT * ray.dir());
         sample.pdf = 1;
         
         state.advance();
@@ -177,9 +178,13 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
     Eigen::MatrixXf gpSamples;
 
     if (startOnSurface) {
+        std::array<Vec3f, 1> cond_pts = { points[0] };
+        std::array<Derivative, 1> cond_deriv = { Derivative::None };
+        std::array<float, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
         std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
-        gpSamples = _gp->sample(
-            points.data(), derivs.data(), points.size()-1,
+        gpSamples = _gp->sample_cond(
+            points.data(), derivs.data(), points.size(),
+            cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
             constraints.data(), constraints.size(),
             ray.dir(), 10, sampler);
     }
@@ -192,7 +197,7 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
             points.data(), derivs.data(), points.size(),
             cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
             nullptr, 0,
-            ray.dir(), 1, sampler);
+            ray.dir(), 10, sampler);
     }
 
     int madeItCnt = 0;
