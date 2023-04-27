@@ -2,6 +2,7 @@
 #include <core/sampling/UniformPathSampler.hpp>
 #include <core/math/Ray.hpp>
 #include <fstream>
+#include <cfloat>
 
 using namespace Tungsten;
 

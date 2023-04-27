@@ -1,5 +1,7 @@
 #include "GaussianProcessMedium.hpp"
 
+#include <cfloat>
+
 #include "sampling/PathSampleGenerator.hpp"
 
 #include "math/GaussianProcess.hpp"
