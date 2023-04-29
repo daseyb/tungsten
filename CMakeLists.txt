@@ -7,6 +7,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED On)
 set(CMAKE_CXX_EXTENSIONS Off)
 
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
 # AVX does not do much benefit at the moment, but breaks compilation on some platforms.
 # Disabled for now until AVX becomes important enough to reconsider.
 SET(EMBREE_MAX_ISA "SSE4.2" CACHE STRING "Selects highest ISA to support.")
@@ -149,8 +151,14 @@ endif()
 add_executable(tungsten src/tungsten/tungsten.cpp)
 target_link_libraries(tungsten ${core_libs})
 
-add_executable(tungsten-test src/tungsten-test/mvn-test.cpp)
-target_link_libraries(tungsten-test ${core_libs})
+set(tests mvn-test derivative-test)
+foreach (test IN LISTS tests)
+	add_executable(tungsten-${test} src/tungsten-test/${test}.cpp)
+	target_link_libraries(tungsten-${test} ${core_libs})
+	set_target_properties (tungsten-${test} PROPERTIES FOLDER tests)
+endforeach ()
+
+
 
 if (WIN32)
     set(socket_libs wsock32 Ws2_32)

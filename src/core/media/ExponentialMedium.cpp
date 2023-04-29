@@ -149,7 +149,7 @@ bool ExponentialMedium::sampleDistance(PathSampleGenerator &sampler, const Ray &
     return true;
 }
 Vec3f ExponentialMedium::transmittance(PathSampleGenerator &/*sampler*/, const Ray &ray, bool startOnSurface,
-        bool endOnSurface) const
+        bool endOnSurface, MediumSample* sample) const
 {
     float  x = _falloffScale*(ray.pos() - _unitPoint).dot(_unitFalloffDirection);
     float dx = _falloffScale*ray.dir().dot(_unitFalloffDirection);

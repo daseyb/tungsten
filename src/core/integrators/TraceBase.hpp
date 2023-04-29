@@ -30,6 +30,8 @@
 
 namespace Tungsten {
 
+    class MediumState;
+
 class TraceBase
 {
 protected:
@@ -54,6 +56,7 @@ protected:
                                int bounce,
                                bool startsOnSurface,
                                bool endsOnSurface,
+                               MediumSample* sample,
                                float &pdfForward,
                                float &pdfBackward) const;
 
@@ -66,6 +69,7 @@ protected:
                              int bounce,
                              bool startsOnSurface,
                              Ray &ray,
+                             MediumSample* sample,
                              Vec3f *transmittance);
 
     bool volumeLensSample(const Camera &camera,
@@ -151,7 +155,8 @@ public:
                                const Primitive *endCap,
                                bool startsOnSurface,
                                bool endsOnSurface,
-                               int bounce) const;
+                               int bounce,
+                               MediumSample* sample) const;
     Vec3f generalizedShadowRayAndPdfs(PathSampleGenerator &sampler,
                                Ray &ray,
                                const Medium *medium,
@@ -159,6 +164,7 @@ public:
                                int bounce,
                                bool startsOnSurface,
                                bool endsOnSurface,
+                               MediumSample* sample,
                                float &pdfForward,
                                float &pdfBackward) const;
 

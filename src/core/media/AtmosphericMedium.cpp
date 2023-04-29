@@ -169,7 +169,7 @@ bool AtmosphericMedium::sampleDistance(PathSampleGenerator &sampler, const Ray &
 }
 
 Vec3f AtmosphericMedium::transmittance(PathSampleGenerator &/*sampler*/, const Ray &ray, bool startOnSurface,
-        bool endOnSurface) const
+        bool endOnSurface, MediumSample* sample) const
 {
     Vec3f p = (ray.pos() - _center);
     float t0 = p.dot(ray.dir());

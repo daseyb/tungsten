@@ -89,22 +89,21 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
         if (maxT == Ray::infinity())
             return false;
         sample.t = maxT;
-        sample.weight = transmittance(sampler, ray, state.firstScatter, true);
+        sample.weight = transmittance(sampler, ray, state.firstScatter, true, &sample);
         sample.pdf = 1.0f;
         sample.exited = true;
     } else {
         float t = maxT;
         {
-            std::vector<Vec3f> points(_samplePoints);
-            std::vector<Derivative> derivs(_samplePoints);
+            std::vector<Vec3f> points(_samplePoints+1);
+            std::vector<Derivative> derivs(_samplePoints+1);
             std::vector<float> ts(_samplePoints);
 
             for (int i = 0; i < _samplePoints; i++) {
                 float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i - sampler.next1D()) / _samplePoints, 0.f, 1.f));
                 ts[i] = t;
-                /*points[i * 2] = */ points[i] = ray.pos() + t * ray.dir();
+                points[i] = ray.pos() + t * ray.dir();
                 derivs[i] = Derivative::None;
-                //derivs[i*2] = Derivative::First;
             }
 
             Eigen::MatrixXf gpSamples;
@@ -115,21 +114,29 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                 std::array<float, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
                 std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
                 gpSamples = _gp->sample_cond(
-                    points.data(), derivs.data(), points.size(),
+                    points.data(), derivs.data(), _samplePoints,
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
                     constraints.data(), constraints.size(),
-                    ray.dir(), 10, sampler);
+                    ray.dir(), 1, sampler);
             }
             else {
+
+                sample.t = maxT;
+                sample.weight = Vec3f(1.0f);
+                sample.pdf = 1.0f;
+                sample.exited = true;
+
+                return true;
+
                 std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
                 std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
-                std::array<float, 2> cond_vs = { 0, _gp->rand_truncated_normal(0, 1., 0, sampler) };
+                std::array<float, 2> cond_vs = { 0, state.lastAniso.dot(ray.dir().normalized()) };
 
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), points.size(),
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
                     nullptr, 0,
-                    ray.dir(), 10, sampler);
+                    ray.dir(), 1, sampler);
             }
             
 
@@ -141,7 +148,46 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                 if (currV < 0) {
                     float offsetT = prevV / (prevV - currV);
                     t = lerp(prevT, currT, offsetT);
-                    //sample.aniso = gpSamples(p * 2, 0);
+
+                    Vec3f ip = ray.pos() + ray.dir() * t;
+                    float eps = 0.01f;
+                    std::array<Vec3f, 6> gradPs{
+                        ip + Vec3f(eps, 0.f, 0.f),
+                        ip + Vec3f(0.f, eps, 0.f),
+                        ip + Vec3f(0.f, 0.f, eps),
+                        ip - Vec3f(eps, 0.f, 0.f),
+                        ip - Vec3f(0.f, eps, 0.f),
+                        ip - Vec3f(0.f, 0.f, eps),
+                    };
+
+                    std::array<Derivative, 6> gradDerivs{
+                        Derivative::None, Derivative::None, Derivative::None,
+                        Derivative::None, Derivative::None, Derivative::None
+                    };
+
+                    points[_samplePoints] = ip;
+
+                    Eigen::VectorXf sampleValues(_samplePoints+1);
+                    sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0);
+                    sampleValues(_samplePoints) = 0;
+
+                    Eigen::MatrixXf gradSamples = _gp->sample_cond(
+                        gradPs.data(), gradDerivs.data(), gradPs.size(),
+                        points.data(), sampleValues.data(), derivs.data(), points.size(),
+                        nullptr, 0,
+                        ray.dir(), 1, sampler);
+
+                    Vec3f grad = Vec3f{
+                        gradSamples(0,0) - gradSamples(3,0),
+                        gradSamples(1,0) - gradSamples(4,0),
+                        gradSamples(2,0) - gradSamples(5,0),
+                    } / (2 * eps);
+
+                    sample.aniso = grad;
+                    if (!std::isfinite(sample.aniso.avg())) {
+                        sample.aniso = Vec3f(1.f, 0.f, 0.f);
+                        std::cout << "Gradient invalid.\n";
+                    }
                     break;
                 }
                 prevV = currV;
@@ -149,13 +195,15 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
             }
         }
 
+        
         sample.t = min(t, maxT);
         sample.continuedT = t;
         sample.exited = (t >= maxT);
-        sample.weight = sigmaS(ray.pos() + sample.t * ray.dir()) / sigmaT(ray.pos() + sample.t * ray.dir());
-        sample.continuedWeight = sigmaS(ray.pos() + sample.continuedT * ray.dir()) / sigmaT(ray.pos() + sample.continuedT * ray.dir());
+        sample.weight = Vec3f(1.0f); // sigmaS(ray.pos() + sample.t * ray.dir()) / sigmaT(ray.pos() + sample.t * ray.dir());
+        sample.continuedWeight = Vec3f(1.0f); // sigmaS(ray.pos() + sample.continuedT * ray.dir()) / sigmaT(ray.pos() + sample.continuedT * ray.dir());
         sample.pdf = 1;
         
+        state.lastAniso = sample.aniso;
         state.advance();
     }
     sample.p = ray.pos() + sample.t*ray.dir();
@@ -165,7 +213,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
 }
 
 Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const Ray &ray, bool startOnSurface,
-        bool endOnSurface) const
+        bool endOnSurface, MediumSample* sample) const
 {
     if (ray.farT() == Ray::infinity())
         return Vec3f(0.0f);
@@ -193,9 +241,17 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
             ray.dir(), 10, sampler);
     }
     else {
+
+        return Vec3f(1.0);
+
+        if (!sample) {
+            std::cout << "what\n";
+            return Vec3f(0.f);
+        }
+
         std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
         std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
-        std::array<float, 2> cond_vs = { 0, _gp->rand_truncated_normal(0, 1., 0, sampler) };
+        std::array<float, 2> cond_vs = { 0, sample->aniso.dot(ray.dir().normalized()) };
 
         gpSamples = _gp->sample_cond(
             points.data(), derivs.data(), points.size(),

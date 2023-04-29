@@ -154,7 +154,7 @@ bool VoxelMedium::sampleDistance(PathSampleGenerator &sampler, const Ray &ray,
 }
 
 Vec3f VoxelMedium::transmittance(PathSampleGenerator &sampler, const Ray &ray, bool startOnSurface,
-        bool endOnSurface) const
+        bool endOnSurface, MediumSample* sample) const
 {
     Vec3f p = _worldToGrid*ray.pos();
     Vec3f w = _worldToGrid.transformVector(ray.dir());

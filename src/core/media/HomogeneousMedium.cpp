@@ -108,7 +108,7 @@ bool HomogeneousMedium::sampleDistance(PathSampleGenerator &sampler, const Ray &
 }
 
 Vec3f HomogeneousMedium::transmittance(PathSampleGenerator &/*sampler*/, const Ray &ray, bool startOnSurface,
-        bool endOnSurface) const
+        bool endOnSurface, MediumSample* sample) const
 {
     if (ray.farT() == Ray::infinity())
         return Vec3f(0.0f);

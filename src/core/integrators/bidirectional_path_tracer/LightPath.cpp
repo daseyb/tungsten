@@ -342,7 +342,7 @@ Vec3f LightPath::bdptConnect(const TraceBase &tracer, const LightPath &camera, c
         PathEdge edge(d, 1.0f, 1.0f);
         Ray ray(b.pos(), -d, 1e-4f);
         Vec3f transmittance = tracer.generalizedShadowRayAndPdfs(sampler, ray, b.selectMedium(-d), nullptr,
-                bounce, b.onSurface(), true, edge.pdfBackward, edge.pdfForward);
+                bounce, b.onSurface(), true, nullptr, edge.pdfBackward, edge.pdfForward);
         if (transmittance == 0.0f)
             return Vec3f(0.0f);
 
@@ -356,7 +356,7 @@ Vec3f LightPath::bdptConnect(const TraceBase &tracer, const LightPath &camera, c
             return Vec3f(0.0f);
         Ray ray(a.pos(), edge.d, 1e-4f, edge.r*(1.0f - 1e-4f));
         Vec3f transmittance = tracer.generalizedShadowRayAndPdfs(sampler, ray, a.selectMedium(edge.d), nullptr,
-                bounce, a.onSurface(), b.onSurface(), edge.pdfForward, edge.pdfBackward);
+                bounce, a.onSurface(), b.onSurface(), nullptr, edge.pdfForward, edge.pdfBackward);
         if (transmittance == 0.0f)
             return Vec3f(0.0f);
 
@@ -383,7 +383,7 @@ bool LightPath::bdptCameraConnect(const TraceBase &tracer, const LightPath &came
     PathEdge edge(a, b);
     Ray ray(a.pos(), edge.d, 1e-4f, edge.r*(1.0f - 1e-4f));
     Vec3f transmittance = tracer.generalizedShadowRayAndPdfs(sampler, ray, a.selectMedium(edge.d), nullptr,
-            bounce, a.onSurface(), b.onSurface(), edge.pdfForward, edge.pdfBackward);
+            bounce, a.onSurface(), b.onSurface(), nullptr, edge.pdfForward, edge.pdfBackward);
     if (transmittance == 0.0f)
         return false;
 
