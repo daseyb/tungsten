@@ -98,19 +98,25 @@ namespace Tungsten {
 
     class HomogeneousMean : public MeanFunction {
     public:
+        HomogeneousMean(float offset = 0.f) : _offset(offset) {}
+
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             MeanFunction::fromJson(value, scene);
+            value.getField("offset", _offset);
         }
 
         virtual rapidjson::Value toJson(Allocator& allocator) const override {
             return JsonObject{ JsonSerializable::toJson(allocator), allocator,
-                "type", "homogeneous"
+                "type", "homogeneous",
+                "offset", _offset
             };
         }
 
     private:
+        float _offset;
+
         virtual float mean(Vec3f a) const override {
-            return 0;
+            return _offset;
         }
 
         virtual Vec3f dmean_da(Vec3f a) const override {
@@ -147,6 +153,45 @@ namespace Tungsten {
 
         virtual Vec3f dmean_da(Vec3f a) const override {
             return (a-_c).normalized();
+        }
+    };
+
+    class LinearMean : public MeanFunction {
+    public:
+
+        LinearMean(Vec3f ref = Vec3f(0.f), Vec3f dir = Vec3f(1.f, 0.f, 0.f), float scale = 1.0f) : 
+            _ref(ref), _dir(dir.normalized()), _scale(scale) {}
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            MeanFunction::fromJson(value, scene);
+
+            value.getField("reference_point", _ref);
+            value.getField("direction", _dir);
+            value.getField("scale", _scale);
+
+            _dir.normalize();
+        }
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+                "type", "linear",
+                "reference_point", _ref,
+                "direction", _dir,
+                "scale", _scale
+            };
+        }
+
+    private:
+        Vec3f _ref;
+        Vec3f _dir;
+        float _scale;
+
+        virtual float mean(Vec3f a) const override {
+            return (a - _ref).dot(_dir) * _scale;
+        }
+
+        virtual Vec3f dmean_da(Vec3f a) const override {
+            return _dir * _scale;
         }
     };
 

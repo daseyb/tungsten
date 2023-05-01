@@ -9,9 +9,10 @@ DEFINE_STRINGABLE_ENUM(GaussianProcessFactory, "gaussian_process", ({
 }))
 
 
-DEFINE_STRINGABLE_ENUM(MeanFunctionFactory, "median", ({
+DEFINE_STRINGABLE_ENUM(MeanFunctionFactory, "mean", ({
     {"homogeneous", std::make_shared<HomogeneousMean>},
     {"spherical", std::make_shared<SphericalMean>},
+    {"linear", std::make_shared<LinearMean>},
 }))
 
 

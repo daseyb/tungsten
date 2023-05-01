@@ -22,7 +22,10 @@
 			"gaussian_process": {
 				"type": "standard",
 				"mean": {
-					"type": "homogeneous",
+					"type": "linear",
+					"reference_point": [0,1.0,0],
+					"direction": [1,1,1],
+					"scale": 0.001
 				},
 				"covariance": {
 					"type": "squared_exponential",
