@@ -252,12 +252,12 @@ void Scene::fromJson(JsonPtr value, const Scene &scene)
 {
     JsonSerializable::fromJson(value, scene);
 
-    if (auto media = value["media"])
-        for (unsigned i = 0; i < media.size(); ++i)
-            _media.emplace_back(instantiate<Medium>(media[i], *this));
     if (auto bsdfs = value["bsdfs"])
         for (unsigned i = 0; i < bsdfs.size(); ++i)
             _bsdfs.emplace_back(instantiate<Bsdf>(bsdfs[i], *this));
+    if (auto media = value["media"])
+        for (unsigned i = 0; i < media.size(); ++i)
+            _media.emplace_back(instantiate<Medium>(media[i], *this));
     if (auto primitives = value["primitives"])
         for (unsigned i = 0; i < primitives.size(); ++i)
             _primitives.emplace_back(instantiate<Primitive>(primitives[i], *this));
