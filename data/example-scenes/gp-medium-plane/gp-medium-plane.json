@@ -1,0 +1,167 @@
+{
+    "media": [
+        {
+            "name": "gp",
+            "phase_function": {
+                "type": "brdf",
+				"bsdf": {
+					"name": "rough_metal",
+					"albedo": 1,
+					"type": "rough_conductor",
+					"material": "Cu",
+					"distribution": "beckmann",
+					"roughness": 0.1
+				}
+            },
+            "max_bounces": 1024,
+            "type": "gaussian_process",
+            "sigma_a": 0.0,
+            "sigma_s": 1.0,
+            "density": 1,
+            "sample_points": 32,
+			"gaussian_process": {
+				"type": "standard",
+				"mean": {
+					"type": "linear",
+					"reference_point": [0,-1,0],
+					"direction": [0,1,0],
+					"scale": 0.05
+				},
+				"covariance": {
+					"type": "squared_exponential",
+					"lengthScale": 1.0,
+					"sigma": 0.01
+				}
+			}
+        }
+    ],
+    "bsdfs": [
+        {
+            "name": "backWall",
+            "albedo": {
+				"type": "checker",
+			},
+            "type": "lambert"
+        },
+		{
+            "name": "wedge",
+            "albedo": 1.0,
+            "type": "forward"
+        },
+        {
+            "name": "light",
+            "albedo": 1,
+            "type": "null"
+        },
+        {
+            "name": "floor",
+            "albedo": 1,
+            "type": "null"
+        }
+    ],
+    "primitives": [
+	    {
+            "name": "floor",
+            "transform": {
+				"position": [ 0, -2, 0],
+                "scale": [
+                    200,
+                    400,
+                    200
+                ],
+                "rotation": [
+                    0,
+                    90,
+                    0
+                ]
+            },
+            "type": "quad",
+            "bsdf": "floor"
+        },
+        {
+            "name": "lightClose",
+            "transform": {
+                "position": [
+                    -2,
+                    1.98,
+                    0
+                ]
+            },
+            "emission": [
+                34,
+                24,
+                8
+            ],
+            "type": "point",
+            "bsdf": "light"
+        },
+		{
+            "name": "lightFar",
+            "transform": {
+                "position": [
+                    2,
+                    1.98,
+                    -20
+                ]
+            },
+            "emission": [
+                34,
+                24,
+                8
+            ],
+            "type": "point",
+            "bsdf": "light"
+        }
+    ],
+    "camera": {
+		"medium": "gp",
+        "tonemap": "filmic",
+        "resolution": [
+            512,
+            512
+        ],
+        "reconstruction_filter": "tent",
+        "transform": {
+            "position": [
+                -1.05697e-006,
+                1,
+                7
+            ],
+            "look_at": [
+                0,
+                1,
+                0
+            ],
+            "up": [
+                0,
+                1,
+                0
+            ]
+        },
+        "type": "pinhole",
+        "fov": 25
+    },
+    "integrator": {
+        "type": "path_tracer",
+        "min_bounces": 0,
+        "max_bounces": 64,
+        "enable_consistency_checks": false,
+        "enable_two_sided_shading": true,
+        "enable_light_sampling": true,
+        "enable_volume_light_sampling": true
+    },
+    "renderer": {
+        "output_file": "gp-medium-plane.png",
+        "hdr_output_file": "gp-medium-plane.pfm",
+        "resume_render_file": "",
+        "overwrite_output_files": false,
+        "adaptive_sampling": false,
+        "enable_resume_render": false,
+        "stratified_sampler": false,
+        "scene_bvh": true,
+        "spp": 8,
+        "spp_step": 1,
+        "checkpoint_interval": "0",
+        "timeout": "0"
+    }
+}
