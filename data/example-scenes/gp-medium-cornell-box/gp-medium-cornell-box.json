@@ -7,9 +7,10 @@
             },
             "max_bounces": 1024,
             "type": "gaussian_process",
-            "sigma_a": 1.0,
+            "sigma_a": 0.1,
             "sigma_s": 1.0,
             "density": 1,
+            "sample_points": 128,
 			"gaussian_process": {
 				"type": "standard",
 				"mean": {
@@ -19,9 +20,9 @@
 				},
 				"covariance": {
 					"type": "squared_exponential",
-					"lengthScale": 0.1,
-					"sigma": 0.1
-				},
+					"lengthScale": 0.001,
+					"sigma": 0.001
+				}
 			}
         }
     ],
@@ -340,6 +341,7 @@
     },
     "renderer": {
         "output_file": "gp-medium-cornell-box.png",
+        "hdr_output_file": "gp-medium-cornell-box.hdr",
         "resume_render_file": "",
         "overwrite_output_files": false,
         "adaptive_sampling": false,
