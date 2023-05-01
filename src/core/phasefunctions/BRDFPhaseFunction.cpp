@@ -29,8 +29,8 @@ Vec3f BRDFPhaseFunction::eval(const Vec3f &wi, const Vec3f &wo, const MediumSamp
     SurfaceScatterEvent se;
     se.requestedLobe = BsdfLobes::AllLobes;
     se.frame = TangentFrame(mediumSample.aniso.normalized());
-    se.wi = se.frame.toLocal(se.wi).normalized();
-    se.wo = se.frame.toLocal(se.wo).normalized();
+    se.wi = se.frame.toLocal(-wi).normalized();
+    se.wo = se.frame.toLocal(wo).normalized();
     IntersectionInfo info;
     info.bsdf = _bsdf.get();
     info.Ng = mediumSample.aniso.normalized();
@@ -49,7 +49,7 @@ bool BRDFPhaseFunction::sample(PathSampleGenerator &sampler, const Vec3f &wi, co
     SurfaceScatterEvent se;
     se.sampler = &sampler;
     se.frame = TangentFrame(mediumSample.aniso.normalized());
-    se.wi = se.frame.toLocal(se.wi).normalized();
+    se.wi = se.frame.toLocal(-wi).normalized();
     se.requestedLobe = BsdfLobes::AllLobes;
     IntersectionInfo info;
     info.bsdf = _bsdf.get();
@@ -77,8 +77,8 @@ float BRDFPhaseFunction::pdf(const Vec3f &wi, const Vec3f &wo, const MediumSampl
 {
     SurfaceScatterEvent se;
     se.frame = TangentFrame(mediumSample.aniso.normalized());
-    se.wi = se.frame.toLocal(se.wi);
-    se.wo = se.frame.toLocal(se.wo);
+    se.wi = se.frame.toLocal(-wi);
+    se.wo = se.frame.toLocal(wo);
     se.requestedLobe = BsdfLobes::AllLobes;
     IntersectionInfo info;
     info.bsdf = _bsdf.get();

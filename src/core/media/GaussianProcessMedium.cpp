@@ -121,13 +121,6 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
             }
             else {
 
-                sample.t = maxT;
-                sample.weight = Vec3f(1.0f);
-                sample.pdf = 1.0f;
-                sample.exited = true;
-
-                return true;
-
                 std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
                 std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
                 std::array<float, 2> cond_vs = { 0, state.lastAniso.dot(ray.dir().normalized()) };
@@ -199,8 +192,8 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
         sample.t = min(t, maxT);
         sample.continuedT = t;
         sample.exited = (t >= maxT);
-        sample.weight = Vec3f(1.0f); // sigmaS(ray.pos() + sample.t * ray.dir()) / sigmaT(ray.pos() + sample.t * ray.dir());
-        sample.continuedWeight = Vec3f(1.0f); // sigmaS(ray.pos() + sample.continuedT * ray.dir()) / sigmaT(ray.pos() + sample.continuedT * ray.dir());
+        sample.weight = sigmaS(ray.pos() + sample.t * ray.dir()) / sigmaT(ray.pos() + sample.t * ray.dir());
+        sample.continuedWeight = sigmaS(ray.pos() + sample.continuedT * ray.dir()) / sigmaT(ray.pos() + sample.continuedT * ray.dir());
         sample.pdf = 1;
         
         state.lastAniso = sample.aniso;
@@ -241,8 +234,6 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
             ray.dir(), 10, sampler);
     }
     else {
-
-        return Vec3f(1.0);
 
         if (!sample) {
             std::cout << "what\n";
