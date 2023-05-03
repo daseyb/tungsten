@@ -25,12 +25,12 @@
 					"type": "linear",
 					"reference_point": [0,-1,0],
 					"direction": [0,1,0],
-					"scale": 0.05
+					"scale": 1
 				},
 				"covariance": {
 					"type": "squared_exponential",
 					"lengthScale": 1.0,
-					"sigma": 0.01
+					"sigma": 0.001
 				}
 			}
         }
@@ -39,14 +39,9 @@
         {
             "name": "backWall",
             "albedo": {
-				"type": "checker",
+				"type": "checker"
 			},
             "type": "lambert"
-        },
-		{
-            "name": "wedge",
-            "albedo": 1.0,
-            "type": "forward"
         },
         {
             "name": "light",
@@ -57,9 +52,36 @@
             "name": "floor",
             "albedo": 1,
             "type": "null"
+        },
+        {
+            "name": "upper",
+            "albedo": 1,
+            "type": "forward"
         }
     ],
     "primitives": [
+	{
+       "name": "backWall",
+            "transform": {
+                "position": [
+                    0,
+                    1,
+                    -30
+                ],
+                "scale": [
+                    30,
+                    4,
+                    30
+                ],
+                "rotation": [
+                    0,
+                    90,
+                    90
+                ]
+            },
+            "type": "quad",
+            "bsdf": "backWall"
+        },
 	    {
             "name": "floor",
             "transform": {
@@ -79,12 +101,48 @@
             "bsdf": "floor"
         },
         {
+            "name": "upper",
+            "transform": {
+				"position": [ 0, 0.4, 0],
+                "scale": [
+                    200,
+                    400,
+                    200
+                ],
+                "rotation": [
+                    0,
+                    90,
+                    0
+                ]
+            },
+            "type": "quad",
+            "bsdf": "upper",
+			"int_medium": "gp"
+        },
+        {
             "name": "lightClose",
             "transform": {
                 "position": [
                     -2,
-                    1.98,
-                    0
+                    1,
+                    -10
+                ]
+            },
+            "emission": [
+                34,
+                24,
+                8
+            ],
+            "type": "point",
+            "bsdf": "light"
+        },
+		{
+            "name": "lightMiddle",
+            "transform": {
+                "position": [
+                    0,
+                    1,
+                    -15
                 ]
             },
             "emission": [
@@ -100,7 +158,7 @@
             "transform": {
                 "position": [
                     2,
-                    1.98,
+                    1,
                     -20
                 ]
             },
@@ -114,7 +172,6 @@
         }
     ],
     "camera": {
-		"medium": "gp",
         "tonemap": "filmic",
         "resolution": [
             512,
@@ -124,7 +181,7 @@
         "transform": {
             "position": [
                 -1.05697e-006,
-                1,
+                2,
                 7
             ],
             "look_at": [

@@ -60,12 +60,23 @@ namespace Tungsten {
         }
     private:
         float _sigma, _l;
+
+        Vec3f _aniso = Vec3f(1.0f, 0.01f, 1.0f);
+
+        float dist2(Vec3f a, Vec3f b, Vec3f aniso) const {
+            return
+                a.x() * b.x() * aniso.x() +
+                a.y() * b.y() * aniso.y() +
+                a.z() * b.z() * aniso.z();
+        }
+
         virtual float cov(Vec3f a, Vec3f b) const override {
-            return sqr(_sigma) * exp(-( (a-b).lengthSq() / (2 * sqr(_l))));
+            float absq = dist2(a, b, _aniso);
+            return sqr(_sigma) * exp(-(absq / (2 * sqr(_l))));
         }
 
         virtual float dcov_da(Vec3f a, Vec3f b) const override {
-            float absq = (a - b).lengthSq();
+            float absq = dist2(a, b, _aniso);
             float ab = sqrtf(absq);
             return ((exp(-(absq / (2 * sqr(_l)))) * ab * sqr(_sigma)) / sqr(_l));
         }
@@ -75,7 +86,7 @@ namespace Tungsten {
         }
 
         virtual float dcov2_dadb(Vec3f a, Vec3f b) const override {
-            float absq = (a - b).lengthSq();
+            float absq = dist2(a, b, _aniso);
             return (exp(-(absq / (2 * sqr(_l)))) * sqr(_sigma)) / sqr(_l) - (exp(-(absq / (2 * sqr(_l)))) * absq * sqr(_sigma)) / powf(_l, 4);
         }
     };

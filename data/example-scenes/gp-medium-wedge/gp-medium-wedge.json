@@ -23,13 +23,13 @@
 				"type": "standard",
 				"mean": {
 					"type": "linear",
-					"reference_point": [0,1.0,0],
-					"direction": [1,1,1],
-					"scale": 0.001
+					"reference_point": [0,0.2,0],
+					"direction": [0,1,0],
+					"scale": 0.05
 				},
 				"covariance": {
 					"type": "squared_exponential",
-					"lengthScale": 0.1,
+					"lengthScale": 1.0,
 					"sigma": 0.1
 				}
 			}
