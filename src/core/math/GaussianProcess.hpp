@@ -61,13 +61,15 @@ namespace Tungsten {
     private:
         float _sigma, _l;
 
-        Vec3f _aniso = Vec3f(1.0f, 0.01f, 1.0f);
+        Vec3f _aniso = Vec3f(1.0f, 1.0f, 1.0f);
 
         float dist2(Vec3f a, Vec3f b, Vec3f aniso) const {
+            return (b - a).lengthSq();
+            Vec3f d = b - a;
             return
-                a.x() * b.x() * aniso.x() +
-                a.y() * b.y() * aniso.y() +
-                a.z() * b.z() * aniso.z();
+                d.x() * d.x() * aniso.x() +
+                d.y() * d.y() * aniso.y() +
+                d.z() * d.z() * aniso.z();
         }
 
         virtual float cov(Vec3f a, Vec3f b) const override {
