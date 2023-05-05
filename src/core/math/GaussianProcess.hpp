@@ -12,6 +12,9 @@
 
 
 namespace Tungsten {
+
+    class Grid;
+
     enum class Derivative : uint8_t {
         None = 0,
         First = 1
@@ -23,11 +26,14 @@ namespace Tungsten {
         float operator()(Derivative a, Derivative b, Vec3f pa, Vec3f pb) const {
             if (a == Derivative::None && b == Derivative::None) {
                 return cov(pa, pb);
-            } else if (a == Derivative::First && b == Derivative::None) {
-                return dcov_da(pa,pb);
-            } else if (a == Derivative::None && b == Derivative::First) {
+            }
+            else if (a == Derivative::First && b == Derivative::None) {
+                return dcov_da(pa, pb);
+            }
+            else if (a == Derivative::None && b == Derivative::First) {
                 return dcov_db(pa, pb);
-            } else {
+            }
+            else {
                 return dcov2_dadb(pa, pb);
             }
         }
@@ -35,7 +41,7 @@ namespace Tungsten {
     private:
         virtual float cov(Vec3f a, Vec3f b) const = 0;
         virtual float dcov_da(Vec3f a, Vec3f b) const = 0;
-        virtual float dcov_db(Vec3f a, Vec3f b) const  = 0;
+        virtual float dcov_db(Vec3f a, Vec3f b) const = 0;
         virtual float dcov2_dadb(Vec3f a, Vec3f b) const = 0;
 
     };
@@ -61,7 +67,7 @@ namespace Tungsten {
     private:
         float _sigma, _l;
         virtual float cov(Vec3f a, Vec3f b) const override {
-            return sqr(_sigma) * exp(-( (a-b).lengthSq() / (2 * sqr(_l))));
+            return sqr(_sigma) * exp(-((a - b).lengthSq() / (2 * sqr(_l))));
         }
 
         virtual float dcov_da(Vec3f a, Vec3f b) const override {
@@ -148,18 +154,18 @@ namespace Tungsten {
         float _r;
 
         virtual float mean(Vec3f a) const override {
-            return (a-_c).length() - _r;
+            return (a - _c).length() - _r;
         }
 
         virtual Vec3f dmean_da(Vec3f a) const override {
-            return (a-_c).normalized();
+            return (a - _c).normalized();
         }
     };
 
     class LinearMean : public MeanFunction {
     public:
 
-        LinearMean(Vec3f ref = Vec3f(0.f), Vec3f dir = Vec3f(1.f, 0.f, 0.f), float scale = 1.0f) : 
+        LinearMean(Vec3f ref = Vec3f(0.f), Vec3f dir = Vec3f(1.f, 0.f, 0.f), float scale = 1.0f) :
             _ref(ref), _dir(dir.normalized()), _scale(scale) {}
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
@@ -195,6 +201,23 @@ namespace Tungsten {
         }
     };
 
+
+    class TabulatedMean : public MeanFunction {
+    public:
+
+        TabulatedMean(std::shared_ptr<Grid> grid = nullptr) : _grid(grid) {}
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override;
+        virtual rapidjson::Value toJson(Allocator& allocator) const override;
+        virtual void loadResources() override;
+
+    private:
+        std::shared_ptr<Grid> _grid;
+
+        virtual float mean(Vec3f a) const override;
+        virtual Vec3f dmean_da(Vec3f a) const override;
+    };
+
     class GaussianProcess : public JsonSerializable {
     public:
 
@@ -204,10 +227,11 @@ namespace Tungsten {
         };
 
         GaussianProcess() : _mean(std::make_shared<HomogeneousMean>()), _cov(std::make_shared<SquaredExponentialCovariance>()) { }
-        GaussianProcess(std::shared_ptr<MeanFunction> mean, std::shared_ptr<CovarianceFunction> cov) : _mean(mean), _cov(cov){ }
+        GaussianProcess(std::shared_ptr<MeanFunction> mean, std::shared_ptr<CovarianceFunction> cov) : _mean(mean), _cov(cov) { }
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override;
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
+        virtual void loadResources() override;
 
         std::tuple<Eigen::VectorXf, Eigen::MatrixXf> mean_and_cov(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const;
         Eigen::VectorXf mean(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const;
@@ -217,7 +241,7 @@ namespace Tungsten {
 
         Eigen::MatrixXf sample(
             const Vec3f* points, const Derivative* derivative_types, int numPts,
-            const Constraint* constraints, int numConstraints, 
+            const Constraint* constraints, int numConstraints,
             Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const;
 
         Eigen::MatrixXf sample_cond(

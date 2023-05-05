@@ -6,6 +6,39 @@
 namespace Tungsten {
 
 
+void TabulatedMean::fromJson(JsonPtr value, const Scene& scene) {
+    MeanFunction::fromJson(value, scene);
+
+    if (auto grid = value["grid"]) {
+        _grid = scene.fetchGrid(grid);
+        _grid->requestSDF();
+        _grid->requestGradient();
+    }
+}
+
+rapidjson::Value TabulatedMean::toJson(Allocator& allocator) const {
+    return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+        "type", "tabulated",
+        "grid", *_grid
+    };
+}
+
+
+float TabulatedMean::mean(Vec3f a) const {
+    Vec3f p = _grid->invNaturalTransform() * a;
+    return _grid->density(p);
+}
+
+Vec3f TabulatedMean::dmean_da(Vec3f a) const {
+    Vec3f p = _grid->invNaturalTransform() * a;
+    return _grid->naturalTransform().transformVector(_grid->gradient(a));
+}
+
+void TabulatedMean::loadResources() {
+    _grid->loadResources();
+}
+
+
 void GaussianProcess::fromJson(JsonPtr value, const Scene& scene) {
     JsonSerializable::fromJson(value, scene);
 
@@ -21,6 +54,11 @@ rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
         "mean", *_mean,
         "covariance", *_cov
     };
+}
+
+void GaussianProcess::loadResources() {
+    _mean->loadResources();
+    _cov->loadResources();
 }
 
 std::tuple<Eigen::VectorXf, Eigen::MatrixXf> GaussianProcess::mean_and_cov(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const {

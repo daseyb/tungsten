@@ -48,6 +48,11 @@ rapidjson::Value GaussianProcessMedium::toJson(Allocator &allocator) const
     };
 }
 
+void GaussianProcessMedium::loadResources() {
+    _gp->loadResources();
+}
+
+
 bool GaussianProcessMedium::isHomogeneous() const
 {
     return false;
@@ -108,6 +113,8 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
 
             Eigen::MatrixXf gpSamples;
 
+            int startSign = 1;
+
             if (state.firstScatter) {
                 std::array<Vec3f, 1> cond_pts = { points[0] };
                 std::array<Derivative, 1> cond_deriv = { Derivative::None };
@@ -123,13 +130,16 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
 
                 std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
                 std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
-                std::array<float, 2> cond_vs = { 0, state.lastAniso.dot(ray.dir().normalized()) };
+
+                float deriv = state.lastAniso.dot(ray.dir().normalized());
+                startSign = deriv < 0 ? -1 : 1;
+                std::array<float, 2> cond_vs = { 0, deriv };
 
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), points.size(),
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
                     nullptr, 0,
-                    ray.dir(), 1, sampler);
+                    ray.dir(), 1, sampler) * startSign;
             }
             
 
@@ -174,7 +184,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                         gradSamples(0,0) - gradSamples(3,0),
                         gradSamples(1,0) - gradSamples(4,0),
                         gradSamples(2,0) - gradSamples(5,0),
-                    } / (2 * eps);
+                    } / (2 * eps) * startSign;
 
                     sample.aniso = grad;
                     if (!std::isfinite(sample.aniso.avg())) {
@@ -221,6 +231,7 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
     }
 
     Eigen::MatrixXf gpSamples;
+    int startSign = 1;
 
     if (startOnSurface) {
         std::array<Vec3f, 1> cond_pts = { points[0] };
@@ -242,13 +253,16 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
 
         std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
         std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
-        std::array<float, 2> cond_vs = { 0, sample->aniso.dot(ray.dir().normalized()) };
+
+        float deriv = sample->aniso.dot(ray.dir().normalized());
+        startSign = deriv < 0 ? -1 : 1;
+        std::array<float, 2> cond_vs = { 0, deriv };
 
         gpSamples = _gp->sample_cond(
             points.data(), derivs.data(), points.size(),
             cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
             nullptr, 0,
-            ray.dir(), 10, sampler);
+            ray.dir(), 10, sampler) * startSign;
     }
 
     int madeItCnt = 0;
