@@ -28,7 +28,7 @@
 			"type": "rough_conductor",
 			"material": "Cu",
 			"distribution": "beckmann",
-			"roughness": 0.1
+			"roughness": 0.01
 		}
     ],
     "media": [
