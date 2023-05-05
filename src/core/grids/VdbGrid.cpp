@@ -16,7 +16,7 @@
 #include <openvdb/tools/Interpolation.h>
 #include <openvdb/tools/GridOperators.h>
 #include <openvdb/tools/FastSweeping.h>
-
+#include <openvdb/tools/MultiResGrid.h>
 namespace Tungsten {
 
 std::string VdbGrid::sampleMethodToString(SampleMethod method)
@@ -271,27 +271,40 @@ void VdbGrid::loadResources()
 
     if (_requestSDF && _densityGrid) {
         std::cout << "Converting density grid to SDF...\n";
-        _densityGrid = openvdb::tools::fogToSdf(*_densityGrid, 0.f);
+        /*auto sdfGrid = openvdb::tools::fogToSdf(*_densityGrid, 0.0f);
+        for (openvdb::FloatGrid::ValueOnIter iter = sdfGrid->beginValueOn(); iter.test(); ++iter) {
+            iter.setValue((*iter) * -1);
+        }*/
+        
+        int downsample = 2;
+        openvdb::tools::MultiResGrid<openvdb::FloatTree> mgrid(downsample+1, _densityGrid);
+       
+
+        auto dilatedSdfGrid = openvdb::tools::dilateSdf(*mgrid.grid(downsample), 100, openvdb::tools::NearestNeighbors::NN_FACE_EDGE_VERTEX, 20);
+
+        //dilatedSdfGrid = openvdb::tools::sdfToSdf(*dilatedSdfGrid, 0, 10);
+
+        float scaleFac = (1 << downsample);
+
+        _transform = Mat4f::translate(-center) * Mat4f::scale(Vec3f(scale * scaleFac));
+        _invTransform = Mat4f::scale(Vec3f(1.0f / (scale * scaleFac))) * Mat4f::translate(center);
+
+        _densityGrid = dilatedSdfGrid;
     }
 
     if (_requestGradient && _densityGrid) {
         std::cout << "Computing gradient...\n";
         _gradientGrid = openvdb::tools::gradient(*_densityGrid);
+        _gradientGrid->setTransform(_densityGrid->transformPtr());
     }
 }
 
 void VdbGrid::requestGradient() {
     _requestGradient = true;
-    if (_densityGrid && !_gradientGrid) {
-        _gradientGrid = openvdb::tools::gradient(*_densityGrid);
-    }
 }
 
 void VdbGrid::requestSDF() {
     _requestSDF = true;
-    if (_densityGrid) {
-        _densityGrid = openvdb::tools::fogToSdf(*_densityGrid, 0.f);
-    }
 }
 
 
@@ -325,7 +338,6 @@ float VdbGrid::density(Vec3f p) const
 Vec3f VdbGrid::gradient(Vec3f p) const
 {
     if (_gradientGrid) {
-        Vec3f op = p;
         return Vec3f(openvdb::tools::BoxSampler::sample(_gradientGrid->tree(), openvdb::Vec3R(p.x(), p.y(), p.z())).asPointer());
     }
     else {

@@ -9,10 +9,16 @@
 #include <vector>
 #include "io/JsonSerializable.hpp"
 #include "io/JsonObject.hpp"
+#include "primitives/Triangle.hpp"
+#include "primitives/Vertex.hpp"
 
+
+namespace fcpw {
+    template<size_t DIM> class Scene;
+}
 
 namespace Tungsten {
-
+    
     class Grid;
 
     enum class Derivative : uint8_t {
@@ -67,13 +73,13 @@ namespace Tungsten {
     private:
         float _sigma, _l;
         virtual float cov(Vec3f a, Vec3f b) const override {
-            return sqr(_sigma) * exp(-((a - b).lengthSq() / (2 * sqr(_l))));
+            return lerp(0.0001f, 5.0f, smoothStep(-.3f, 3.f, a.x())) * sqr(_sigma) * exp(-((a - b).lengthSq() / (2 * sqr(_l))));
         }
 
         virtual float dcov_da(Vec3f a, Vec3f b) const override {
             float absq = (a - b).lengthSq();
             float ab = sqrtf(absq);
-            return ((exp(-(absq / (2 * sqr(_l)))) * ab * sqr(_sigma)) / sqr(_l));
+            return lerp(0.001f, 5.0f, smoothStep(-1.f, 1.f, a.x())) * ((exp(-(absq / (2 * sqr(_l)))) * ab * sqr(_sigma)) / sqr(_l));
         }
 
         virtual float dcov_db(Vec3f a, Vec3f b) const override {
@@ -82,7 +88,7 @@ namespace Tungsten {
 
         virtual float dcov2_dadb(Vec3f a, Vec3f b) const override {
             float absq = (a - b).lengthSq();
-            return (exp(-(absq / (2 * sqr(_l)))) * sqr(_sigma)) / sqr(_l) - (exp(-(absq / (2 * sqr(_l)))) * absq * sqr(_sigma)) / powf(_l, 4);
+            return lerp(0.001f, 5.0f, smoothStep(-1.f, 1.f, a.x())) * ((exp(-(absq / (2 * sqr(_l)))) * sqr(_sigma)) / sqr(_l) - (exp(-(absq / (2 * sqr(_l)))) * absq * sqr(_sigma)) / powf(_l, 4));
         }
     };
 
@@ -213,6 +219,26 @@ namespace Tungsten {
 
     private:
         std::shared_ptr<Grid> _grid;
+
+        virtual float mean(Vec3f a) const override;
+        virtual Vec3f dmean_da(Vec3f a) const override;
+    };
+
+    class MeshSdfMean : public MeanFunction {
+    public:
+
+        MeshSdfMean(PathPtr path = nullptr) : _path(path) {}
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override;
+        virtual rapidjson::Value toJson(Allocator& allocator) const override;
+        virtual void loadResources() override;
+
+    private:
+        PathPtr _path;
+        std::shared_ptr<fcpw::Scene<3>> _scene;
+
+        std::vector<Vertex> _verts;
+        std::vector<TriangleI> _tris;
 
         virtual float mean(Vec3f a) const override;
         virtual Vec3f dmean_da(Vec3f a) const override;

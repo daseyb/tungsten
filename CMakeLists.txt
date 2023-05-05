@@ -80,13 +80,20 @@ add_library(thirdparty STATIC
 
 add_subdirectory(src/thirdparty/eigen)
 
+add_subdirectory(src/thirdparty/fcpw)
+
+
 if (CMAKE_COMPILER_IS_GNUCXX)
     set(CXX_WARNINGS "-Wall -Wextra -Wpointer-arith -Wcast-align -fstrict-aliasing -Wno-unused-local-typedefs -Wno-misleading-indentation -Wno-maybe-uninitialized -Wno-int-in-bool-context -Wno-implicit-fallthrough -Wno-class-memaccess")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARNINGS} -fvisibility-inlines-hidden")
 endif()
-set(core_libs core thirdparty embree Eigen3::Eigen)
+set(core_libs core thirdparty embree Eigen3::Eigen fcpw)
 
-include_directories(src/core src/thirdparty src/thirdparty/embree/include src src/thirdparty/eigen/)
+include_directories(
+	src/core src/thirdparty 
+	src/thirdparty/embree/include src 
+	src/thirdparty/eigen/ src/thirdparty/fcpw/include 
+	${FCPW_EIGEN_INCLUDES} ${FCPW_ENOKI_INCLUDES})
 
 find_package(Imath CONFIG REQUIRED)
 find_package(OpenEXR CONFIG REQUIRED)

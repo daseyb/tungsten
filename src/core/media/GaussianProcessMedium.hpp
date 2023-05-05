@@ -19,9 +19,9 @@ class GaussianProcessMedium : public Medium
 
     int _samplePoints;
 
-    std::shared_ptr<GaussianProcess> _gp;
 
 public:
+    std::shared_ptr<GaussianProcess> _gp;
     GaussianProcessMedium();
 
     virtual void fromJson(JsonPtr value, const Scene &scene) override;

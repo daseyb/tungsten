@@ -1,10 +1,15 @@
 #include "GaussianProcess.hpp"
 #include "io/JsonObject.hpp"
 #include "io/Scene.hpp"
+#include "io/MeshIO.hpp"
+
 #include "ziggurat_constants.h"
+#include "primitives/Triangle.hpp"
+#include "primitives/Vertex.hpp"
+
+#include <fcpw/fcpw.h>
 
 namespace Tungsten {
-
 
 void TabulatedMean::fromJson(JsonPtr value, const Scene& scene) {
     MeanFunction::fromJson(value, scene);
@@ -31,12 +36,83 @@ float TabulatedMean::mean(Vec3f a) const {
 
 Vec3f TabulatedMean::dmean_da(Vec3f a) const {
     Vec3f p = _grid->invNaturalTransform() * a;
-    return _grid->naturalTransform().transformVector(_grid->gradient(a));
+    return _grid->naturalTransform().transformVector(_grid->gradient(p));
 }
 
 void TabulatedMean::loadResources() {
     _grid->loadResources();
 }
+
+
+void MeshSdfMean::fromJson(JsonPtr value, const Scene& scene) {
+    MeanFunction::fromJson(value, scene);
+    if (auto path = value["file"]) _path = scene.fetchResource(path);
+}
+
+rapidjson::Value MeshSdfMean::toJson(Allocator& allocator) const {
+    return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+        "type", "mesh",
+        "file", *_path
+    };
+}
+
+
+float MeshSdfMean::mean(Vec3f a) const {
+    // perform a closest point query
+    fcpw::Interaction<3> interaction;
+    if (_scene->findClosestPoint({ a.x(), a.y(), a.z() }, interaction)) {
+        return interaction.signedDistance({ a.x(), a.y(), a.z() });
+    }
+    else {
+        return 1000000.f;
+    }
+}
+
+Vec3f MeshSdfMean::dmean_da(Vec3f a) const {
+    float eps = 0.001f;
+    float vals[] = {
+        mean(a),
+        mean(a + Vec3f(eps, 0.f, 0.f)),
+        mean(a + Vec3f(0.f, eps, 0.f)),
+        mean(a + Vec3f(0.f, 0.f, eps))
+    };
+
+    return Vec3f(vals[1] - vals[0], vals[2] - vals[0], vals[3] - vals[0]) / eps;
+}
+
+void MeshSdfMean::loadResources() {
+    if (_path && !MeshIO::load(*_path, _verts, _tris)) {
+        _scene = std::make_shared<fcpw::Scene<3>>();
+
+        // set the types of primitives the objects in the scene contain;
+        // in this case, we have a single object consisting of only triangles
+        _scene->setObjectTypes({ {fcpw::PrimitiveType::Triangle} });
+
+        // set the vertex and triangle count of the (0th) object
+        _scene->setObjectVertexCount(_verts.size(), 0);
+        _scene->setObjectTriangleCount(_tris.size() , 0);
+
+        // specify the vertex positions
+        for (int i = 0; i < _verts.size(); i++) {
+            _scene->setObjectVertex({ _verts[i].pos().x(), _verts[i].pos().y(), _verts[i].pos().z() }, i, 0);
+        }
+
+        // specify the triangle indices
+        for (int i = 0; i < _tris.size(); i++) {
+            int tri[] = {
+                _tris[i].v0,
+                _tris[i].v1,
+                _tris[i].v2,
+            };
+
+            _scene->setObjectTriangle(tri, i, 0);
+        }
+
+        // now that the geometry has been specified, build the acceleration structure
+        _scene->build(fcpw::AggregateType::Bvh_SurfaceArea, true); // the second boolean argument enables vectorization
+    }
+}
+
 
 
 void GaussianProcess::fromJson(JsonPtr value, const Scene& scene) {

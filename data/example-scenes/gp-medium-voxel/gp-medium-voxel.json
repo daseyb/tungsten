@@ -20,12 +20,12 @@
 						"type": "vdb",
 						"file": "dragon.vdb",
 						"density_name": "ls_dragon",
-						"request_gradient": true,
 						"normalize_size": false,
+						"integration_method": "raymarching",
 						"transform": {
 							"position": [
 								0.0,
-								0.5,
+								0.4,
 								0.0
 							],
 							"scale": 0.01,
@@ -39,8 +39,8 @@
 				},
 				"covariance": {
 					"type": "squared_exponential",
-					"lengthScale": 1.0,
-					"sigma": 0.1
+					"lengthScale": 0.1,
+					"sigma": 1.0
 				}
 			}
         }
@@ -66,11 +66,11 @@
             "transform": {
                 "position": [
                     0,
-                    1,
+                    1.001,
                     0
                 ],
                 "scale": [
-                    2,
+                    4,
                     2,
                     2
                 ],
@@ -198,7 +198,7 @@
         "enable_resume_render": false,
         "stratified_sampler": true,
         "scene_bvh": true,
-        "spp": 16,
+        "spp": 128,
         "spp_step": 1,
         "timeout": "0",
         "output_file": "gp-medium-voxel.png",
