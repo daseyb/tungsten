@@ -50,10 +50,14 @@ class VdbGrid : public Grid
     SampleMethod _sampleMethod;
     openvdb::FloatGrid::Ptr _densityGrid;
     openvdb::Vec3fGrid::Ptr _emissionGrid;
+    openvdb::Vec3fGrid::Ptr _gradientGrid;
     Vec2fGrid::Ptr _superGrid;
     Mat4f _transform;
     Mat4f _invTransform;
     Box3f _bounds;
+    bool _requestGradient;
+    bool _requestSDF;
+    
 
     static std::string sampleMethodToString(SampleMethod method);
     static std::string integrationMethodToString(IntegrationMethod method);
@@ -75,7 +79,11 @@ public:
     virtual Mat4f invNaturalTransform() const override;
     virtual Box3f bounds() const override;
 
+    virtual void requestGradient() override;
+    virtual void requestSDF() override;
+
     float density(Vec3f p) const override;
+    Vec3f gradient(Vec3f p) const override;
     Vec3f emission(Vec3f p) const override;
     float opticalDepth(PathSampleGenerator &sampler, Vec3f p, Vec3f w, float t0, float t1) const override;
     Vec2f inverseOpticalDepth(PathSampleGenerator &sampler, Vec3f p, Vec3f w, float t0, float t1, float tau) const override;

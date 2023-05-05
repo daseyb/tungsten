@@ -48,6 +48,11 @@ rapidjson::Value GaussianProcessMedium::toJson(Allocator &allocator) const
     };
 }
 
+void GaussianProcessMedium::loadResources() {
+    _gp->loadResources();
+}
+
+
 bool GaussianProcessMedium::isHomogeneous() const
 {
     return false;

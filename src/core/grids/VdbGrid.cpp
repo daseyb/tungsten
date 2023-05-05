@@ -14,6 +14,8 @@
 #include "Debug.hpp"
 
 #include <openvdb/tools/Interpolation.h>
+#include <openvdb/tools/GridOperators.h>
+#include <openvdb/tools/FastSweeping.h>
 
 namespace Tungsten {
 
@@ -72,7 +74,8 @@ VdbGrid::VdbGrid()
   _emissionScale(1.0f),
   _scaleEmissionByDensity(true),
   _normalizeSize(true),
-  _supergridSubsample(10)
+  _supergridSubsample(10),
+  _requestGradient(false)
 {
     _integrationMethod = stringToIntegrationMethod(_integrationString);
     _sampleMethod = stringToSampleMethod(_sampleString);
@@ -147,6 +150,7 @@ void VdbGrid::fromJson(JsonPtr value, const Scene &scene)
     value.getField("step_size", _stepSize);
     value.getField("supergrid_subsample", _supergridSubsample);
     value.getField("transform", _configTransform);
+    value.getField("request_gradient", _requestGradient);
 
     _integrationMethod = stringToIntegrationMethod(_integrationString);
     _sampleMethod = stringToSampleMethod(_sampleString);
@@ -165,7 +169,8 @@ rapidjson::Value VdbGrid::toJson(Allocator &allocator) const
         "normalize_size", _normalizeSize,
         "integration_method", _integrationString,
         "sampling_method", _sampleString,
-        "transform", _configTransform
+        "transform", _configTransform,
+        "request_gradient", _requestGradient
     };
     if (_integrationMethod == IntegrationMethod::ResidualRatio)
         result.add("supergrid_subsample", _supergridSubsample);
@@ -261,9 +266,35 @@ void VdbGrid::loadResources()
             _bounds = Box3f(Vec3f(minP - 1), Vec3f(maxP + 1));
         }
     }
-
     _invConfigTransform = _configTransform.invert();
+
+
+    if (_requestSDF && _densityGrid) {
+        std::cout << "Converting density grid to SDF...\n";
+        _densityGrid = openvdb::tools::fogToSdf(*_densityGrid, 0.f);
+    }
+
+    if (_requestGradient && _densityGrid) {
+        std::cout << "Computing gradient...\n";
+        _gradientGrid = openvdb::tools::gradient(*_densityGrid);
+    }
 }
+
+void VdbGrid::requestGradient() {
+    _requestGradient = true;
+    if (_densityGrid && !_gradientGrid) {
+        _gradientGrid = openvdb::tools::gradient(*_densityGrid);
+    }
+}
+
+void VdbGrid::requestSDF() {
+    _requestSDF = true;
+    if (_densityGrid) {
+        _densityGrid = openvdb::tools::fogToSdf(*_densityGrid, 0.f);
+    }
+}
+
+
 
 Mat4f VdbGrid::naturalTransform() const
 {
@@ -289,6 +320,18 @@ static inline float gridAt(TreeT &acc, Vec3f p)
 float VdbGrid::density(Vec3f p) const
 {
     return gridAt(_densityGrid->tree(), p);
+}
+
+Vec3f VdbGrid::gradient(Vec3f p) const
+{
+    if (_gradientGrid) {
+        Vec3f op = p;
+        return Vec3f(openvdb::tools::BoxSampler::sample(_gradientGrid->tree(), openvdb::Vec3R(p.x(), p.y(), p.z())).asPointer());
+    }
+    else {
+        std::cerr << "Tried to evaluate gradient on grid for which it was not requested at initialization!" << std::endl;
+        return Vec3f(0.f);
+    }
 }
 
 Vec3f VdbGrid::emission(Vec3f p) const

@@ -26,6 +26,7 @@ public:
 
     virtual void fromJson(JsonPtr value, const Scene &scene) override;
     virtual rapidjson::Value toJson(Allocator &allocator) const override;
+    virtual void loadResources() override;
 
     virtual bool isHomogeneous() const override;
 
