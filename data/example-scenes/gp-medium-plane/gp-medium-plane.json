@@ -10,7 +10,7 @@
 					"type": "rough_conductor",
 					"material": "Cu",
 					"distribution": "beckmann",
-					"roughness": 0.1
+					"roughness": 0.01
 				}
             },
             "max_bounces": 1024,
@@ -25,12 +25,12 @@
 					"type": "linear",
 					"reference_point": [0,-1,0],
 					"direction": [0,1,0],
-					"scale": 1
+					"scale": 100
 				},
 				"covariance": {
 					"type": "squared_exponential",
-					"lengthScale": 1.0,
-					"sigma": 0.001
+					"lengthScale": 0.01,
+					"sigma": 0.01
 				}
 			}
         }
