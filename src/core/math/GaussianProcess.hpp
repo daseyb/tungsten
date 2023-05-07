@@ -55,12 +55,13 @@ namespace Tungsten {
     class SquaredExponentialCovariance : public CovarianceFunction {
     public:
 
-        SquaredExponentialCovariance(float sigma = 1.f, float l = 1.) : _sigma(sigma), _l(l) {}
+        SquaredExponentialCovariance(float sigma = 1.f, float l = 1., Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _aniso(aniso) {}
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             CovarianceFunction::fromJson(value, scene);
             value.getField("sigma", _sigma);
             value.getField("lengthScale", _l);
+            value.getField("aniso", _aniso);
         }
 
         virtual rapidjson::Value toJson(Allocator& allocator) const override {
@@ -68,18 +69,27 @@ namespace Tungsten {
                 "type", "squared_exponential",
                 "sigma", _sigma,
                 "lengthScale", _l,
+                "aniso", _aniso
             };
         }
     private:
         float _sigma, _l;
+        Vec3f _aniso;
+
+        float dist2(Vec3f a, Vec3f b) const {
+            Vec3f d = b - a;
+            return d.dot(_aniso * d);
+        }
+
         virtual float cov(Vec3f a, Vec3f b) const override {
-            return lerp(0.0001f, 5.0f, smoothStep(-.3f, 3.f, a.x())) * sqr(_sigma) * exp(-((a - b).lengthSq() / (2 * sqr(_l))));
+            float absq = dist2(a, b);
+            return sqr(_sigma) * exp(-(absq / (2 * sqr(_l))));
         }
 
         virtual float dcov_da(Vec3f a, Vec3f b) const override {
-            float absq = (a - b).lengthSq();
+            float absq = dist2(a, b);
             float ab = sqrtf(absq);
-            return lerp(0.001f, 5.0f, smoothStep(-1.f, 1.f, a.x())) * ((exp(-(absq / (2 * sqr(_l)))) * ab * sqr(_sigma)) / sqr(_l));
+            return ((exp(-(absq / (2 * sqr(_l)))) * ab * sqr(_sigma)) / sqr(_l));
         }
 
         virtual float dcov_db(Vec3f a, Vec3f b) const override {
@@ -87,8 +97,8 @@ namespace Tungsten {
         }
 
         virtual float dcov2_dadb(Vec3f a, Vec3f b) const override {
-            float absq = (a - b).lengthSq();
-            return lerp(0.001f, 5.0f, smoothStep(-1.f, 1.f, a.x())) * ((exp(-(absq / (2 * sqr(_l)))) * sqr(_sigma)) / sqr(_l) - (exp(-(absq / (2 * sqr(_l)))) * absq * sqr(_sigma)) / powf(_l, 4));
+            float absq = dist2(a, b);
+            return ((exp(-(absq / (2 * sqr(_l)))) * sqr(_sigma)) / sqr(_l) - (exp(-(absq / (2 * sqr(_l)))) * absq * sqr(_sigma)) / powf(_l, 4));
         }
     };
 

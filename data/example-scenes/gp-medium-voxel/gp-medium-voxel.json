@@ -11,7 +11,7 @@
             "sigma_a": 0.0,
             "sigma_s": 1.0,
             "density": 1,
-            "sample_points": 32,
+            "sample_points": 64,
 			"gaussian_process": {
 				"type": "standard",
 				"mean": {
@@ -198,7 +198,7 @@
         "enable_resume_render": false,
         "stratified_sampler": true,
         "scene_bvh": true,
-        "spp": 128,
+        "spp": 256,
         "spp_step": 1,
         "timeout": "0",
         "output_file": "gp-medium-voxel.png",
