@@ -47,12 +47,16 @@ void TabulatedMean::loadResources() {
 void MeshSdfMean::fromJson(JsonPtr value, const Scene& scene) {
     MeanFunction::fromJson(value, scene);
     if (auto path = value["file"]) _path = scene.fetchResource(path);
+    value.getField("transform", _configTransform);
+    _invConfigTransform = _configTransform.invert();
+
 }
 
 rapidjson::Value MeshSdfMean::toJson(Allocator& allocator) const {
     return JsonObject{ JsonSerializable::toJson(allocator), allocator,
         "type", "mesh",
-        "file", *_path
+        "file", *_path,
+        "transform", _configTransform
     };
 }
 
@@ -81,7 +85,7 @@ Vec3f MeshSdfMean::dmean_da(Vec3f a) const {
 }
 
 void MeshSdfMean::loadResources() {
-    if (_path && !MeshIO::load(*_path, _verts, _tris)) {
+    if (_path && MeshIO::load(*_path, _verts, _tris)) {
         _scene = std::make_shared<fcpw::Scene<3>>();
 
         // set the types of primitives the objects in the scene contain;
@@ -94,7 +98,8 @@ void MeshSdfMean::loadResources() {
 
         // specify the vertex positions
         for (int i = 0; i < _verts.size(); i++) {
-            _scene->setObjectVertex({ _verts[i].pos().x(), _verts[i].pos().y(), _verts[i].pos().z() }, i, 0);
+            Vec3f tpos = _configTransform * _verts[i].pos();
+            _scene->setObjectVertex({ tpos.x(), tpos.y(), tpos.z() }, i, 0);
         }
 
         // specify the triangle indices
@@ -107,6 +112,8 @@ void MeshSdfMean::loadResources() {
 
             _scene->setObjectTriangle(tri, i, 0);
         }
+
+        _scene->computeObjectNormals(0);
 
         // now that the geometry has been specified, build the acceleration structure
         _scene->build(fcpw::AggregateType::Bvh_SurfaceArea, true); // the second boolean argument enables vectorization

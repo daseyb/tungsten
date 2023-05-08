@@ -247,6 +247,9 @@ namespace Tungsten {
         PathPtr _path;
         std::shared_ptr<fcpw::Scene<3>> _scene;
 
+        Mat4f _configTransform;
+        Mat4f _invConfigTransform;
+
         std::vector<Vertex> _verts;
         std::vector<TriangleI> _tris;
 

@@ -40,8 +40,8 @@ int main(int argc, char** argv) {
     std::vector<Derivative> derivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> fderivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
 
-    Vec3f min(-1.0f, 0.0f, -1.0f);
-    Vec3f max( 1.0f, 2.0f,  1.0f);
+    Vec3f min(-2.0f, 0.0f, -2.0f);
+    Vec3f max( 2.0f, 2.0f,  2.0f);
 
     {
         int idx = 0;

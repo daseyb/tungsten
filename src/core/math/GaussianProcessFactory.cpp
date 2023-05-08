@@ -14,6 +14,7 @@ DEFINE_STRINGABLE_ENUM(MeanFunctionFactory, "mean", ({
     {"spherical", std::make_shared<SphericalMean>},
     {"linear", std::make_shared<LinearMean>},
     {"tabulated", std::make_shared<TabulatedMean>},
+    {"mesh", std::make_shared<MeshSdfMean>},
 }))
 
 
