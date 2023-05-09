@@ -7,3 +7,6 @@
 [submodule "src/thirdparty/autodiff"]
 	path = src/thirdparty/autodiff
 	url = https://github.com/autodiff/autodiff
+[submodule "src/thirdparty/spectra"]
+	path = src/thirdparty/spectra
+	url = https://github.com/yixuan/spectra

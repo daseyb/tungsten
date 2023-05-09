@@ -14,6 +14,8 @@
             "sample_points": 64,
 			"gaussian_process": {
 				"type": "standard",
+				"max_num_eigenvalues": 32,
+				"covariance_epsilon": 0.0001,
 				"mean": {
 					"type": "tabulated",
 					"grid": {
@@ -201,7 +203,7 @@
         "enable_resume_render": false,
         "stratified_sampler": true,
         "scene_bvh": true,
-        "spp": 256,
+        "spp": 16,
         "spp_step": 1,
         "timeout": "0",
         "output_file": "gp-medium-voxel.png",

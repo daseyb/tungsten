@@ -160,6 +160,14 @@ public:
         return result;
     }
 
+    Vec cwiseProduct(const Vec& other) const
+    {
+        Vec result;
+        for (unsigned i = 0; i < Size; ++i)
+            result[i] = _v[i] * other[i];
+        return result;
+    }
+
     void normalize()
     {
         ElementType invLen = ElementType(1)/length();

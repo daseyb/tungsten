@@ -8,14 +8,22 @@
 #include "primitives/Vertex.hpp"
 
 #include <fcpw/fcpw.h>
+#include <Eigen/SparseQR>
+#include <Eigen/Core>
+#include <Spectra/SymEigsSolver.h>
 
+#include <Spectra/MatOp/SparseGenMatProd.h>
+
+#ifdef SPARSE_COV
+#define SPARSE_SOLVE
+#endif
 
 namespace Tungsten {
 
 FloatD CovarianceFunction::dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const {
     Eigen::Array3d zd = Eigen::Array3d::Zero();
     auto covDiff = autodiff::derivatives([&](auto a, auto b) { return cov(a,b); }, autodiff::along(dir, zd), at(a, b));
-    return -covDiff[1];
+    return covDiff[1];
 }
 
 FloatD CovarianceFunction::dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const {
@@ -26,6 +34,21 @@ FloatD CovarianceFunction::dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir
     auto covDiff = autodiff::derivatives([&](auto a, auto b) { return cov(a, b); }, autodiff::along(Eigen::Array3d(-dir*0.5f), Eigen::Array3d(dir*0.5f)), at(a, b));
     return -covDiff[2];
 }
+
+/*virtual FloatD dcov_da(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
+    FloatD absq = dist2(a, b);
+    FloatD ab = sqrt(absq);
+    return ((exp(-(absq / (2 * sqr(_l)))) * ab * sqr(_sigma)) / sqr(_l));
+}
+
+virtual FloatD dcov_db(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
+    return dcov_da(b, a);
+}
+
+virtual FloatD dcov2_dadb(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
+    FloatD absq = dist2(a, b);
+    return ((exp(-(absq / (2 * sqr(_l)))) * sqr(_sigma)) / sqr(_l) - (exp(-(absq / (2 * sqr(_l)))) * absq * sqr(_sigma)) / powf(_l, 4));
+}*/
 
 void TabulatedMean::fromJson(JsonPtr value, const Scene& scene) {
     MeanFunction::fromJson(value, scene);
@@ -145,13 +168,18 @@ void GaussianProcess::fromJson(JsonPtr value, const Scene& scene) {
         _mean = scene.fetchMeanFunction(mean);
     if (auto cov = value["covariance"])
         _cov = scene.fetchCovarianceFunction(cov);
+
+    value.getField("max_num_eigenvalues", _maxEigenvaluesN);
+    value.getField("covariance_epsilon", _covEps);
 }
 
 rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
     return JsonObject{ JsonSerializable::toJson(allocator), allocator,
         "type", "standard",
         "mean", *_mean,
-        "covariance", *_cov
+        "covariance", *_cov,
+        "max_num_eigenvalues", _maxEigenvaluesN,
+        "covariance_epsilon", _covEps
     };
 }
 
@@ -160,22 +188,39 @@ void GaussianProcess::loadResources() {
     _cov->loadResources();
 }
 
-std::tuple<Eigen::VectorXf, Eigen::MatrixXf> GaussianProcess::mean_and_cov(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const {
+std::tuple<Eigen::VectorXf, CovMatrix> GaussianProcess::mean_and_cov(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, size_t numPts) const {
     Eigen::VectorXf ps_mean(numPts);
-    Eigen::MatrixXf ps_cov(numPts, numPts);
+    CovMatrix ps_cov(numPts, numPts);
+
+#if SPARSE_COV
+    std::vector<Eigen::Triplet<float>> tripletList;
+    tripletList.reserve(min(numPts * numPts / 10, (size_t)10000));
+#endif
 
     for (size_t i = 0; i < numPts; i++) {
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
 
         for (size_t j = 0; j < numPts; j++) {
-            ps_cov(i, j) = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], deriv_dir);
+            float cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], deriv_dir);
+
+#if SPARSE_COV
+            if (std::abs(cov_ij) > _covEps) {
+                tripletList.push_back(Eigen::Triplet<float>(i, j, cov_ij));
+            }
+#else
+            ps_cov(i, j) = cov_ij;
+#endif
         }
     }
+
+#if SPARSE_COV
+    ps_cov.setFromTriplets(tripletList.begin(), tripletList.end());
+#endif
 
     return { ps_mean, ps_cov };
 }
 
-Eigen::VectorXf GaussianProcess::mean(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const {
+Eigen::VectorXf GaussianProcess::mean(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, size_t numPts) const {
     Eigen::VectorXf ps_mean(numPts);
     for (size_t i = 0; i < numPts; i++) {
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
@@ -183,14 +228,32 @@ Eigen::VectorXf GaussianProcess::mean(const Vec3f* points, const Derivative* der
     return ps_mean;
 }
 
-Eigen::MatrixXf GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, Vec3f deriv_dir, int numPtsA, int numPtsB) const {
-    Eigen::MatrixXf ps_cov(numPtsA, numPtsB);
+CovMatrix GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, Vec3f deriv_dir, size_t numPtsA, size_t numPtsB) const {
+    CovMatrix ps_cov(numPtsA, numPtsB);
+
+#if SPARSE_COV
+    std::vector<Eigen::Triplet<float>> tripletList;
+    tripletList.reserve(min(numPts * numPts / 10, (size_t)10000));
+#endif
+
 
     for (size_t i = 0; i < numPtsA; i++) {
         for (size_t j = 0; j < numPtsB; j++) {
-            ps_cov(i, j) = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j], deriv_dir);
+            float cov_ij = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j], deriv_dir);
+
+#if SPARSE_COV
+            if (std::abs(cov_ij) > _covEps) {
+                tripletList.push_back(Eigen::Triplet<float>(i, j, cov_ij));
+            }
+#else
+            ps_cov(i, j) = cov_ij;
+#endif
         }
     }
+
+#if SPARSE_COV
+    ps_cov.setFromTriplets(tripletList.begin(), tripletList.end());
+#endif
 
     return ps_cov;
 }
@@ -204,8 +267,8 @@ float GaussianProcess::sample_start_value(Vec3f p, PathSampleGenerator& sampler)
 
 
 Eigen::MatrixXf GaussianProcess::sample(
-    const Vec3f* points, const Derivative* derivative_types, int numPts, 
-    const Constraint* constraints, int numConstraints, 
+    const Vec3f* points, const Derivative* derivative_types, size_t numPts,
+    const Constraint* constraints, size_t numConstraints,
     Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
     auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dir, numPts);
@@ -216,23 +279,28 @@ Eigen::MatrixXf GaussianProcess::sample(
 }
 
 Eigen::MatrixXf GaussianProcess::sample_cond(
-    const Vec3f* points, const Derivative* derivative_types, int numPts,
-    const Vec3f* cond_points, const float* cond_values, const Derivative* cond_derivative_types, int numCondPts,
-    const Constraint* constraints, int numConstraints,
+    const Vec3f* points, const Derivative* derivative_types, size_t numPts,
+    const Vec3f* cond_points, const float* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+    const Constraint* constraints, size_t numConstraints,
     Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
-    Eigen::MatrixXf s11 = cov(cond_points, cond_points, cond_derivative_types, cond_derivative_types, deriv_dir, numCondPts, numCondPts);
-    Eigen::MatrixXf s12 = cov(cond_points, points, cond_derivative_types, derivative_types, deriv_dir, numCondPts, numPts);
+    CovMatrix s11 = cov(cond_points, cond_points, cond_derivative_types, cond_derivative_types, deriv_dir, numCondPts, numCondPts);
+    CovMatrix s12 = cov(cond_points, points, cond_derivative_types, derivative_types, deriv_dir, numCondPts, numPts);
 
-    //Eigen::LLT<Eigen::MatrixXf> solver(s11);
-    Eigen::MatrixXf solved = s11.colPivHouseholderQr().solve(s12).transpose(); //  solver.solve(s12).transpose();
+#ifdef SPARSE_COV
+    Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::AMDOrdering<int>> solver(s11);
+    CovMatrix solved = solver.solve(s12).transpose();
+#else
+    CovMatrix solved = s11.colPivHouseholderQr().solve(s12).transpose();
+#endif
+
 
     Eigen::Map<const Eigen::VectorXf> cond_values_view(cond_values, numCondPts);
     Eigen::VectorXf m2 = mean(points, derivative_types, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, deriv_dir, numCondPts)));
 
-    Eigen::MatrixXf s22 = cov(points, points, derivative_types, derivative_types, deriv_dir, numPts, numPts);
+    CovMatrix s22 = cov(points, points, derivative_types, derivative_types, deriv_dir, numPts, numPts);
 
-    Eigen::MatrixXf s2 = s22 - (solved * s12);
+    CovMatrix s2 = s22 - (solved * s12);
 
     return sample_multivariate_normal(m2, s2, constraints, numConstraints, samples, sampler);
 }
@@ -352,13 +420,20 @@ float GaussianProcess::rand_truncated_normal(float mean, float sigma, float a, P
 //}
 
 Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
-    const Eigen::VectorXf& mean, const Eigen::MatrixXf& cov,
+    const Eigen::VectorXf& mean, const CovMatrix& cov,
     const Constraint* constraints, int numConstraints,
     int samples, PathSampleGenerator& sampler) const {
 
-    // Use the Cholesky decomposition to transform the standard normal vector to the desired multivariate normal distribution
-    Eigen::LLT<Eigen::MatrixXf> chol(cov);
     Eigen::MatrixXf normTransform;
+
+#ifndef SPARSE_SOLVE
+    // Use the Cholesky decomposition to transform the standard normal vector to the desired multivariate normal distribution
+
+#ifdef SPARSE_COV
+    Eigen::SimplicialLLT<CovMatrix> chol(cov);
+#else
+    Eigen::LLT<Eigen::MatrixXf> chol(cov);
+#endif
 
     // We can only use the cholesky decomposition if 
       // the covariance matrix is symmetric, pos-definite.
@@ -368,11 +443,26 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
         // Use cholesky solver
         normTransform = chol.matrixL();
     }
-    else {
-        // Use eigen solver
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> eigenSolver(cov);
-        normTransform = eigenSolver.eigenvectors()
-            * eigenSolver.eigenvalues().cwiseMax(0).cwiseSqrt().asDiagonal();
+    else 
+#endif
+    {
+
+#ifdef SPARSE_SOLVE
+        Spectra::SparseGenMatProd<float> op(cov);
+        Spectra::SymEigsSolver<Spectra::SparseGenMatProd<float>> eigs(
+            op, 
+            min(size_t(cov.rows()-2), _maxEigenvaluesN), 
+            min(size_t(cov.rows()-1), _maxEigenvaluesN * 2)
+        );
+
+        // Initialize and compute
+        eigs.init();
+        int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
+#else
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> eigs(cov);
+#endif
+        normTransform = eigs.eigenvectors() 
+            * eigs.eigenvalues().cwiseMax(0).cwiseSqrt().asDiagonal();
     }
 
     // Generate a vector of standard normal variates with the same dimension as the mean

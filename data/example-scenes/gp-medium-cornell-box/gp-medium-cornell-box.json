@@ -11,8 +11,11 @@
             "sigma_a": 0.0,
             "sigma_s": 1.0,
             "density": 1,
+			"sample_points": 128,
 			"gaussian_process": {
 				"type": "standard",
+				"max_num_eigenvalues": 64,
+				"covariance_epsilon": 0.0001,
 				"mean": {
 					"type": "spherical",
 					"center": [0,1,0],
@@ -355,7 +358,7 @@
         "enable_resume_render": false,
         "stratified_sampler": false,
         "scene_bvh": true,
-        "spp": 8,
+        "spp": 1,
         "spp_step": 1,
         "checkpoint_interval": "0",
         "timeout": "0"

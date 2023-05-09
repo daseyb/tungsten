@@ -90,18 +90,22 @@ set(AUTODIFF_BUILD_EXAMPLES OFF)
 set(AUTODIFF_BUILD_DOCS OFF)
 add_subdirectory(src/thirdparty/autodiff)
 
+
+add_subdirectory(src/thirdparty/spectra)
+
 if (CMAKE_COMPILER_IS_GNUCXX)
     set(CXX_WARNINGS "-Wall -Wextra -Wpointer-arith -Wcast-align -fstrict-aliasing -Wno-unused-local-typedefs -Wno-misleading-indentation -Wno-maybe-uninitialized -Wno-int-in-bool-context -Wno-implicit-fallthrough -Wno-class-memaccess")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARNINGS} -fvisibility-inlines-hidden")
 endif()
 
-set(core_libs core thirdparty embree Eigen3::Eigen fcpw enoki-autodiff autodiff::autodiff)
+set(core_libs core thirdparty embree Eigen3::Eigen fcpw autodiff::autodiff Spectra)
 
 include_directories(
 	src/core src/thirdparty 
 	src/thirdparty/embree/include src 
 	src/thirdparty/eigen/ src/thirdparty/fcpw/include 
 	src/thirdparty/autodiff
+	src/thirdparty/spectra/include
 	${FCPW_EIGEN_INCLUDES} ${FCPW_ENOKI_INCLUDES})
 
 find_package(Imath CONFIG REQUIRED)
@@ -134,10 +138,14 @@ if (OpenVDB_FOUND AND OpenEXR_FOUND AND TBB_FOUND)
     add_definitions(-DOPENVDB_3_ABI_COMPATIBLE)
 	add_definitions(-DQT_NO_KEYWORDS)
     include_directories(${OpenVDB_INCLUDE_DIRS} ${Tbb_INCLUDE_DIRS})
-    set(core_libs ${core_libs} zstd lz4 OpenVDB::openvdb TBB::tbb TBB::tbbmalloc)
-    set(core_libs ${core_libs} 
-        "/dartfs-hpc/rc/home/y/f003hxy/dev/vcpkg/installed/x64-linux/lib/liblz4.a"
-        "/dartfs-hpc/rc/home/y/f003hxy/dev/vcpkg/installed/x64-linux/lib/libzstd.a")
+    set(core_libs ${core_libs} OpenVDB::openvdb TBB::tbb TBB::tbbmalloc)
+	
+	if (NOT WIN32)
+		set(core_libs ${core_libs} 
+			"/dartfs-hpc/rc/home/y/f003hxy/dev/vcpkg/installed/x64-linux/lib/liblz4.a"
+			"/dartfs-hpc/rc/home/y/f003hxy/dev/vcpkg/installed/x64-linux/lib/libzstd.a")
+	endif()
+
 else()
     if (NOT OpenVDB_FOUND)
         message(STATUS "No OpenVDB detected. Building without .vdb support")

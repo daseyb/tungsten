@@ -2,6 +2,8 @@
 #define GAUSSIANPROCESS_HPP_
 #include "sampling/PathSampleGenerator.hpp"
 #include "Eigen/Dense"
+#include "Eigen/Sparse"
+
 #include "BitManip.hpp"
 #include "math/Vec.hpp"
 #include "math/MathUtil.hpp"
@@ -46,13 +48,12 @@ namespace Tungsten {
 
     public:
         float operator()(Derivative a, Derivative b, Vec3f pa, Vec3f pb, Vec3f gradDir) const {
-
             Vec3Diff pad = to_diff(pa);
             Vec3Diff pbd = to_diff(pb);
             Eigen::Array3d gradDirD = Eigen::Array3d{ gradDir.x(), gradDir.y(), gradDir.z() };
 
             if (a == Derivative::None && b == Derivative::None) {
-                return (float)cov(pad, pbd);
+                return cov(pa, pb);
             }
             else if (a == Derivative::First && b == Derivative::None) {
                 return (float)dcov_da(pad, pbd, gradDirD);
@@ -65,8 +66,14 @@ namespace Tungsten {
             }
         }
 
+        virtual bool isMonotonic() const {
+            return true;
+        }
+
     private:
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const = 0;
+        virtual float cov(Vec3f a, Vec3f b) const = 0;
+
         virtual FloatD dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const;
         virtual FloatD dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const;
         virtual FloatD dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const;
@@ -96,9 +103,10 @@ namespace Tungsten {
         float _sigma, _l;
         Vec3f _aniso;
 
-        FloatD dist2(Vec3Diff a, Vec3Diff b) const {
-            Vec3Diff d = b - a;
-            return d.dot(to_diff(_aniso).cwiseProduct(d));
+        template<typename Vec>
+        auto dist2(Vec a, Vec b) const {
+            auto d = b - a;
+            return d.dot(Vec{ _aniso.x(), _aniso.y(), _aniso.z() }.cwiseProduct(d));
         }
 
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
@@ -106,20 +114,10 @@ namespace Tungsten {
             return sqr(_sigma)* exp(-(absq / (2 * sqr(_l))));
         }
 
-        /*virtual FloatD dcov_da(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
-            FloatD absq = dist2(a, b);
-            FloatD ab = sqrt(absq);
-            return ((exp(-(absq / (2 * sqr(_l)))) * ab * sqr(_sigma)) / sqr(_l));
+        virtual float cov(Vec3f a, Vec3f b) const override {
+            float absq = dist2(a, b);
+            return sqr(_sigma) * exp(-(absq / (2 * sqr(_l))));
         }
-
-        virtual FloatD dcov_db(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
-            return dcov_da(b, a);
-        }
-
-        virtual FloatD dcov2_dadb(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
-            FloatD absq = dist2(a, b);
-            return ((exp(-(absq / (2 * sqr(_l)))) * sqr(_sigma)) / sqr(_l) - (exp(-(absq / (2 * sqr(_l)))) * absq * sqr(_sigma)) / powf(_l, 4));
-        }*/
     };
 
     class MeanFunction : public JsonSerializable {
@@ -277,6 +275,14 @@ namespace Tungsten {
         virtual Vec3f dmean_da(Vec3f a) const override;
     };
 
+//#define SPARSE_COV
+
+#ifdef SPARSE_COV
+    using CovMatrix = Eigen::SparseMatrix<float>;
+#else
+    using CovMatrix = Eigen::MatrixXf;
+#endif
+
     class GaussianProcess : public JsonSerializable {
     public:
 
@@ -292,22 +298,25 @@ namespace Tungsten {
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
         virtual void loadResources() override;
 
-        std::tuple<Eigen::VectorXf, Eigen::MatrixXf> mean_and_cov(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const;
-        Eigen::VectorXf mean(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const;
-        Eigen::MatrixXf cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, Vec3f deriv_dir, int numPtsA, int numPtsB) const;
+        std::tuple<Eigen::VectorXf, CovMatrix> mean_and_cov(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, size_t numPts) const;
+        Eigen::VectorXf mean(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, size_t numPts) const;
+        CovMatrix cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, Vec3f deriv_dir, size_t numPtsA, size_t numPtsB) const;
 
         float sample_start_value(Vec3f p, PathSampleGenerator& sampler) const;
 
         Eigen::MatrixXf sample(
-            const Vec3f* points, const Derivative* derivative_types, int numPts,
-            const Constraint* constraints, int numConstraints,
+            const Vec3f* points, const Derivative* derivative_types, size_t numPts,
+            const Constraint* constraints, size_t numConstraints,
             Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const;
 
         Eigen::MatrixXf sample_cond(
-            const Vec3f* points, const Derivative* derivative_types, int numPts,
-            const Vec3f* cond_points, const float* cond_values, const Derivative* cond_derivative_types, int numCondPts,
-            const Constraint* constraints, int numConstraints,
+            const Vec3f* points, const Derivative* derivative_types, size_t numPts,
+            const Vec3f* cond_points, const float* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+            const Constraint* constraints, size_t numConstraints,
             Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const;
+
+        size_t _maxEigenvaluesN = 64;
+        float _covEps = 0.0001f;
 
     public:
         // Get me some bits
@@ -321,7 +330,7 @@ namespace Tungsten {
         float rand_truncated_normal(float mean, float sigma, float a, PathSampleGenerator& sampler) const;
 
         Eigen::MatrixXf sample_multivariate_normal(
-            const Eigen::VectorXf& mean, const Eigen::MatrixXf& cov,
+            const Eigen::VectorXf& mean, const CovMatrix& cov,
             const Constraint* constraints, int numConstraints,
             int samples, PathSampleGenerator& sampler) const;
 

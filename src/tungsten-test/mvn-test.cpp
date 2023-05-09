@@ -6,11 +6,11 @@
 
 using namespace Tungsten;
 
-constexpr size_t NUM_SAMPLE_POINTS = 64;
+constexpr size_t NUM_SAMPLE_POINTS = 1024;
 
 int main() {
 
-	GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(5.f, 0.5f, 0.f), 4.f), std::make_shared<SquaredExponentialCovariance>(0.1f, 0.1f));
+	GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(5.f, 0.5f, 0.f), 3.f), std::make_shared<SquaredExponentialCovariance>(1.0f, 0.1f));
     
     UniformPathSampler sampler(0);
 
@@ -57,6 +57,21 @@ int main() {
         Eigen::VectorXf mean = gp.mean(points.data(), derivs.data(), ray.dir(), points.size());
         std::ofstream xfile("mean.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)mean.data(), sizeof(float) * mean.rows() * mean.cols());
+        xfile.close();
+    }
+
+    {
+        Eigen::Matrix4Xf kernel(4, NUM_SAMPLE_POINTS);
+
+        for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
+            kernel(0, i) = (*gp._cov)(Derivative::None, Derivative::None, points[0], points[i], ray.dir());
+            kernel(1, i) = (*gp._cov)(Derivative::None, Derivative::First, points[0], points[i], ray.dir());
+            kernel(2, i) = (*gp._cov)(Derivative::First, Derivative::None, points[0], points[i], ray.dir());
+            kernel(3, i) = (*gp._cov)(Derivative::First, Derivative::First, points[0], points[i], ray.dir());
+        }
+
+        std::ofstream xfile("kernel-eval.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)kernel.data(), sizeof(float) * kernel.rows() * kernel.cols());
         xfile.close();
     }
 

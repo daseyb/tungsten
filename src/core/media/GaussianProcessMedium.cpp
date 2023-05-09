@@ -136,7 +136,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                 std::array<float, 2> cond_vs = { 0, deriv };
 
                 gpSamples = _gp->sample_cond(
-                    points.data(), derivs.data(), points.size(),
+                    points.data(), derivs.data(), _samplePoints,
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
                     nullptr, 0,
                     ray.dir(), 1, sampler) * startSign;
