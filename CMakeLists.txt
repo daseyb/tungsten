@@ -134,7 +134,10 @@ if (OpenVDB_FOUND AND OpenEXR_FOUND AND TBB_FOUND)
     add_definitions(-DOPENVDB_3_ABI_COMPATIBLE)
 	add_definitions(-DQT_NO_KEYWORDS)
     include_directories(${OpenVDB_INCLUDE_DIRS} ${Tbb_INCLUDE_DIRS})
-    set(core_libs ${core_libs} OpenVDB::openvdb TBB::tbb TBB::tbbmalloc)
+    set(core_libs ${core_libs} zstd lz4 OpenVDB::openvdb TBB::tbb TBB::tbbmalloc)
+    set(core_libs ${core_libs} 
+        "/dartfs-hpc/rc/home/y/f003hxy/dev/vcpkg/installed/x64-linux/lib/liblz4.a"
+        "/dartfs-hpc/rc/home/y/f003hxy/dev/vcpkg/installed/x64-linux/lib/libzstd.a")
 else()
     if (NOT OpenVDB_FOUND)
         message(STATUS "No OpenVDB detected. Building without .vdb support")

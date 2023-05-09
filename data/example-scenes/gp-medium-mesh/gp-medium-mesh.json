@@ -104,7 +104,7 @@
 					"res_u": 2000,
 					"res_v": 2000
 				},
-                "type": "lambert",
+                "type": "lambert"
             }
         },
         {
@@ -193,6 +193,6 @@
         "spp_step": 1,
         "timeout": "0",
         "output_file": "gp-medium-mesh.png",
-		"hdr_output_file": "gp-medium-mesh.exr",
+		"hdr_output_file": "gp-medium-mesh.exr"
     }
 }

@@ -11,13 +11,21 @@ folder_glob = glob.glob(f"/dartfs-hpc/rc/lab/J/JaroszLab/dseyb/stimp/{sys.argv[1
 
 folder_glob = [f for f in folder_glob if os.path.isdir(f)]
 
+print(folder_glob)
+
 for folder in (pbar := tqdm(folder_glob)):
     input_glob = f"{folder}/*/*"
     output_file = f"{folder}"
 
     pbar.set_description("Averaging files in ", input_glob)
 
-    input_image_paths = glob.glob(input_glob + ".pfm") + glob.glob(input_glob + ".exr")
+    input_image_paths = glob.glob(input_glob + ".pfm") + glob.glob(input_glob + ".exr") 
+    if len(input_image_paths) == 0:
+        input_image_paths = glob.glob(f"{folder}/*.pfm") + glob.glob(f"{folder}/*.exr")
+
+    if len(input_image_paths) == 0:
+        print(f"No images found in {folder}!")
+        continue
 
     result = None
 

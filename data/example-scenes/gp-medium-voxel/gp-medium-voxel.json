@@ -100,8 +100,12 @@
             },
             "type": "quad",
             "bsdf": {
-                "albedo": 0.8,
-                "type": "lambert",
+                "albedo": {
+					"type": "checker",
+					"res_u": 2000,
+					"res_v": 2000
+				},
+                "type": "lambert"
             }
         },
         {
@@ -126,7 +130,7 @@
             "temperature": 7777.0,
             "gamma_scale": 1.0,
             "turbidity": 1.0,
-            "intensity": 6.0,
+            "intensity": 2.0,
             "sample": true
         },
         {
@@ -151,8 +155,7 @@
             "type": "infinite_sphere_cap",
             "sample": true,
             "cap_angle": 0.1
-        },
-
+        }
     ],
     "camera": {
         "tonemap": "filmic",
@@ -202,6 +205,6 @@
         "spp_step": 1,
         "timeout": "0",
         "output_file": "gp-medium-voxel.png",
-		"hdr_output_file": "gp-medium-voxel.exr",
+		"hdr_output_file": "gp-medium-voxel.exr"
     }
 }
