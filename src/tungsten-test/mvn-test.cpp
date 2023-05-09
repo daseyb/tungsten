@@ -61,7 +61,7 @@ int main() {
     }
 
     {
-        Eigen::MatrixXf cov = gp.cov(points.data(), points.data(), derivs.data(), derivs.data(), points.size(), points.size());
+        Eigen::MatrixXf cov = gp.cov(points.data(), points.data(), derivs.data(), derivs.data(), ray.dir(), points.size(), points.size());
         std::ofstream xfile("cov.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)cov.data(), sizeof(float) * cov.rows() * cov.cols());
         xfile.close();

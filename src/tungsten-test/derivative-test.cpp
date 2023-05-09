@@ -10,7 +10,7 @@ constexpr size_t NUM_SAMPLE_POINTS = 64;
 
 int main() {
 
-	GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(5.f, 2.5f, 0.f), 3.f), std::make_shared<SquaredExponentialCovariance>(0.001f, 1.0f));
+	GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(5.f, 2.5f, 0.f), 3.f), std::make_shared<SquaredExponentialCovariance>(1.0f, 1.0f));
     
     UniformPathSampler sampler(0);
 
@@ -42,6 +42,23 @@ int main() {
         xfile.write((char*)mean.data(), sizeof(float) * mean.rows() * mean.cols());
         xfile.close();
     }
+
+    {
+        Eigen::Matrix4Xf kernel(4, NUM_SAMPLE_POINTS);
+
+        for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
+            kernel(0, i) = (*gp._cov)(Derivative::None, Derivative::None, points[0], points[i], ray.dir());
+            kernel(1, i) = (*gp._cov)(Derivative::None, Derivative::First, points[0], points[i], ray.dir());
+            kernel(2, i) = (*gp._cov)(Derivative::First, Derivative::None, points[0], points[i], ray.dir());
+            kernel(3, i) = (*gp._cov)(Derivative::First, Derivative::First, points[0], points[i], ray.dir());
+        }
+
+        std::ofstream xfile("kernel-eval.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)kernel.data(), sizeof(float) * kernel.rows() * kernel.cols());
+        xfile.close();
+    }
+
+
 
     {
         std::array<Vec3f, 0> cond_pts = {  };

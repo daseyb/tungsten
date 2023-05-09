@@ -11,6 +11,7 @@ constexpr size_t NUM_SAMPLE_POINTS = 40;
 int main() {
 
 	GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(0.f, 0.f, 0.f), 0.25f), std::make_shared<SquaredExponentialCovariance>(0.1f, 0.01f));
+
     
     UniformPathSampler sampler(0);
     sampler.next1D();

@@ -162,7 +162,7 @@
     },
     "renderer": {
         "output_file": "gp-medium-wedge.png",
-        "hdr_output_file": "gp-medium-wedge.pfm",
+        "hdr_output_file": "gp-medium-wedge.exr",
         "resume_render_file": "",
         "overwrite_output_files": false,
         "adaptive_sampling": false,
