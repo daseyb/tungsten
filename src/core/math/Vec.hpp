@@ -13,6 +13,8 @@
 
 namespace Tungsten {
 
+    using std::sqrt;
+
 template<typename ElementType, unsigned Size>
 class Vec {
 protected:
@@ -134,7 +136,7 @@ public:
 
     ElementType length() const
     {
-        return std::sqrt(lengthSq());
+        return sqrt(lengthSq());
     }
 
     ElementType sum() const

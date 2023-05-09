@@ -9,7 +9,23 @@
 
 #include <fcpw/fcpw.h>
 
+
 namespace Tungsten {
+
+FloatD CovarianceFunction::dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const {
+    Eigen::Array3d zd = Eigen::Array3d::Zero();
+    auto covDiff = autodiff::derivatives([&](auto a, auto b) { return cov(a,b); }, autodiff::along(dir, zd), at(a, b));
+    return -covDiff[1];
+}
+
+FloatD CovarianceFunction::dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const {
+    return dcov_da(b, a, dir);
+}
+
+FloatD CovarianceFunction::dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const {
+    auto covDiff = autodiff::derivatives([&](auto a, auto b) { return cov(a, b); }, autodiff::along(Eigen::Array3d(-dir*0.5f), Eigen::Array3d(dir*0.5f)), at(a, b));
+    return -covDiff[2];
+}
 
 void TabulatedMean::fromJson(JsonPtr value, const Scene& scene) {
     MeanFunction::fromJson(value, scene);
@@ -152,7 +168,7 @@ std::tuple<Eigen::VectorXf, Eigen::MatrixXf> GaussianProcess::mean_and_cov(const
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
 
         for (size_t j = 0; j < numPts; j++) {
-            ps_cov(i, j) = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j]);
+            ps_cov(i, j) = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], deriv_dir);
         }
     }
 
@@ -167,12 +183,12 @@ Eigen::VectorXf GaussianProcess::mean(const Vec3f* points, const Derivative* der
     return ps_mean;
 }
 
-Eigen::MatrixXf GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, int numPtsA, int numPtsB) const {
+Eigen::MatrixXf GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, Vec3f deriv_dir, int numPtsA, int numPtsB) const {
     Eigen::MatrixXf ps_cov(numPtsA, numPtsB);
 
     for (size_t i = 0; i < numPtsA; i++) {
         for (size_t j = 0; j < numPtsB; j++) {
-            ps_cov(i, j) = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j]);
+            ps_cov(i, j) = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j], deriv_dir);
         }
     }
 
@@ -181,7 +197,7 @@ Eigen::MatrixXf GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_
 
 float GaussianProcess::sample_start_value(Vec3f p, PathSampleGenerator& sampler) const {
     float m = (*_mean)(Derivative::None, p, Vec3f(0.f));
-    float sigma = (*_cov)(Derivative::None, Derivative::None, p, p);
+    float sigma = (*_cov)(Derivative::None, Derivative::None, p, p, Vec3f(0.f));
 
     return max(0.f, rand_truncated_normal(m, sigma, 0, sampler));
 }
@@ -205,8 +221,8 @@ Eigen::MatrixXf GaussianProcess::sample_cond(
     const Constraint* constraints, int numConstraints,
     Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
-    Eigen::MatrixXf s11 = cov(cond_points, cond_points, cond_derivative_types, cond_derivative_types, numCondPts, numCondPts);
-    Eigen::MatrixXf s12 = cov(cond_points, points, cond_derivative_types, derivative_types, numCondPts, numPts);
+    Eigen::MatrixXf s11 = cov(cond_points, cond_points, cond_derivative_types, cond_derivative_types, deriv_dir, numCondPts, numCondPts);
+    Eigen::MatrixXf s12 = cov(cond_points, points, cond_derivative_types, derivative_types, deriv_dir, numCondPts, numPts);
 
     //Eigen::LLT<Eigen::MatrixXf> solver(s11);
     Eigen::MatrixXf solved = s11.colPivHouseholderQr().solve(s12).transpose(); //  solver.solve(s12).transpose();
@@ -214,7 +230,7 @@ Eigen::MatrixXf GaussianProcess::sample_cond(
     Eigen::Map<const Eigen::VectorXf> cond_values_view(cond_values, numCondPts);
     Eigen::VectorXf m2 = mean(points, derivative_types, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, deriv_dir, numCondPts)));
 
-    Eigen::MatrixXf s22 = cov(points, points, derivative_types, derivative_types, numPts, numPts);
+    Eigen::MatrixXf s22 = cov(points, points, derivative_types, derivative_types, deriv_dir, numPts, numPts);
 
     Eigen::MatrixXf s2 = s22 - (solved * s12);
 

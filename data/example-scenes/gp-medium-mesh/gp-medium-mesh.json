@@ -11,7 +11,7 @@
             "sigma_a": 0.0,
             "sigma_s": 1.0,
             "density": 1,
-            "sample_points": 32,
+            "sample_points": 64,
 			"gaussian_process": {
 				"type": "standard",
 				"mean": {
@@ -33,8 +33,8 @@
 				},
 				"covariance": {
 					"type": "squared_exponential",
-					"lengthScale": 0.1,
-					"sigma": 0.01
+					"lengthScale": 1.0,
+					"sigma": 0.005
 				}
 			}
         }
@@ -118,11 +118,6 @@
                     0.05,
                     0.05,
                     0.05
-                ],
-                "rotation": [
-                    -32.512420654296878,
-                    78.93219757080078,
-                    34.01728439331055
                 ]
             },
 			"bsdf": "light",
@@ -131,7 +126,24 @@
             "sample": true,
             "cap_angle": 0.1
         },
-
+		{
+            "transform": {
+                "position": [
+                    1,
+                    3,
+                    3
+                ],
+                "scale": [
+                    0.5,
+                    0.5,
+                    0.5
+                ]
+            },
+			"bsdf": "light",
+            "power": 10.0,
+            "type": "sphere",
+            "sample": true
+        }
     ],
     "camera": {
         "tonemap": "filmic",
@@ -177,7 +189,7 @@
         "enable_resume_render": false,
         "stratified_sampler": true,
         "scene_bvh": true,
-        "spp": 1,
+        "spp": 4,
         "spp_step": 1,
         "timeout": "0",
         "output_file": "gp-medium-mesh.png",

@@ -12,6 +12,12 @@
 #include "primitives/Triangle.hpp"
 #include "primitives/Vertex.hpp"
 
+#include <autodiff/forward/real/real.hpp>
+#include <autodiff/forward/real/eigen.hpp>
+#include <autodiff/forward/dual/dual.hpp>
+#include <autodiff/forward/dual/eigen.hpp>
+
+using FloatD = autodiff::real2nd;
 
 namespace fcpw {
     template<size_t DIM> class Scene;
@@ -19,6 +25,16 @@ namespace fcpw {
 
 namespace Tungsten {
     
+    using Vec3Diff = autodiff::Vector3real2nd;
+
+    inline Vec3f from_diff(const Vec3Diff& vd) {
+        return Vec3f{ (float)vd.x(), (float)vd.y(), (float)vd.z() };
+    }
+
+    inline Vec3Diff to_diff(const Vec3f& vd) {
+        return Vec3Diff{ vd.x(), vd.y(), vd.z() };
+    }
+
     class Grid;
 
     enum class Derivative : uint8_t {
@@ -29,27 +45,31 @@ namespace Tungsten {
     class CovarianceFunction : public JsonSerializable {
 
     public:
-        float operator()(Derivative a, Derivative b, Vec3f pa, Vec3f pb) const {
+        float operator()(Derivative a, Derivative b, Vec3f pa, Vec3f pb, Vec3f gradDir) const {
+
+            Vec3Diff pad = to_diff(pa);
+            Vec3Diff pbd = to_diff(pb);
+            Eigen::Array3d gradDirD = Eigen::Array3d{ gradDir.x(), gradDir.y(), gradDir.z() };
+
             if (a == Derivative::None && b == Derivative::None) {
-                return cov(pa, pb);
+                return (float)cov(pad, pbd);
             }
             else if (a == Derivative::First && b == Derivative::None) {
-                return dcov_da(pa, pb);
+                return (float)dcov_da(pad, pbd, gradDirD);
             }
             else if (a == Derivative::None && b == Derivative::First) {
-                return dcov_db(pa, pb);
+                return (float)dcov_db(pad, pbd, gradDirD);
             }
             else {
-                return dcov2_dadb(pa, pb);
+                return (float)dcov2_dadb(pad, pbd, gradDirD);
             }
         }
 
     private:
-        virtual float cov(Vec3f a, Vec3f b) const = 0;
-        virtual float dcov_da(Vec3f a, Vec3f b) const = 0;
-        virtual float dcov_db(Vec3f a, Vec3f b) const = 0;
-        virtual float dcov2_dadb(Vec3f a, Vec3f b) const = 0;
-
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const = 0;
+        virtual FloatD dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const;
+        virtual FloatD dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const;
+        virtual FloatD dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const;
     };
 
     class SquaredExponentialCovariance : public CovarianceFunction {
@@ -76,30 +96,30 @@ namespace Tungsten {
         float _sigma, _l;
         Vec3f _aniso;
 
-        float dist2(Vec3f a, Vec3f b) const {
-            Vec3f d = b - a;
-            return d.dot(_aniso * d);
+        FloatD dist2(Vec3Diff a, Vec3Diff b) const {
+            Vec3Diff d = b - a;
+            return d.dot(to_diff(_aniso).cwiseProduct(d));
         }
 
-        virtual float cov(Vec3f a, Vec3f b) const override {
-            float absq = dist2(a, b);
-            return sqr(_sigma) * exp(-(absq / (2 * sqr(_l))));
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
+            FloatD absq = dist2(a, b);
+            return sqr(_sigma)* exp(-(absq / (2 * sqr(_l))));
         }
 
-        virtual float dcov_da(Vec3f a, Vec3f b) const override {
-            float absq = dist2(a, b);
-            float ab = sqrtf(absq);
+        /*virtual FloatD dcov_da(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
+            FloatD absq = dist2(a, b);
+            FloatD ab = sqrt(absq);
             return ((exp(-(absq / (2 * sqr(_l)))) * ab * sqr(_sigma)) / sqr(_l));
         }
 
-        virtual float dcov_db(Vec3f a, Vec3f b) const override {
+        virtual FloatD dcov_db(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
             return dcov_da(b, a);
         }
 
-        virtual float dcov2_dadb(Vec3f a, Vec3f b) const override {
-            float absq = dist2(a, b);
+        virtual FloatD dcov2_dadb(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
+            FloatD absq = dist2(a, b);
             return ((exp(-(absq / (2 * sqr(_l)))) * sqr(_sigma)) / sqr(_l) - (exp(-(absq / (2 * sqr(_l)))) * absq * sqr(_sigma)) / powf(_l, 4));
-        }
+        }*/
     };
 
     class MeanFunction : public JsonSerializable {
@@ -274,7 +294,7 @@ namespace Tungsten {
 
         std::tuple<Eigen::VectorXf, Eigen::MatrixXf> mean_and_cov(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const;
         Eigen::VectorXf mean(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, int numPts) const;
-        Eigen::MatrixXf cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, int numPtsA, int numPtsB) const;
+        Eigen::MatrixXf cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, Vec3f deriv_dir, int numPtsA, int numPtsB) const;
 
         float sample_start_value(Vec3f p, PathSampleGenerator& sampler) const;
 
