@@ -36,6 +36,9 @@ int main(int argc, char** argv) {
 
     auto gp = gp_medium->_gp;
 
+    std::vector<float> tpc(128);
+
+
     std::vector<Vec3f> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> derivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> fderivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);

@@ -180,11 +180,13 @@ endif()
 add_executable(tungsten src/tungsten/tungsten.cpp)
 target_link_libraries(tungsten ${core_libs})
 
-set(tests mvn-test derivative-test realization-gen lod-gen)
+set(tests mvn-test derivative-test realization-gen lod-gen microfacet-gen)
 foreach (test IN LISTS tests)
 	add_executable(tungsten-${test} src/tungsten-test/${test}.cpp)
 	target_link_libraries(tungsten-${test} ${core_libs})
-	set_target_properties (tungsten-${test} PROPERTIES FOLDER tests)
+	set_target_properties (tungsten-${test} PROPERTIES 
+		FOLDER tests
+		VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/data")
 endforeach ()
 
 

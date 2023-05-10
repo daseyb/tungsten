@@ -7,6 +7,7 @@
 #include "BitManip.hpp"
 #include "math/Vec.hpp"
 #include "math/MathUtil.hpp"
+#include "math/Angle.hpp"
 #include <functional>
 #include <vector>
 #include "io/JsonSerializable.hpp"
@@ -16,8 +17,6 @@
 
 #include <autodiff/forward/real/real.hpp>
 #include <autodiff/forward/real/eigen.hpp>
-#include <autodiff/forward/dual/dual.hpp>
-#include <autodiff/forward/dual/eigen.hpp>
 
 using FloatD = autodiff::real2nd;
 
@@ -35,6 +34,12 @@ namespace Tungsten {
 
     inline Vec3Diff to_diff(const Vec3f& vd) {
         return Vec3Diff{ vd.x(), vd.y(), vd.z() };
+    }
+
+    template<typename Vec>
+    inline auto dist2(Vec a, Vec b, Vec3f aniso) {
+        auto d = b - a;
+        return d.dot(Vec{ aniso.x(), aniso.y(), aniso.z() }.cwiseProduct(d));
     }
 
     class Grid;
@@ -103,20 +108,89 @@ namespace Tungsten {
         float _sigma, _l;
         Vec3f _aniso;
 
-        template<typename Vec>
-        auto dist2(Vec a, Vec b) const {
-            auto d = b - a;
-            return d.dot(Vec{ _aniso.x(), _aniso.y(), _aniso.z() }.cwiseProduct(d));
-        }
 
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
-            FloatD absq = dist2(a, b);
+            FloatD absq = dist2(a, b, _aniso);
             return sqr(_sigma)* exp(-(absq / (2 * sqr(_l))));
         }
 
         virtual float cov(Vec3f a, Vec3f b) const override {
-            float absq = dist2(a, b);
+            float absq = dist2(a, b, _aniso);
             return sqr(_sigma) * exp(-(absq / (2 * sqr(_l))));
+        }
+    };
+
+    class RationalQuadraticCovariance : public CovarianceFunction {
+    public:
+
+        RationalQuadraticCovariance(float sigma = 1.f, float l = 1., float a = 1.0f, Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _a(a), _aniso(aniso) {}
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            CovarianceFunction::fromJson(value, scene);
+            value.getField("sigma", _sigma);
+            value.getField("a", _a);
+            value.getField("lengthScale", _l);
+            value.getField("aniso", _aniso);
+        }
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+                "type", "rational_quadratic",
+                "sigma", _sigma,
+                "a", _a,
+                "lengthScale", _l,
+                "aniso", _aniso
+            };
+        }
+    private:
+        float _sigma, _a, _l;
+        Vec3f _aniso;
+
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
+            auto absq = dist2(a, b, _aniso);
+            return sqr(_sigma) * pow((1.0f + absq / (2 * _a * _l * _l)), -_a);
+        }
+
+        virtual float cov(Vec3f a, Vec3f b) const override {
+            auto absq = dist2(a, b, _aniso);
+            return sqr(_sigma) * pow((1.0f + absq / (2 * _a * _l * _l)), -_a);
+        }
+    };
+
+    class PeriodicCovariance : public CovarianceFunction {
+    public:
+
+        PeriodicCovariance(float sigma = 1.f, float l = 1., float w = TWO_PI, Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _w(w), _aniso(aniso) {}
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            CovarianceFunction::fromJson(value, scene);
+            value.getField("sigma", _sigma);
+            value.getField("w", _w);
+            value.getField("lengthScale", _l);
+            value.getField("aniso", _aniso);
+        }
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+                "type", "periodic",
+                "sigma", _sigma,
+                "w", _w,
+                "lengthScale", _l,
+                "aniso", _aniso
+            };
+        }
+    private:
+        float _sigma, _w, _l;
+        Vec3f _aniso;
+
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
+            auto absq = dist2(a, b, _aniso);
+            return sqr(_sigma) * exp(-2 * pow(sin(PI * sqrt(absq) * _w), 2.f)) / (_l * _l);
+        }
+
+        virtual float cov(Vec3f a, Vec3f b) const override {
+            auto absq = dist2(a, b, _aniso);
+            return sqr(_sigma) * exp(-2 * pow(sin(PI * sqrt(absq) * _w), 2.f)) / (_l * _l);
         }
     };
 
@@ -275,7 +349,7 @@ namespace Tungsten {
         virtual Vec3f dmean_da(Vec3f a) const override;
     };
 
-//#define SPARSE_COV
+#define SPARSE_COV
 
 #ifdef SPARSE_COV
     using CovMatrix = Eigen::SparseMatrix<float>;

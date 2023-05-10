@@ -20,6 +20,8 @@ DEFINE_STRINGABLE_ENUM(MeanFunctionFactory, "mean", ({
 
 DEFINE_STRINGABLE_ENUM(CovarianceFunctionFactory, "covariance", ({
     {"squared_exponential", std::make_shared<SquaredExponentialCovariance>},
+    {"rational_qudratic", std::make_shared<RationalQuadraticCovariance>},
+    {"periodic", std::make_shared<PeriodicCovariance>},
 }))
 
 

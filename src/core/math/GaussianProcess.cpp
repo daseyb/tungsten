@@ -15,7 +15,7 @@
 #include <Spectra/MatOp/SparseGenMatProd.h>
 
 #ifdef SPARSE_COV
-#define SPARSE_SOLVE
+//#define SPARSE_SOLVE
 #endif
 
 namespace Tungsten {
@@ -192,7 +192,7 @@ std::tuple<Eigen::VectorXf, CovMatrix> GaussianProcess::mean_and_cov(const Vec3f
     Eigen::VectorXf ps_mean(numPts);
     CovMatrix ps_cov(numPts, numPts);
 
-#if SPARSE_COV
+#ifdef SPARSE_COV
     std::vector<Eigen::Triplet<float>> tripletList;
     tripletList.reserve(min(numPts * numPts / 10, (size_t)10000));
 #endif
@@ -203,7 +203,7 @@ std::tuple<Eigen::VectorXf, CovMatrix> GaussianProcess::mean_and_cov(const Vec3f
         for (size_t j = 0; j < numPts; j++) {
             float cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], deriv_dir);
 
-#if SPARSE_COV
+#ifdef SPARSE_COV
             if (std::abs(cov_ij) > _covEps) {
                 tripletList.push_back(Eigen::Triplet<float>(i, j, cov_ij));
             }
@@ -213,7 +213,7 @@ std::tuple<Eigen::VectorXf, CovMatrix> GaussianProcess::mean_and_cov(const Vec3f
         }
     }
 
-#if SPARSE_COV
+#ifdef SPARSE_COV
     ps_cov.setFromTriplets(tripletList.begin(), tripletList.end());
 #endif
 
@@ -231,9 +231,9 @@ Eigen::VectorXf GaussianProcess::mean(const Vec3f* points, const Derivative* der
 CovMatrix GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, Vec3f deriv_dir, size_t numPtsA, size_t numPtsB) const {
     CovMatrix ps_cov(numPtsA, numPtsB);
 
-#if SPARSE_COV
+#ifdef SPARSE_COV
     std::vector<Eigen::Triplet<float>> tripletList;
-    tripletList.reserve(min(numPts * numPts / 10, (size_t)10000));
+    tripletList.reserve(min(numPtsA * numPtsB / 10, (size_t)10000));
 #endif
 
 
@@ -241,7 +241,7 @@ CovMatrix GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_b, con
         for (size_t j = 0; j < numPtsB; j++) {
             float cov_ij = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j], deriv_dir);
 
-#if SPARSE_COV
+#ifdef SPARSE_COV
             if (std::abs(cov_ij) > _covEps) {
                 tripletList.push_back(Eigen::Triplet<float>(i, j, cov_ij));
             }
@@ -251,7 +251,7 @@ CovMatrix GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_b, con
         }
     }
 
-#if SPARSE_COV
+#ifdef SPARSE_COV
     ps_cov.setFromTriplets(tripletList.begin(), tripletList.end());
 #endif
 
