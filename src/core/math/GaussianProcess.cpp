@@ -289,10 +289,10 @@ Eigen::MatrixXf GaussianProcess::sample_cond(
 
 #ifdef SPARSE_COV
     Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::AMDOrdering<int>> solver(s11);
-    CovMatrix solved = solver.solve(s12).transpose();
 #else
-    CovMatrix solved = s11.colPivHouseholderQr().solve(s12).transpose();
+    Eigen::LDLT<CovMatrix> solver(s11);
 #endif
+    CovMatrix solved = solver.solve(s12).transpose();
 
 
     Eigen::Map<const Eigen::VectorXf> cond_values_view(cond_values, numCondPts);
@@ -354,7 +354,7 @@ Vec2f GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
     float u1 = sampler.next1D();
     float u2 = sampler.next1D();
 
-    float r = sqrtf(-2 * log(u1));
+    float r = sqrtf(-2 * log(1. - u1));
     float x = cos(2 * PI * u2);
     float y = sin(2 * PI * u2);
     float z1 = r * x;
@@ -394,30 +394,6 @@ float GaussianProcess::rand_truncated_normal(float mean, float sigma, float a, P
 
     return sigma * x_bar + mean;
 }
-
-//float GaussianProcess::rand_truncated_normal(float mean, float sigma, float a, PathSampleGenerator& sampler) const {
-//    if (abs(a - mean) < 0.00001) {
-//        return abs(mean + sigma * rand_normal_2(sampler).x());
-//    }
-//
-//    float a_bar = (a - mean) / sigma;
-//    if (!std::isfinite(a_bar)) {
-//        std::cout << a << " " << mean << " " << sigma << "\n";
-//    }
-//    float y_bar;
-//
-//    while (true) {
-//        float u = sampler.next1D();
-//        y_bar = -1 / a_bar * log(1 - u);
-//        float v = sampler.next1D();
-//
-//        if (v < expf(-y_bar*y_bar/2)) {
-//            break;
-//        }
-//    }
-//
-//    return sigma * (y_bar + a_bar) + mean;
-//}
 
 Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
     const Eigen::VectorXf& mean, const CovMatrix& cov,
