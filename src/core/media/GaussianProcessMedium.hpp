@@ -19,10 +19,12 @@ class GaussianProcessMedium : public Medium
 
     int _samplePoints;
 
-
 public:
     std::shared_ptr<GaussianProcess> _gp;
     GaussianProcessMedium();
+    GaussianProcessMedium(std::shared_ptr<GaussianProcess> gp, 
+        float materialSigmaA, float materialSigmaS, float density, int samplePoints) : 
+        _gp(gp), _materialSigmaA(materialSigmaA), _materialSigmaS(materialSigmaS), _density(density), _samplePoints(samplePoints) {}
 
     virtual void fromJson(JsonPtr value, const Scene &scene) override;
     virtual rapidjson::Value toJson(Allocator &allocator) const override;
@@ -35,6 +37,8 @@ public:
     virtual Vec3f sigmaA(Vec3f p) const override;
     virtual Vec3f sigmaS(Vec3f p) const override;
     virtual Vec3f sigmaT(Vec3f p) const override;
+
+    std::vector<MediumSample> sampleDistanceMult(PathSampleGenerator& sampler, const Ray& ray, Medium::MediumState& state) const;
 
     virtual bool sampleDistance(PathSampleGenerator &sampler, const Ray &ray,
             MediumState &state, MediumSample &sample) const override;

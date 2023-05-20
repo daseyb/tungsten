@@ -156,6 +156,16 @@ else()
     endif()
 endif()
 
+find_package(FFTW3 CONFIG)
+
+if(FFTW3_FOUND)
+    message(STATUS "FFTW detected. Building with DFT realization generation support")
+	include_directories(${FFTW3_INCLUDE_DIRS})
+	set(core_libs ${core_libs} FFTW3::fftw3)
+	add_definitions(-DFFTW_AVAILABLE)
+endif()
+
+
 file(GLOB_RECURSE Core_SOURCES "src/core/*.cpp")
 add_library(core STATIC ${Core_SOURCES})
 
@@ -180,7 +190,7 @@ endif()
 add_executable(tungsten src/tungsten/tungsten.cpp)
 target_link_libraries(tungsten ${core_libs})
 
-set(tests mvn-test derivative-test realization-gen lod-gen microfacet-gen)
+set(tests mvn-test derivative-test realization-gen lod-gen microfacet-gen dft-realization-gen)
 foreach (test IN LISTS tests)
 	add_executable(tungsten-${test} src/tungsten-test/${test}.cpp)
 	target_link_libraries(tungsten-${test} ${core_libs})
@@ -188,6 +198,7 @@ foreach (test IN LISTS tests)
 		FOLDER tests
 		VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/data")
 endforeach ()
+
 
 
 if (WIN32)

@@ -61,26 +61,26 @@ int main(int argc, char** argv) {
     }
 
     {
-        Eigen::VectorXf mean = gp->mean(points.data(), derivs.data(), Vec3f(1.0f, 0.0f, 0.0f), points.size());
+        Eigen::VectorXf mean = gp->mean(points.data(), derivs.data(), nullptr, Vec3f(1.0f, 0.0f, 0.0f), points.size());
         std::ofstream xfile("./data/testing/load-gen/mean-eval.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)mean.data(), sizeof(float) * mean.rows() * mean.cols());
         xfile.close();
     }
 
     {
-        Eigen::VectorXf gradx = gp->mean(points.data(), fderivs.data(), Vec3f(1.0f, 0.0f, 0.0f), points.size());
+        Eigen::VectorXf gradx = gp->mean(points.data(), fderivs.data(), nullptr, Vec3f(1.0f, 0.0f, 0.0f), points.size());
         std::ofstream xfile("./data/testing/load-gen/mean-dx-eval.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)gradx.data(), sizeof(float) * gradx.rows() * gradx.cols());
         xfile.close();
     }
     {
-        Eigen::VectorXf grady = gp->mean(points.data(), fderivs.data(), Vec3f(0.0f, 1.0f, 0.0f), points.size());
+        Eigen::VectorXf grady = gp->mean(points.data(), fderivs.data(), nullptr, Vec3f(0.0f, 1.0f, 0.0f), points.size());
         std::ofstream xfile("./data/testing/load-gen/mean-dy-eval.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)grady.data(), sizeof(float) * grady.rows() * grady.cols());
         xfile.close();
     }
     {
-        Eigen::VectorXf gradz = gp->mean(points.data(), fderivs.data(), Vec3f(0.0f, 0.0f, 1.0f), points.size());
+        Eigen::VectorXf gradz = gp->mean(points.data(), fderivs.data(), nullptr, Vec3f(0.0f, 0.0f, 1.0f), points.size());
         std::ofstream xfile("./data/testing/load-gen/mean-dz-eval.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)gradz.data(), sizeof(float) * gradz.rows() * gradz.cols());
         xfile.close();

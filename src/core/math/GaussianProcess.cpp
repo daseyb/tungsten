@@ -6,7 +6,6 @@
 #include "ziggurat_constants.h"
 #include "primitives/Triangle.hpp"
 #include "primitives/Vertex.hpp"
-
 #include <fcpw/fcpw.h>
 #include <Eigen/SparseQR>
 #include <Eigen/Core>
@@ -14,24 +13,126 @@
 
 #include <Spectra/MatOp/SparseGenMatProd.h>
 
+namespace Tungsten {
+
+template<typename T>
+struct Span {
+    T* _data;
+    size_t _size;
+
+    Span(T* data, size_t size) : _data(data), _size(size) { }
+    template<typename Container>
+    Span(const Container& c) : _data(c.data()), _size(c.size()) { }
+
+    size_t size() const {
+        return _size;
+    }
+};
+
+
+template<typename T>
+struct SpanList {
+    Span<Span<T>> _spans;
+    size_t _size;
+
+    SpanList(std::initializer_list<Span<T>> spans) {
+        _spans = spans;
+        _size = 0;
+        for (const auto& s : _spans) {
+            _size += s.size();
+        }
+    }
+
+    struct Iterator
+    {
+        using iterator_category = std::forward_iterator_tag;
+        using difference_type = std::ptrdiff_t;
+        using value_type = T;
+        using pointer = T*;
+        using reference = T&;
+
+        Iterator(const SpanList<T>* list, size_t spanIdx, size_t elemIdx) : list(list), spanIdx(spanIdx), elemIdx(elemIdx) {}
+
+        reference operator*() const { return list->_spans[spandIdx][elemIdx]; }
+        pointer operator->() { return &list->_spans[spandIdx][elemIdx]; }
+        Iterator& operator++() {
+            elemIdx++;
+            if (elemIdx >= list[spanIdx].size()) {
+                elemIdx = 0;
+                spanIdx++;
+            }
+            return *this;
+        }
+        Iterator operator++(int) { Iterator tmp = *this; ++(*this); return tmp; }
+        friend bool operator== (const Iterator& a, const Iterator& b) { return a.spanIdx == b.spanIdx && a.elemIdx == b.elemIdx; };
+        friend bool operator!= (const Iterator& a, const Iterator& b) { return a.spanIdx != b.spanIdx || a.elemIdx != b.elemIdx; };
+
+    private:
+
+        size_t spanIdx;
+        size_t elemIdx;
+        const SpanList<T>* list;
+    };
+
+    struct ConstantIterator
+    {
+        using iterator_category = std::forward_iterator_tag;
+        using difference_type = std::ptrdiff_t;
+        using value_type = T;
+        using pointer = T*;
+        using reference = T&;
+
+        ConstantIterator(const SpanList<const T>* list, size_t spanIdx, size_t elemIdx) : list(list), spanIdx(spanIdx), elemIdx(elemIdx) {}
+
+        const reference operator*() const { return list->_spans[spandIdx][elemIdx]; }
+        const pointer operator->() { return &list->_spans[spandIdx][elemIdx]; }
+        ConstantIterator& operator++() {
+            elemIdx++;
+            if (elemIdx >= list[spanIdx].size()) {
+                elemIdx = 0;
+                spanIdx++;
+            }
+            return *this;
+        }
+        ConstantIterator operator++(int) { ConstantIterator tmp = *this; ++(*this); return tmp; }
+        friend bool operator== (const ConstantIterator& a, const ConstantIterator& b) { return a.spanIdx == b.spanIdx && a.elemIdx == b.elemIdx; };
+        friend bool operator!= (const ConstantIterator& a, const ConstantIterator& b) { return a.spanIdx != b.spanIdx || a.elemIdx != b.elemIdx; };
+
+    private:
+
+        size_t spanIdx;
+        size_t elemIdx;
+        const SpanList<const T>* list;
+    };
+
+    Iterator begin() { return Iterator(this, 0, 0); }
+    Iterator end() { return Iterator(this, _spans.size() - 1, _spans[_spans.size() - 1].size()); }
+    ConstantIterator cbegin() { return Iterator(this, 0, 0); }
+    ConstantIterator cend() { return Iterator(this, _spans.size() - 1, _spans[_spans.size() - 1].size()); }
+
+    size_t size() const {
+        return _size;
+    }
+};
+
+
 #ifdef SPARSE_COV
 //#define SPARSE_SOLVE
 #endif
 
-namespace Tungsten {
 
-FloatD CovarianceFunction::dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const {
+FloatD CovarianceFunction::dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA) const {
     Eigen::Array3d zd = Eigen::Array3d::Zero();
-    auto covDiff = autodiff::derivatives([&](auto a, auto b) { return cov(a,b); }, autodiff::along(dir, zd), at(a, b));
+    auto covDiff = autodiff::derivatives([&](auto a, auto b) { return cov(a,b); }, autodiff::along(dirA, zd), at(a, b));
     return covDiff[1];
 }
 
-FloatD CovarianceFunction::dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const {
-    return dcov_da(b, a, dir);
+FloatD CovarianceFunction::dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirB) const {
+    return dcov_da(b, a, dirB);
 }
 
-FloatD CovarianceFunction::dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const {
-    auto covDiff = autodiff::derivatives([&](auto a, auto b) { return cov(a, b); }, autodiff::along(Eigen::Array3d(-dir*0.5f), Eigen::Array3d(dir*0.5f)), at(a, b));
+FloatD CovarianceFunction::dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA, Eigen::Array3d dirB) const {
+    auto covDiff = autodiff::derivatives([&](auto a, auto b) { return cov(a, b); }, autodiff::along(Eigen::Array3d(dirA*0.5f), Eigen::Array3d(dirB*0.5f)), at(a, b));
     return -covDiff[2];
 }
 
@@ -188,7 +289,10 @@ void GaussianProcess::loadResources() {
     _cov->loadResources();
 }
 
-std::tuple<Eigen::VectorXf, CovMatrix> GaussianProcess::mean_and_cov(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, size_t numPts) const {
+std::tuple<Eigen::VectorXf, CovMatrix> GaussianProcess::mean_and_cov(
+    const Vec3f* points, const Derivative* derivative_types, const Vec3f* ddirs,
+    Vec3f deriv_dir, size_t numPts) const {
+
     Eigen::VectorXf ps_mean(numPts);
     CovMatrix ps_cov(numPts, numPts);
 
@@ -201,7 +305,7 @@ std::tuple<Eigen::VectorXf, CovMatrix> GaussianProcess::mean_and_cov(const Vec3f
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
 
         for (size_t j = 0; j < numPts; j++) {
-            float cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], deriv_dir);
+            float cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], -deriv_dir, deriv_dir);
 
 #ifdef SPARSE_COV
             if (std::abs(cov_ij) > _covEps) {
@@ -220,15 +324,22 @@ std::tuple<Eigen::VectorXf, CovMatrix> GaussianProcess::mean_and_cov(const Vec3f
     return { ps_mean, ps_cov };
 }
 
-Eigen::VectorXf GaussianProcess::mean(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, size_t numPts) const {
+Eigen::VectorXf GaussianProcess::mean(
+    const Vec3f* points, const Derivative* derivative_types, const Vec3f* ddirs,
+    Vec3f deriv_dir, size_t numPts) const {
     Eigen::VectorXf ps_mean(numPts);
     for (size_t i = 0; i < numPts; i++) {
+        const Vec3f& ddir= ddirs ? ddirs[i] : deriv_dir;
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
     }
     return ps_mean;
 }
 
-CovMatrix GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, Vec3f deriv_dir, size_t numPtsA, size_t numPtsB) const {
+CovMatrix GaussianProcess::cov(
+    const Vec3f* points_a, const Vec3f* points_b, 
+    const Derivative* dtypes_a, const Derivative* dtypes_b,
+    const Vec3f* ddirs_a, const Vec3f* ddirs_b,
+    Vec3f deriv_dir, size_t numPtsA, size_t numPtsB) const {
     CovMatrix ps_cov(numPtsA, numPtsB);
 
 #ifdef SPARSE_COV
@@ -238,8 +349,11 @@ CovMatrix GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_b, con
 
 
     for (size_t i = 0; i < numPtsA; i++) {
+        const Vec3f& ddir_a = ddirs_a ? ddirs_a[i] : -deriv_dir;
         for (size_t j = 0; j < numPtsB; j++) {
-            float cov_ij = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j], deriv_dir);
+            const Vec3f& ddir_b = ddirs_b ? ddirs_b[j] : deriv_dir;
+
+            float cov_ij = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j], ddir_a, ddir_b);
 
 #ifdef SPARSE_COV
             if (std::abs(cov_ij) > _covEps) {
@@ -260,7 +374,7 @@ CovMatrix GaussianProcess::cov(const Vec3f* points_a, const Vec3f* points_b, con
 
 float GaussianProcess::sample_start_value(Vec3f p, PathSampleGenerator& sampler) const {
     float m = (*_mean)(Derivative::None, p, Vec3f(0.f));
-    float sigma = (*_cov)(Derivative::None, Derivative::None, p, p, Vec3f(0.f));
+    float sigma = (*_cov)(Derivative::None, Derivative::None, p, p, Vec3f(0.f), Vec3f(0.f));
 
     return max(0.f, rand_truncated_normal(m, sigma, 0, sampler));
 }
@@ -268,24 +382,81 @@ float GaussianProcess::sample_start_value(Vec3f p, PathSampleGenerator& sampler)
 
 Eigen::MatrixXf GaussianProcess::sample(
     const Vec3f* points, const Derivative* derivative_types, size_t numPts,
+    const Vec3f* deriv_dirs,
     const Constraint* constraints, size_t numConstraints,
     Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
-    auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dir, numPts);
+    if (_globalCondPs.size() == 0) {
+        auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dirs, deriv_dir, numPts);
+        Eigen::MatrixXf s = sample_multivariate_normal(ps_mean, ps_cov, constraints, numConstraints, samples, sampler);
+        return s;
+    }
+    else {
 
-    Eigen::MatrixXf s = sample_multivariate_normal(ps_mean, ps_cov, constraints, numConstraints, samples, sampler);
-
-    return s;
+        return sample_cond(points, derivative_types, numPts,
+            deriv_dirs,
+            _globalCondPs.data(), _globalCondValues.data(), _globalCondDerivs.data(), 0,
+            _globalCondDerivDirs.data(),
+            constraints, numConstraints,
+            deriv_dir, samples, sampler);
+    }
 }
 
 Eigen::MatrixXf GaussianProcess::sample_cond(
     const Vec3f* points, const Derivative* derivative_types, size_t numPts,
+    const Vec3f* deriv_dirs,
     const Vec3f* cond_points, const float* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+    const Vec3f* cond_deriv_dirs,
     const Constraint* constraints, size_t numConstraints,
     Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
-    CovMatrix s11 = cov(cond_points, cond_points, cond_derivative_types, cond_derivative_types, deriv_dir, numCondPts, numCondPts);
-    CovMatrix s12 = cov(cond_points, points, cond_derivative_types, derivative_types, deriv_dir, numCondPts, numPts);
+    std::vector<Vec3f> cond_ps;
+    std::vector<Derivative> cond_derivs;
+    std::vector<Vec3f> cond_dds;
+    std::vector<float> cond_vs;
+
+    if (_globalCondPs.size() > 0) {
+        cond_ps.resize(_globalCondPs.size() + numCondPts);
+        cond_derivs.resize(_globalCondDerivs.size() + numCondPts);
+        cond_dds.resize(_globalCondDerivDirs.size() + numCondPts);
+        cond_vs.resize(_globalCondValues.size() + numCondPts);
+
+        std::copy(cond_points, cond_points + numCondPts, cond_ps.begin());
+        std::copy(_globalCondPs.begin(), _globalCondPs.end(), cond_ps.begin() + numCondPts);
+
+        std::copy(cond_derivative_types, cond_derivative_types + numCondPts, cond_derivs.begin());
+        std::copy(_globalCondDerivs.begin(), _globalCondDerivs.end(), cond_derivs.begin() + numCondPts);
+
+        if (cond_deriv_dirs != nullptr) {
+            std::copy(cond_deriv_dirs, cond_deriv_dirs + numCondPts, cond_dds.begin());
+        }
+        else {
+            std::fill_n(cond_dds.begin(), numCondPts, deriv_dir);
+        }
+        std::copy(_globalCondDerivDirs.begin(), _globalCondDerivDirs.end(), cond_dds.begin() + numCondPts);
+
+        std::copy(cond_values, cond_values + numCondPts, cond_vs.begin());
+        std::copy(_globalCondValues.begin(), _globalCondValues.end(), cond_vs.begin() + numCondPts);
+
+        cond_points = cond_ps.data();
+        cond_derivative_types = cond_derivs.data();
+        cond_deriv_dirs = _globalCondDerivDirs.data();
+        cond_values = cond_vs.data();
+
+        numCondPts = cond_ps.size();
+    }
+
+    CovMatrix s11 = cov(
+        cond_points, cond_points, 
+        cond_derivative_types, cond_derivative_types, 
+        cond_deriv_dirs, cond_deriv_dirs, 
+        deriv_dir, numCondPts, numCondPts);
+
+    CovMatrix s12 = cov(
+        cond_points, points, 
+        cond_derivative_types, derivative_types, 
+        cond_deriv_dirs, deriv_dirs,
+        deriv_dir, numCondPts, numPts);
 
 #ifdef SPARSE_COV
     Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::AMDOrdering<int>> solver(s11);
@@ -294,11 +465,14 @@ Eigen::MatrixXf GaussianProcess::sample_cond(
 #endif
     CovMatrix solved = solver.solve(s12).transpose();
 
-
     Eigen::Map<const Eigen::VectorXf> cond_values_view(cond_values, numCondPts);
-    Eigen::VectorXf m2 = mean(points, derivative_types, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, deriv_dir, numCondPts)));
+    Eigen::VectorXf m2 = mean(points, derivative_types, deriv_dirs, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, cond_deriv_dirs, deriv_dir, numCondPts)));
 
-    CovMatrix s22 = cov(points, points, derivative_types, derivative_types, deriv_dir, numPts, numPts);
+    CovMatrix s22 = cov(
+        points, points, 
+        derivative_types, derivative_types, 
+        deriv_dirs, deriv_dirs,
+        deriv_dir, numPts, numPts);
 
     CovMatrix s2 = s22 - (solved * s12);
 

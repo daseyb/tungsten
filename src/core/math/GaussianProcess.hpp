@@ -10,6 +10,7 @@
 #include "math/Angle.hpp"
 #include <functional>
 #include <vector>
+
 #include "io/JsonSerializable.hpp"
 #include "io/JsonObject.hpp"
 #include "primitives/Triangle.hpp"
@@ -25,7 +26,6 @@ namespace fcpw {
 }
 
 namespace Tungsten {
-    
     using Vec3Diff = autodiff::Vector3real2nd;
 
     inline Vec3f from_diff(const Vec3Diff& vd) {
@@ -52,22 +52,23 @@ namespace Tungsten {
     class CovarianceFunction : public JsonSerializable {
 
     public:
-        float operator()(Derivative a, Derivative b, Vec3f pa, Vec3f pb, Vec3f gradDir) const {
+        float operator()(Derivative a, Derivative b, Vec3f pa, Vec3f pb, Vec3f gradDirA, Vec3f gradDirB) const {
             Vec3Diff pad = to_diff(pa);
             Vec3Diff pbd = to_diff(pb);
-            Eigen::Array3d gradDirD = Eigen::Array3d{ gradDir.x(), gradDir.y(), gradDir.z() };
+            Eigen::Array3d gradDirAD = Eigen::Array3d{ gradDirA.x(), gradDirA.y(), gradDirA.z() };
+            Eigen::Array3d gradDirBD = Eigen::Array3d{ gradDirB.x(), gradDirB.y(), gradDirB.z() };
 
             if (a == Derivative::None && b == Derivative::None) {
                 return cov(pa, pb);
             }
             else if (a == Derivative::First && b == Derivative::None) {
-                return (float)dcov_da(pad, pbd, gradDirD);
+                return (float)dcov_da(pad, pbd, gradDirAD);
             }
             else if (a == Derivative::None && b == Derivative::First) {
-                return (float)dcov_db(pad, pbd, gradDirD);
+                return (float)dcov_db(pad, pbd, gradDirBD);
             }
             else {
-                return (float)dcov2_dadb(pad, pbd, gradDirD);
+                return (float)dcov2_dadb(pad, pbd, gradDirAD, gradDirBD);
             }
         }
 
@@ -75,19 +76,25 @@ namespace Tungsten {
             return true;
         }
 
+        virtual std::string id() const = 0;
+
+        Vec3f _aniso;
+
     private:
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const = 0;
         virtual float cov(Vec3f a, Vec3f b) const = 0;
 
-        virtual FloatD dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const;
-        virtual FloatD dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const;
-        virtual FloatD dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dir) const;
+        virtual FloatD dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA) const;
+        virtual FloatD dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirB) const;
+        virtual FloatD dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA, Eigen::Array3d dirB) const;
     };
 
     class SquaredExponentialCovariance : public CovarianceFunction {
     public:
 
-        SquaredExponentialCovariance(float sigma = 1.f, float l = 1., Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _aniso(aniso) {}
+        SquaredExponentialCovariance(float sigma = 1.f, float l = 1., Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l) {
+            _aniso = aniso;
+        }
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             CovarianceFunction::fromJson(value, scene);
@@ -104,10 +111,13 @@ namespace Tungsten {
                 "aniso", _aniso
             };
         }
+
+        virtual std::string id() const {
+            return tinyformat::format("se/aniso=[%.1f,%.1f,%.1f]-s=%.3f-l=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l);
+        }
+
     private:
         float _sigma, _l;
-        Vec3f _aniso;
-
 
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
             FloatD absq = dist2(a, b, _aniso);
@@ -123,7 +133,9 @@ namespace Tungsten {
     class RationalQuadraticCovariance : public CovarianceFunction {
     public:
 
-        RationalQuadraticCovariance(float sigma = 1.f, float l = 1., float a = 1.0f, Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _a(a), _aniso(aniso) {}
+        RationalQuadraticCovariance(float sigma = 1.f, float l = 1., float a = 1.0f, Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _a(a) {
+            _aniso = aniso;
+        }
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             CovarianceFunction::fromJson(value, scene);
@@ -131,6 +143,10 @@ namespace Tungsten {
             value.getField("a", _a);
             value.getField("lengthScale", _l);
             value.getField("aniso", _aniso);
+        }
+
+        virtual std::string id() const {
+            return tinyformat::format("rq/aniso=[%.1f,%.1f,%.1f]-s=%.3f-l=%.3f-a=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l, _a);
         }
 
         virtual rapidjson::Value toJson(Allocator& allocator) const override {
@@ -144,7 +160,6 @@ namespace Tungsten {
         }
     private:
         float _sigma, _a, _l;
-        Vec3f _aniso;
 
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
             auto absq = dist2(a, b, _aniso);
@@ -160,7 +175,9 @@ namespace Tungsten {
     class PeriodicCovariance : public CovarianceFunction {
     public:
 
-        PeriodicCovariance(float sigma = 1.f, float l = 1., float w = TWO_PI, Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _w(w), _aniso(aniso) {}
+        PeriodicCovariance(float sigma = 1.f, float l = 1., float w = TWO_PI, Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _w(w) {
+            _aniso = aniso;
+        }
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             CovarianceFunction::fromJson(value, scene);
@@ -179,9 +196,13 @@ namespace Tungsten {
                 "aniso", _aniso
             };
         }
+
+        virtual std::string id() const {
+            return tinyformat::format("per/aniso=[%.1f,%.1f,%.1f]-s=%.3f-l=%.3f-w=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l, _w);
+        }
+
     private:
         float _sigma, _w, _l;
-        Vec3f _aniso;
 
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
             auto absq = dist2(a, b, _aniso);
@@ -372,25 +393,45 @@ namespace Tungsten {
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
         virtual void loadResources() override;
 
-        std::tuple<Eigen::VectorXf, CovMatrix> mean_and_cov(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, size_t numPts) const;
-        Eigen::VectorXf mean(const Vec3f* points, const Derivative* derivative_types, Vec3f deriv_dir, size_t numPts) const;
-        CovMatrix cov(const Vec3f* points_a, const Vec3f* points_b, const Derivative* dtypes_a, const Derivative* dtypes_b, Vec3f deriv_dir, size_t numPtsA, size_t numPtsB) const;
+        std::tuple<Eigen::VectorXf, CovMatrix> mean_and_cov(
+            const Vec3f* points, const Derivative* derivative_types, const Vec3f* ddirs,
+            Vec3f deriv_dir, size_t numPts) const;
+        Eigen::VectorXf mean(
+            const Vec3f* points, const Derivative* derivative_types, const Vec3f* ddirs,
+            Vec3f deriv_dir, size_t numPts) const;
+
+        CovMatrix cov(
+            const Vec3f* points_a, const Vec3f* points_b,
+            const Derivative* dtypes_a, const Derivative* dtypes_b,
+            const Vec3f* ddirs_a, const Vec3f* ddirs_b,
+            Vec3f deriv_dir, size_t numPtsA, size_t numPtsB) const;
 
         float sample_start_value(Vec3f p, PathSampleGenerator& sampler) const;
 
         Eigen::MatrixXf sample(
             const Vec3f* points, const Derivative* derivative_types, size_t numPts,
+            const Vec3f* ddirs,
             const Constraint* constraints, size_t numConstraints,
             Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const;
 
         Eigen::MatrixXf sample_cond(
             const Vec3f* points, const Derivative* derivative_types, size_t numPts,
+            const Vec3f* ddirs,
             const Vec3f* cond_points, const float* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+            const Vec3f* cond_ddirs,
             const Constraint* constraints, size_t numConstraints,
             Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const;
 
-        size_t _maxEigenvaluesN = 64;
-        float _covEps = 0.0001f;
+
+        void setConditioning(std::vector<Vec3f> globalCondPs, 
+            std::vector<Derivative> globalCondDerivs, 
+            std::vector<Vec3f> globalCondDerivDirs,
+            std::vector<float> globalCondValues) {
+            _globalCondPs = globalCondPs;
+            _globalCondDerivs = globalCondDerivs;
+            _globalCondDerivDirs = globalCondDerivDirs;
+            _globalCondValues = globalCondValues;
+        }
 
     public:
         // Get me some bits
@@ -408,8 +449,15 @@ namespace Tungsten {
             const Constraint* constraints, int numConstraints,
             int samples, PathSampleGenerator& sampler) const;
 
+        std::vector<Vec3f> _globalCondPs;
+        std::vector<Derivative> _globalCondDerivs;
+        std::vector<Vec3f> _globalCondDerivDirs;
+        std::vector<float> _globalCondValues;
+
         std::shared_ptr<MeanFunction> _mean;
         std::shared_ptr<CovarianceFunction> _cov;
+        size_t _maxEigenvaluesN = 64;
+        float _covEps = 0.0001f;
     };
 }
 

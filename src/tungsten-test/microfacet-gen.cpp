@@ -6,6 +6,11 @@
 #include <io/ImageIO.hpp>
 #include <io/FileUtils.hpp>
 #include <bsdfs/Microfacet.hpp>
+#include <rapidjson/document.h>
+#include <io/JsonDocument.hpp>
+#include <io/JsonObject.hpp>
+#include <io/Scene.hpp>
+#include <math/GaussianProcessFactory.hpp>
 
 using namespace Tungsten;
 
@@ -44,7 +49,7 @@ Eigen::MatrixXf compute_normals(const Eigen::MatrixXf& samples) {
 }
 
 float compute_beckmann_roughness(const CovarianceFunction& cov) {
-    float L2 = cov(Derivative::First, Derivative::First, Vec3f(0.f), Vec3f(0.f), Vec3f(1.f, 0.f, 0.f));
+    float L2 = cov(Derivative::First, Derivative::First, Vec3f(0.f), Vec3f(0.f), Vec3f(-1.f, 0.f, 0.f), Vec3f(1.f, 0.f, 0.f));
     return sqrt(2 * L2);
 }
 
@@ -72,7 +77,7 @@ void normals_and_stuff(const GaussianProcess& gp) {
 
 
         Eigen::MatrixXf samples = gp.sample(
-            points.data(), derivs.data(), points.size(),
+            points.data(), derivs.data(), points.size(), nullptr,
             nullptr, 0,
             Vec3f(1.0f, 0.0f, 0.0f), 100, sampler);
 
@@ -103,7 +108,7 @@ void normals_and_stuff(const GaussianProcess& gp) {
     }
 }
 
-void side_view(const GaussianProcess& gp) {
+void side_view(const GaussianProcess& gp, std::string output) {
     UniformPathSampler sampler(0);
     sampler.next1D();
     sampler.next1D();
@@ -125,7 +130,7 @@ void side_view(const GaussianProcess& gp) {
 
 
         Eigen::MatrixXf samples = gp.sample(
-            points.data(), derivs.data(), points.size(),
+            points.data(), derivs.data(), points.size(), nullptr,
             nullptr, 0,
             Vec3f(1.0f, 0.0f, 0.0f), 1, sampler);
 
@@ -142,21 +147,23 @@ void side_view(const GaussianProcess& gp) {
         }
 
         for (int i = 0; i < samples.cols(); i++) {
-            std::ofstream xfile(incrementalFilename("microfacet/side-view/squared-exponential/rel.bin", "", false).asString(), std::ios::out | std::ios::binary);
+            Path basePath = Path(output) / Path(gp._cov->id());
+
+            std::ofstream xfile(incrementalFilename(basePath + Path("-rel.bin"), "", false).asString(), std::ios::out | std::ios::binary);
             xfile.write((char*)samples.col(i).data(), sizeof(float) * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
             xfile.close();
 
             samples.col(i).array() -= samples.col(i).minCoeff();
             samples.col(i).array() /= samples.col(i).maxCoeff();
 
-            ImageIO::saveHdr(incrementalFilename("microfacet/side-view/squared-exponential/rel.exr", "", false), samples.col(i).data(), NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 1);
-            ImageIO::saveHdr(incrementalFilename("microfacet/side-view/squared-exponential/thr.exr", "", false), thresholded.col(i).data(), NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 1);
+            ImageIO::saveHdr(incrementalFilename(basePath + Path("-rel.exr"), "", false), samples.col(i).data(), NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 1);
+            ImageIO::saveHdr(incrementalFilename(basePath + Path("-thr.exr"), "", false), thresholded.col(i).data(), NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 1);
         }
     }
 }
 
 
-constexpr size_t NUM_RAY_SAMPLE_POINTS = 64;
+constexpr size_t NUM_RAY_SAMPLE_POINTS = 512;
 
 std::vector<std::tuple<float, Vec3f>> trace_ray(const Ray& ray, const GaussianProcess* _gp, int num, PathSampleGenerator& sampler) {
     std::vector<Vec3f> points(NUM_RAY_SAMPLE_POINTS + 1);
@@ -179,8 +186,8 @@ std::vector<std::tuple<float, Vec3f>> trace_ray(const Ray& ray, const GaussianPr
     std::array<float, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
     std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
     gpSamples = _gp->sample_cond(
-        points.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS,
-        cond_pts.data(), cond_vs.data(), cond_deriv.data(), 0,
+        points.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS, nullptr,
+        cond_pts.data(), cond_vs.data(), cond_deriv.data(), 0, nullptr,
         constraints.data(), constraints.size(),
         ray.dir(), num, sampler);
 
@@ -189,7 +196,8 @@ std::vector<std::tuple<float, Vec3f>> trace_ray(const Ray& ray, const GaussianPr
     for (int s = 0; s < gpSamples.cols(); s++) {
 
         if ((s + 1) % 100 == 0) {
-            std::cout << s << "/" << gpSamples.cols() << "\n";
+            std::cout << s << "/" << gpSamples.cols();
+            std::cout << "\r";
         }
 
         float prevV = gpSamples(0, s);
@@ -210,73 +218,39 @@ std::vector<std::tuple<float, Vec3f>> trace_ray(const Ray& ray, const GaussianPr
 
                 Vec3f ip = ray.pos() + ray.dir() * t;
 
-#if 0
-                {
-                    float eps = 0.00001f;
-                    std::array<Vec3f, 6> gradPs{
-                        ip + Vec3f(eps, 0.f, 0.f),
-                        ip + Vec3f(0.f, eps, 0.f),
-                        ip + Vec3f(0.f, 0.f, eps),
-                        ip - Vec3f(eps, 0.f, 0.f),
-                        ip - Vec3f(0.f, eps, 0.f),
-                        ip - Vec3f(0.f, 0.f, eps),
-                    };
-
-                    std::array<Derivative, 6> gradDerivs{
-                        Derivative::None, Derivative::None, Derivative::None,
-                        Derivative::None, Derivative::None, Derivative::None
-                    };
-
-                    points[NUM_RAY_SAMPLE_POINTS] = ip;
-                    derivs[NUM_RAY_SAMPLE_POINTS] = Derivative::None;
-
-                    Eigen::VectorXf sampleValues(NUM_RAY_SAMPLE_POINTS + 1);
-                    sampleValues.block(0, 0, NUM_RAY_SAMPLE_POINTS, 1) = gpSamples.col(s);
-                    sampleValues(NUM_RAY_SAMPLE_POINTS) = 0;
-
-                    Eigen::MatrixXf gradSamples = _gp->sample_cond(
-                        gradPs.data(), gradDerivs.data(), gradPs.size(),
-                        points.data(), sampleValues.data(), derivs.data(), points.size(),
-                        nullptr, 0,
-                        ray.dir(), 1, sampler);
-
-                    Vec3f grad = Vec3f{
-                        gradSamples(0,0) - gradSamples(3,0),
-                        gradSamples(1,0) - gradSamples(4,0),
-                        2 * eps,
-                    } / (2 * eps) * startSign;
-                }
-#else
                 std::array<Vec3f, 1> gradPs{ ip };
                 std::array<Derivative, 1> gradDerivs{ Derivative::First };
 
-                //points[NUM_RAY_SAMPLE_POINTS] = ip;
-                //derivs[NUM_RAY_SAMPLE_POINTS] = Derivative::None;
+                points[NUM_RAY_SAMPLE_POINTS] = ip;
+                derivs[NUM_RAY_SAMPLE_POINTS] = Derivative::None;
 
                 Eigen::VectorXf sampleValues(NUM_RAY_SAMPLE_POINTS + 1);
-                //sampleValues.block(0, 0, NUM_RAY_SAMPLE_POINTS, 1) = gpSamples.col(s);
-                //sampleValues(NUM_RAY_SAMPLE_POINTS) = 0;
+                sampleValues.block(0, 0, NUM_RAY_SAMPLE_POINTS, 1) = gpSamples.col(s);
+                sampleValues(NUM_RAY_SAMPLE_POINTS) = 0;
 
                 Vec3f grad;
 
                 grad.x() = _gp->sample_cond(
-                    gradPs.data(), gradDerivs.data(), gradPs.size(),
-                    points.data(), sampleValues.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS,
+                    gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
+                    points.data(), sampleValues.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS+1, nullptr,
                     nullptr, 0,
                     Vec3f(1.f, 0.f, 0.f), 1, sampler)(0, 0);
 
                 grad.y() = _gp->sample_cond(
-                    gradPs.data(), gradDerivs.data(), gradPs.size(),
-                    points.data(), sampleValues.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS,
+                    gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
+                    points.data(), sampleValues.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS+1, nullptr,
                     nullptr, 0,
                     Vec3f(0.f, 1.f, 0.f), 1, sampler)(0, 0);
 
                 grad.z() = _gp->sample_cond(
-                    gradPs.data(), gradDerivs.data(), gradPs.size(),
-                    points.data(), sampleValues.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS,
+                    gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
+                    points.data(), sampleValues.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS+1, nullptr,
                     nullptr, 0,
                     Vec3f(0.f, 0.f, 1.f), 1, sampler)(0, 0);
-#endif
+
+                if (grad.z() < 0) {
+                    //std::cout << "Normal pointing down!\n";
+                }
 
                 if (!std::isfinite(grad.avg())) {
                     std::cout << "Gradient invalid.\n";
@@ -318,7 +292,7 @@ void sample_beckmann(float alpha) {
 
 }
 
-void v_ndf(const GaussianProcess& gp, float angle) {
+void v_ndf(const GaussianProcess& gp, float angle, int samples, std::string output) {
     UniformPathSampler sampler(0);
     sampler.next1D();
     sampler.next1D();
@@ -328,7 +302,7 @@ void v_ndf(const GaussianProcess& gp, float angle) {
     ray.setNearT(-(ray.pos().z()-10.0f) / ray.dir().z());
     ray.setFarT(-(ray.pos().z()+10.0f) / ray.dir().z());
 
-    auto trace_results = trace_ray(ray, &gp, 100000, sampler);
+    auto trace_results = trace_ray(ray, &gp, samples, sampler);
 
     Eigen::MatrixXf normals(trace_results.size(),3);
 
@@ -341,23 +315,71 @@ void v_ndf(const GaussianProcess& gp, float angle) {
     }
 
     {
-        std::ofstream xfile(incrementalFilename("microfacet/visible-normals/squared-exponential.bin", "", false).asString(), std::ios::out | std::ios::binary);
+        std::ofstream xfile(incrementalFilename(Path(output) / Path(gp._cov->id()) + Path(tinyformat::format("-%.1fdeg-%d.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
+        //std::ofstream xfile((Path(output) / Path(gp._cov->id()) + Path(tinyformat::format("-%.1fdeg.bin",  180 * angle / PI))).asString(), std::ios::out | std::ios::binary);
         xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
         xfile.close();
     }
 
 }
 
-int main() {
-    GaussianProcess gp(std::make_shared<LinearMean>(Vec3f(0.f), Vec3f(0.f, 0.f, 1.f), 1.0f), std::make_shared<SquaredExponentialCovariance>(1.0f, 1.0f, Vec3f(1.0f, 1.0f, 0.0f)));
-    gp._covEps = 0.00001f;
-    gp._maxEigenvaluesN = 1024;
+template<typename T>
+static std::shared_ptr<T> instantiate(JsonPtr value, const Scene& scene)
+{
+    auto result = StringableEnum<std::function<std::shared_ptr<T>()>>(value.getRequiredMember("type")).toEnum()();
+    result->fromJson(value, scene);
+    return result;
+}
 
-    float alpha = compute_beckmann_roughness(*gp._cov);
-    std::cout << "Beckmann roughness: " << compute_beckmann_roughness(*gp._cov) << "\n";
+int main(int argc, char** argv) {
+    auto lmean = std::make_shared<LinearMean>(Vec3f(0.f), Vec3f(0.f, 0.f, 1.f), 1.0f);
 
-    sample_beckmann(alpha);
-    //normals_and_stuff(gp);
-    //side_view(gp);
-    // v_ndf(gp, 0);
+    std::shared_ptr<JsonDocument> document;
+    try {
+        document = std::make_shared<JsonDocument>(argc > 1 ? argv[1] : "microfacet/covariances-problem.json");
+    }
+    catch (std::exception& e) {
+        std::cerr << e.what() << "\n";
+        return -1;
+    }
+
+    float aniso = 0.5;
+    float angle =  0.;
+    Scene scene;
+
+    auto covs = (*document)["covariances"];
+    if (!covs || !covs.isArray()) {
+        std::cerr << "There should be a `covariances` array in the file\n";
+        return -1;
+    }
+
+    for (int i = 0; i < covs.size(); i++) {
+        const auto& jcov = covs[i];
+        try {
+            auto cov = instantiate<CovarianceFunction>(jcov, scene);
+            cov->loadResources();
+            cov->_aniso[2] = aniso;
+
+            std::cout << cov->id() << "\n";
+
+            GaussianProcess gp(lmean, cov);
+            gp._covEps = 0; // 0.00001f;
+            gp._maxEigenvaluesN = 1024;
+
+            float alpha = compute_beckmann_roughness(*gp._cov);
+            std::cout << "Beckmann roughness: " << alpha << "\n";
+
+            /*auto testFile = Path("microfacet/visible-normals/") / Path(gp._cov->id()) + Path(tinyformat::format("-%.1fdeg.bin", 180 * angle / PI));
+            if (testFile.exists()) {
+                std::cout << "skipping...\n";
+                continue;
+            }*/
+
+            v_ndf(gp, angle, 10000, "microfacet/visible-normals/");
+            //side_view(gp, "microfacet/side-view/");
+        }
+        catch (std::exception& e) {
+            std::cerr << e.what() << "\n";
+        }
+    }
 }

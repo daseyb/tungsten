@@ -81,6 +81,115 @@ Vec3f GaussianProcessMedium::sigmaT(Vec3f /*p*/) const
     return _sigmaT;
 }
 
+std::vector<MediumSample> GaussianProcessMedium::sampleDistanceMult(PathSampleGenerator& sampler, const Ray& ray, MediumState& state) const {
+
+    float t = ray.farT();
+    {
+        std::vector<Vec3f> points(_samplePoints + 1);
+        std::vector<Derivative> derivs(_samplePoints + 1);
+        std::vector<float> ts(_samplePoints);
+
+        for (int i = 0; i < _samplePoints; i++) {
+            float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i - sampler.next1D()) / _samplePoints, 0.f, 1.f));
+            ts[i] = t;
+            points[i] = ray.pos() + t * ray.dir();
+            derivs[i] = Derivative::None;
+        }
+
+        Eigen::MatrixXf gpSamples;
+
+        int startSign = 1;
+
+        if (state.firstScatter) {
+            std::array<Vec3f, 1> cond_pts = { points[0] };
+            std::array<Derivative, 1> cond_deriv = { Derivative::None };
+            std::array<float, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
+            std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
+            gpSamples = _gp->sample_cond(
+                points.data(), derivs.data(), _samplePoints, nullptr,
+                cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
+                constraints.data(), constraints.size(),
+                ray.dir(), 1, sampler);
+        }
+        else {
+
+            std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
+            std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
+
+            float deriv = state.lastAniso.dot(ray.dir().normalized());
+            startSign = deriv < 0 ? -1 : 1;
+            std::array<float, 2> cond_vs = { 0, deriv };
+
+            gpSamples = _gp->sample_cond(
+                points.data(), derivs.data(), _samplePoints, nullptr,
+                cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
+                nullptr, 0,
+                ray.dir(), 1, sampler) * startSign;
+        }
+
+        std::vector<MediumSample> result;
+
+        for (int s = 0; s < gpSamples.cols(); s++) {
+
+            float prevV = gpSamples(0, s);
+            float prevT = ts[0];
+
+            for (int p = 1; p < _samplePoints; p++) {
+                float currV = gpSamples(p, s);
+                float currT = ts[p];
+                if (currV < 0) {
+
+                    float offsetT = prevV / (prevV - currV);
+                    float t = lerp(prevT, currT, offsetT);
+
+                    Vec3f ip = ray.pos() + ray.dir() * t;
+
+                    std::array<Vec3f, 1> gradPs{ ip };
+                    std::array<Derivative, 1> gradDerivs{ Derivative::First };
+
+                    //points[NUM_RAY_SAMPLE_POINTS] = ip;
+                    //derivs[NUM_RAY_SAMPLE_POINTS] = Derivative::None;
+
+                    Eigen::VectorXf sampleValues(_samplePoints + 1);
+                    //sampleValues.block(0, 0, NUM_RAY_SAMPLE_POINTS, 1) = gpSamples.col(s);
+                    //sampleValues(NUM_RAY_SAMPLE_POINTS) = 0;
+
+                    Vec3f grad;
+
+                    grad.x() = _gp->sample_cond(
+                        gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
+                        points.data(), sampleValues.data(), derivs.data(), _samplePoints, nullptr,
+                        nullptr, 0,
+                        Vec3f(1.f, 0.f, 0.f), 1, sampler)(0, 0);
+
+                    grad.y() = _gp->sample_cond(
+                        gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
+                        points.data(), sampleValues.data(), derivs.data(), _samplePoints, nullptr,
+                        nullptr, 0,
+                        Vec3f(0.f, 1.f, 0.f), 1, sampler)(0, 0);
+
+                    grad.z() = _gp->sample_cond(
+                        gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
+                        points.data(), sampleValues.data(), derivs.data(), _samplePoints, nullptr,
+                        nullptr, 0,
+                        Vec3f(0.f, 0.f, 1.f), 1, sampler)(0, 0);
+
+                    if (!std::isfinite(grad.avg())) {
+                        std::cout << "Gradient invalid.\n";
+                    }
+                    else {
+                        //result.emplace_back(t, grad);
+                    }
+
+                    break;
+                }
+                prevV = currV;
+                prevT = currT;
+            }
+        }
+    }
+}
+
 bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const Ray &ray,
         MediumState &state, MediumSample &sample) const
 {
@@ -121,8 +230,8 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                 std::array<float, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
                 std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
                 gpSamples = _gp->sample_cond(
-                    points.data(), derivs.data(), _samplePoints,
-                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
+                    points.data(), derivs.data(), _samplePoints, nullptr,
+                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
                     constraints.data(), constraints.size(),
                     ray.dir(), 1, sampler);
             }
@@ -136,8 +245,8 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                 std::array<float, 2> cond_vs = { 0, deriv };
 
                 gpSamples = _gp->sample_cond(
-                    points.data(), derivs.data(), _samplePoints,
-                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
+                    points.data(), derivs.data(), _samplePoints, nullptr,
+                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
                     nullptr, 0,
                     ray.dir(), 1, sampler) * startSign;
             }
@@ -175,8 +284,8 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                     sampleValues(_samplePoints) = 0;
 
                     Eigen::MatrixXf gradSamples = _gp->sample_cond(
-                        gradPs.data(), gradDerivs.data(), gradPs.size(),
-                        points.data(), sampleValues.data(), derivs.data(), points.size(),
+                        gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
+                        points.data(), sampleValues.data(), derivs.data(), points.size(), nullptr,
                         nullptr, 0,
                         ray.dir(), 1, sampler);
 
@@ -239,8 +348,8 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
         std::array<float, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
         std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
         gpSamples = _gp->sample_cond(
-            points.data(), derivs.data(), points.size(),
-            cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
+            points.data(), derivs.data(), points.size(), nullptr,
+            cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
             constraints.data(), constraints.size(),
             ray.dir(), 10, sampler);
     }
@@ -259,8 +368,8 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
         std::array<float, 2> cond_vs = { 0, deriv };
 
         gpSamples = _gp->sample_cond(
-            points.data(), derivs.data(), points.size(),
-            cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
+            points.data(), derivs.data(), points.size(), nullptr,
+            cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
             nullptr, 0,
             ray.dir(), 10, sampler) * startSign;
     }

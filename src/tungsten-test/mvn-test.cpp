@@ -54,7 +54,7 @@ int main() {
     }
 
     {
-        Eigen::VectorXf mean = gp.mean(points.data(), derivs.data(), ray.dir(), points.size());
+        Eigen::VectorXf mean = gp.mean(points.data(), derivs.data(), nullptr, ray.dir(), points.size());
         std::ofstream xfile("mean.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)mean.data(), sizeof(float) * mean.rows() * mean.cols());
         xfile.close();
@@ -64,10 +64,10 @@ int main() {
         Eigen::Matrix4Xf kernel(4, NUM_SAMPLE_POINTS);
 
         for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
-            kernel(0, i) = (*gp._cov)(Derivative::None, Derivative::None, points[0], points[i], ray.dir());
-            kernel(1, i) = (*gp._cov)(Derivative::None, Derivative::First, points[0], points[i], ray.dir());
-            kernel(2, i) = (*gp._cov)(Derivative::First, Derivative::None, points[0], points[i], ray.dir());
-            kernel(3, i) = (*gp._cov)(Derivative::First, Derivative::First, points[0], points[i], ray.dir());
+            kernel(0, i) = (*gp._cov)(Derivative::None, Derivative::None, points[0], points[i], -ray.dir(), ray.dir());
+            kernel(1, i) = (*gp._cov)(Derivative::None, Derivative::First, points[0], points[i], -ray.dir(), ray.dir());
+            kernel(2, i) = (*gp._cov)(Derivative::First, Derivative::None, points[0], points[i], -ray.dir(), ray.dir());
+            kernel(3, i) = (*gp._cov)(Derivative::First, Derivative::First, points[0], points[i], -ray.dir(), ray.dir());
         }
 
         std::ofstream xfile("kernel-eval.bin", std::ios::out | std::ios::binary);
@@ -76,14 +76,14 @@ int main() {
     }
 
     {
-        Eigen::MatrixXf cov = gp.cov(points.data(), points.data(), derivs.data(), derivs.data(), ray.dir(), points.size(), points.size());
+        Eigen::MatrixXf cov = gp.cov(points.data(), points.data(), derivs.data(), derivs.data(), nullptr, nullptr, ray.dir(), points.size(), points.size());
         std::ofstream xfile("cov.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)cov.data(), sizeof(float) * cov.rows() * cov.cols());
         xfile.close();
     }
 
     {
-        Eigen::MatrixXf samples = gp.sample(points.data(), derivs.data(), points.size(), nullptr, 0, ray.dir(), 50, sampler);
+        Eigen::MatrixXf samples = gp.sample(points.data(), derivs.data(), points.size(), nullptr, nullptr, 0, ray.dir(), 50, sampler);
         std::ofstream xfile("samples.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)samples.data(), sizeof(float) * samples.rows() * samples.cols());
         xfile.close();
@@ -91,7 +91,7 @@ int main() {
 
     {
         std::array<GaussianProcess::Constraint, 1> constraints = { { 0, 0, 0, FLT_MAX } };
-        Eigen::MatrixXf samples = gp.sample(points.data(), derivs.data(), points.size(), constraints.data(), constraints.size(), ray.dir(), 50, sampler);
+        Eigen::MatrixXf samples = gp.sample(points.data(), derivs.data(), points.size(), nullptr, constraints.data(), constraints.size(), ray.dir(), 50, sampler);
         std::ofstream xfile("samples-free-space.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)samples.data(), sizeof(float) * samples.rows() * samples.cols());
         xfile.close();
@@ -101,7 +101,7 @@ int main() {
         std::array<GaussianProcess::Constraint, 1> constraints = { { 0, 0, 0, FLT_MAX } };
 
         Eigen::MatrixXf samples = gp.sample(
-            points.data(), derivs.data(), points.size(),
+            points.data(), derivs.data(), points.size(), nullptr,
             constraints.data(), constraints.size(),
             ray.dir(), 50000, sampler);
 
@@ -135,8 +135,8 @@ int main() {
         std::array<float, 2> cond_vs = { 0 };
 
         Eigen::MatrixXf samples = gp.sample_cond(
-            points.data(), derivs.data(), points.size(),
-            cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
+            points.data(), derivs.data(), points.size(), nullptr,
+            cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
             nullptr, 0,
             ray.dir(), 50, sampler);
 
@@ -153,8 +153,8 @@ int main() {
 
 
         Eigen::MatrixXf samples = gp.sample_cond(
-            points.data(), derivs.data(), points.size(),
-            cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
+            points.data(), derivs.data(), points.size(), nullptr,
+            cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
             constraints.data(), constraints.size(),
             ray.dir(), 50, sampler);
 
@@ -170,8 +170,8 @@ int main() {
         std::array<GaussianProcess::Constraint, 0> constraints = {  };
 
         Eigen::MatrixXf samples = gp.sample_cond(
-            points.data(), derivs.data(), points.size(),
-            cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(),
+            points.data(), derivs.data(), points.size(), nullptr,
+            cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
             constraints.data(), constraints.size(),
             ray.dir(), 50000, sampler);
 
