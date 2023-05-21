@@ -7,9 +7,16 @@
 #include <fftw3.h>
 #include <tinyformat/tinyformat.hpp>
 
+#include <openvdb/openvdb.h>
+#include <openvdb/Grid.h>
+#include <openvdb/tools/Interpolation.h>
+#include <openvdb/tools/GridOperators.h>
+#include <openvdb/tools/FastSweeping.h>
+#include <openvdb/tools/MultiResGrid.h>
+
 using namespace Tungsten;
 
-constexpr int NUM_SAMPLE_POINTS = 1024;
+constexpr int NUM_SAMPLE_POINTS = 256;
 constexpr int NUM_PT_EVAL_POINTS = 512;
 
 void fft_shift(const std::vector<std::complex<double>>& dft, std::vector<std::complex<double>>& dft_shift, int offset) {
@@ -71,7 +78,7 @@ float eval_idft_point(Vec3f p, const std::vector<std::complex<double>>& dft) {
 
 
 void rational_quadratic_sphere() {
-    GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(1.2f, 0.0f, 0.f), 1.f), std::make_shared<RationalQuadraticCovariance>(0.3f, 0.5f, 0.5f, Vec3f(1.f, 1.0f, 1.f)));
+    GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(1.2f, 0.0f, 0.f), 1.f), std::make_shared<RationalQuadraticCovariance>(0.5f, 0.5f, 0.5f, Vec3f(1.f, 1.0f, 1.f)));
     UniformPathSampler sampler(0);
     sampler.next2D();
 
@@ -138,9 +145,119 @@ void rational_quadratic_sphere() {
     fftw_destroy_plan(plan);
 }
 
-int main() {
-    rational_quadratic_sphere();
+void rational_quadratic_sphere_3D() {
+    GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(0.0f, 0.0f, 0.f), 1.f), std::make_shared<RationalQuadraticCovariance>(0.5f, 0.2f, 1.0f, Vec3f(1.f, 1.0f, 1.f)));
+    UniformPathSampler sampler(0);
+    sampler.next2D();
 
+
+    std::vector<Vec3f> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+    std::vector<Derivative> derivs(points.size());
+
+    std::vector<std::complex<double>> cov(points.size());
+    std::vector<std::complex<double>> Fcov(points.size());
+    fftw_plan plan = fftw_plan_dft_3d(NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS,
+        (fftw_complex*)cov.data(), (fftw_complex*)Fcov.data(), FFTW_FORWARD, FFTW_ESTIMATE);
+
+    int idx = 0;
+    for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
+        for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
+            for (int k = 0; k < NUM_SAMPLE_POINTS; k++) {
+                points[idx] = 4.f * (Vec3f((float)i, (float)j, (float)k) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
+
+                derivs[idx] = Derivative::None;
+                cov[idx] = std::complex<double>((*gp._cov)(Derivative::None, Derivative::None, Vec3f(0.f), points[idx], -points[idx].normalized(), points[idx].normalized()), 0.f);
+                idx++;
+            }
+        }
+    }
+
+    fftw_execute(plan);
+
+    fftw_destroy_plan(plan);
+
+    std::vector<std::complex<double>> Fcov_sample(points.size());
+    std::vector<std::complex<double>> real(points.size());
+    plan = fftw_plan_dft_3d(NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 
+        (fftw_complex*)Fcov_sample.data(), (fftw_complex*)real.data(), FFTW_BACKWARD, FFTW_MEASURE);
+
+    {
+        std::ofstream xfile(tinyformat::format("3d-reals/%s-sample.bin", gp._cov->id()), std::ios::out | std::ios::binary);
+
+        for (int num_reals = 0; num_reals < 5; num_reals++) {
+            openvdb::io::File file(tinyformat::format("3d-reals/%s-sample%d.vdb", gp._cov->id(), num_reals));
+
+            for (int i = 0; i < Fcov.size(); i++) {
+                Vec2f u = gp.rand_normal_2(sampler);
+                Fcov_sample[i] = sqrt(Fcov[i] / std::complex<double>(4*cov.size())) * (std::complex<double>(u.x(), u.y()));
+            }
+
+            fftw_execute(plan);
+
+            for (int i = 0; i < Fcov.size(); i++) {
+                Vec2f u = gp.rand_normal_2(sampler);
+                real[i] += std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3f(0.f)));
+            }
+
+
+            auto grid = openvdb::createGrid<openvdb::FloatGrid>(4.f);
+            grid->setGridClass(openvdb::GRID_LEVEL_SET);
+
+            openvdb::FloatGrid::Accessor accessor = grid->getAccessor();
+
+            const float outside = grid->background();
+            const float inside = -outside;
+
+            std::cout << outside << "\n";
+
+            int idx = 0;
+            for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
+                for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
+                    for (int k = 0; k < NUM_SAMPLE_POINTS; k++) {
+                        float val = real[idx].real();
+                        if (abs(val) < outside*10) {
+                            accessor.setValue({ i,j,k }, val);
+                        }
+                        idx++;
+                    }
+                }
+            }
+
+            openvdb::GridPtrVec grids;
+            grid->setName("density");
+            grids.push_back(grid);
+            file.write(grids);
+            file.close();
+
+            xfile.write((char*)real.data(), sizeof(fftw_complex) * real.size());
+        }
+
+        xfile.close();
+    }
+
+    for (int i = 0; i < Fcov.size(); i++) {
+        Vec2f u = gp.rand_normal_2(sampler);
+        real[i] = std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3f(0.f)));
+    }
+
+    {
+        std::ofstream xfile(tinyformat::format("3d-reals/%s-mean.bin", gp._cov->id()), std::ios::out | std::ios::binary);
+        xfile.write((char*)real.data(), sizeof(fftw_complex) * real.size());
+        xfile.close();
+    }
+
+    fftw_destroy_plan(plan);
+}
+
+
+int main() {
+
+    try {
+        rational_quadratic_sphere_3D();
+    }
+    catch (std::exception& e) {
+        std::cerr << e.what();
+    }
 #if 0
 
 	GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(0.f, 0.f, 0.f), 0.25f), std::make_shared<RationalQuadraticCovariance>(1.0f, 0.1f, 0.25f, Vec3f(1.f, 1.0f, 1.f)));

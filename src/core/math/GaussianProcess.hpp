@@ -215,6 +215,50 @@ namespace Tungsten {
         }
     };
 
+
+    class ThinPlateCovariance : public CovarianceFunction {
+    public:
+
+        ThinPlateCovariance(float sigma = 1.f, float R = 1., Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _R(R) {
+            _aniso = aniso;
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            CovarianceFunction::fromJson(value, scene);
+            value.getField("sigma", _sigma);
+            value.getField("R", _R);
+            value.getField("aniso", _aniso);
+        }
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+                "type", "thin-plate",
+                "sigma", _sigma,
+                "R", _R,
+                "aniso", _aniso
+            };
+        }
+
+        virtual std::string id() const {
+            return tinyformat::format("tp/aniso=[%.1f,%.1f,%.1f]-s=%.3f-R=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _R);
+        }
+
+    private:
+        float _sigma, _R;
+
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
+            auto absq = dist2(a, b, _aniso);
+            auto ab = sqrt(absq);
+            return sqr(_sigma) / 12 * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
+        }
+
+        virtual float cov(Vec3f a, Vec3f b) const override {
+            auto absq = dist2(a, b, _aniso);
+            auto ab = sqrt(absq);
+            return sqr(_sigma) / 12 * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
+        }
+    };
+
     class MeanFunction : public JsonSerializable {
     public:
         float operator()(Derivative a, Vec3f p, Vec3f d) const {
