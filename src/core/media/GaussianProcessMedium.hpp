@@ -38,8 +38,6 @@ public:
     virtual Vec3f sigmaS(Vec3f p) const override;
     virtual Vec3f sigmaT(Vec3f p) const override;
 
-    std::vector<MediumSample> sampleDistanceMult(PathSampleGenerator& sampler, const Ray& ray, Medium::MediumState& state) const;
-
     virtual bool sampleDistance(PathSampleGenerator &sampler, const Ray &ray,
             MediumState &state, MediumSample &sample) const override;
     virtual Vec3f transmittance(PathSampleGenerator &sampler, const Ray &ray, bool startOnSurface, bool endOnSurface, MediumSample* sample) const override;

@@ -120,6 +120,11 @@ else()
     message(STATUS "No OpenEXR detected. Building without .exr support")
 endif()
 
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+	set(core_libs ${core_libs} OpenMP::OpenMP_CXX)
+endif()
+
 find_package(JPEG)
 if (JPEG_FOUND)
     message(STATUS "JPEG library detected.")

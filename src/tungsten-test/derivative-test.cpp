@@ -23,8 +23,8 @@ int main() {
     
     std::vector<float> ts;
 
-    float L0 = (*gp->_cov)(Derivative::None, Derivative::None, Vec3f(0.f), Vec3f(0.f), Vec3f(-1.f, 0.f, 0.f), Vec3f(1.f, 0.f, 0.f));
-    float L2 = (*gp->_cov)(Derivative::First, Derivative::First, Vec3f(0.f), Vec3f(0.f), Vec3f(-1.f, 0.f, 0.f), Vec3f(1.f, 0.f, 0.f));
+    float L0 = (*gp->_cov)(Derivative::None, Derivative::None, Vec3f(0.f), Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), Vec3f(1.f, 0.f, 0.f));
+    float L2 = (*gp->_cov)(Derivative::First, Derivative::First, Vec3f(0.f), Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), Vec3f(1.f, 0.f, 0.f));
 
     std::cout << "L0:" << L0 << std::endl;
     std::cout << "L2:" << L2 << std::endl;

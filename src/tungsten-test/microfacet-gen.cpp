@@ -1,5 +1,6 @@
 #include <core/math/GaussianProcess.hpp>
 #include <core/sampling/UniformPathSampler.hpp>
+#include <core/media/GaussianProcessMedium.hpp>
 #include <core/math/Ray.hpp>
 #include <fstream>
 #include <cfloat>
@@ -49,7 +50,7 @@ Eigen::MatrixXf compute_normals(const Eigen::MatrixXf& samples) {
 }
 
 float compute_beckmann_roughness(const CovarianceFunction& cov) {
-    float L2 = cov(Derivative::First, Derivative::First, Vec3f(0.f), Vec3f(0.f), Vec3f(-1.f, 0.f, 0.f), Vec3f(1.f, 0.f, 0.f));
+    float L2 = cov(Derivative::First, Derivative::First, Vec3f(0.f), Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), Vec3f(1.f, 0.f, 0.f));
     return sqrt(2 * L2);
 }
 
@@ -292,7 +293,10 @@ void sample_beckmann(float alpha) {
 
 }
 
-void v_ndf(const GaussianProcess& gp, float angle, int samples, std::string output) {
+void v_ndf(std::shared_ptr<GaussianProcess> gp, float angle, int samples, std::string output) {
+
+    auto gp_med = std::make_shared<GaussianProcessMedium>(gp, 0, 1, 1, NUM_RAY_SAMPLE_POINTS);
+
     UniformPathSampler sampler(0);
     sampler.next1D();
     sampler.next1D();
@@ -302,9 +306,28 @@ void v_ndf(const GaussianProcess& gp, float angle, int samples, std::string outp
     ray.setNearT(-(ray.pos().z()-10.0f) / ray.dir().z());
     ray.setFarT(-(ray.pos().z()+10.0f) / ray.dir().z());
 
-    auto trace_results = trace_ray(ray, &gp, samples, sampler);
+    Eigen::MatrixXf normals(samples, 3);
 
-    Eigen::MatrixXf normals(trace_results.size(),3);
+
+    for (int s = 0; s < samples; s++) {
+
+        if ((s + 1) % 100 == 0) {
+            std::cout << s << "/" << samples;
+            std::cout << "\r";
+        }
+
+        Medium::MediumState state;
+        state.reset();
+        MediumSample sample;
+        gp_med->sampleDistance(sampler, ray, state, sample);
+        sample.aniso.normalize();
+        normals(s, 0) = sample.aniso.x();
+        normals(s, 1) = sample.aniso.y();
+        normals(s, 2) = sample.aniso.z();
+    }
+
+#if 0
+    auto trace_results = trace_ray(ray, &gp, samples, sampler);
 
     for (int i = 0; i < trace_results.size(); i++) {
         auto [t, n] = trace_results[i];
@@ -313,9 +336,10 @@ void v_ndf(const GaussianProcess& gp, float angle, int samples, std::string outp
         normals(i,1) = n[1];
         normals(i,2) = n[2];
     }
+#endif
 
     {
-        std::ofstream xfile(incrementalFilename(Path(output) / Path(gp._cov->id()) + Path(tinyformat::format("-%.1fdeg-%d.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
+        std::ofstream xfile(incrementalFilename(Path(output) / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
         //std::ofstream xfile((Path(output) / Path(gp._cov->id()) + Path(tinyformat::format("-%.1fdeg.bin",  180 * angle / PI))).asString(), std::ios::out | std::ios::binary);
         xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
         xfile.close();
@@ -362,11 +386,11 @@ int main(int argc, char** argv) {
 
             std::cout << cov->id() << "\n";
 
-            GaussianProcess gp(lmean, cov);
-            gp._covEps = 0; // 0.00001f;
-            gp._maxEigenvaluesN = 1024;
+            auto gp = std::make_shared<GaussianProcess>(lmean, cov);
+            gp->_covEps = 0; // 0.00001f;
+            gp->_maxEigenvaluesN = 1024;
 
-            float alpha = compute_beckmann_roughness(*gp._cov);
+            float alpha = compute_beckmann_roughness(*gp->_cov);
             std::cout << "Beckmann roughness: " << alpha << "\n";
 
             /*auto testFile = Path("microfacet/visible-normals/") / Path(gp._cov->id()) + Path(tinyformat::format("-%.1fdeg.bin", 180 * angle / PI));
@@ -375,7 +399,7 @@ int main(int argc, char** argv) {
                 continue;
             }*/
 
-            v_ndf(gp, angle, 10000, "microfacet/visible-normals/");
+            v_ndf(gp, angle, 1000, "microfacet/visible-normals/");
             //side_view(gp, "microfacet/side-view/");
         }
         catch (std::exception& e) {

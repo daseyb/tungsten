@@ -8,13 +8,14 @@
 
 #ifdef OPENVDB_AVAILABLE
 #include <openvdb/openvdb.h>
+#include <openvdb/tools/Interpolation.h>
 #endif
 
 using namespace Tungsten;
 
 constexpr size_t NUM_SAMPLE_POINTS = 128;
 
-int main(int argc, char** argv) {
+int gen3d(int argc, char** argv) {
 
     EmbreeUtil::initDevice();
 
@@ -36,38 +37,160 @@ int main(int argc, char** argv) {
 
     auto gp = gp_medium->_gp;
 
-    std::vector<float> tpc(128);
 
+    UniformPathSampler sampler(0);
+    sampler.next1D();
+    sampler.next1D();
 
     std::vector<Vec3f> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> derivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> fderivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
 
     Vec3f min(-2.0f, 0.0f, -2.0f);
-    Vec3f max( 2.0f, 2.0f,  2.0f);
+    Vec3f max(2.0f, 4.0f, 2.0f);
 
+    Eigen::VectorXf mean(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+    Eigen::VectorXf variance(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(4.f);
+    //meanGrid->setGridClass(openvdb::GRID_LEVEL_SET);
+    meanGrid->setName("density");
+    meanGrid->setTransform(openvdb::math::Transform::createLinearTransform(4.0 / NUM_SAMPLE_POINTS));
+
+    openvdb::FloatGrid::Accessor meanAccessor = meanGrid->getAccessor();
+
+    int numEstSamples = 50;
     {
-        int idx = 0;
         for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
+            std::cout << i << "\r";
+#pragma omp parallel for
             for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
                 for (int k = 0; k < NUM_SAMPLE_POINTS; k++) {
+                    int idx = i * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS + j * NUM_SAMPLE_POINTS + k;
                     points[idx] = lerp(min, max, Vec3f((float)i, (float)j, (float)k) / (NUM_SAMPLE_POINTS - 1));
                     derivs[idx] = Derivative::None;
                     fderivs[idx] = Derivative::First;
-                    idx++;
+
+                    mean[idx] = 0;
+                    std::vector<float> samples(numEstSamples);
+                    for (int s = 0; s < numEstSamples; s++) {
+                        Vec2f s1 = gp->rand_normal_2(sampler);
+                        Vec2f s2 = gp->rand_normal_2(sampler);
+                        Vec3f offset = { s1.x(), s1.y(), s2.x() };
+                        Vec3f p = points[idx] + offset * sqr(4.0f / NUM_SAMPLE_POINTS);
+                        samples[s] = gp->mean(&p, &derivs[idx], nullptr, Vec3f(1.0f, 0.0f, 0.0f), 1)(0) - 4.0f / NUM_SAMPLE_POINTS;
+                        mean[idx] += samples[s];
+                    }
+
+                    mean[idx] /= numEstSamples;
+                }
+            }
+        }
+
+        for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
+            std::cout << i << "\r";
+            for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
+                for (int k = 0; k < NUM_SAMPLE_POINTS; k++) {
+                    int idx = i * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS + j * NUM_SAMPLE_POINTS + k;
+                    meanAccessor.setValue({ i,j,k }, mean[idx]);
+                }
+            }
+        }
+
+
+        openvdb::tools::GridSampler<openvdb::FloatGrid, openvdb::tools::BoxSampler> meanGridSampler(meanGrid->tree(), meanGrid->transform());
+
+
+        for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
+            std::cout << i << "\r";
+#pragma omp parallel for
+            for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
+                for (int k = 0; k < NUM_SAMPLE_POINTS; k++) {
+                    int idx = i * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS + j * NUM_SAMPLE_POINTS + k;
+                    Vec3f cp = Vec3f((float)i, (float)j, (float)k);
+
+                    std::vector<float> samples(numEstSamples);
+                    int valid_samples = 0;
+                    for (int s = 0; s < numEstSamples; s++) {
+                        Vec2f s1 = gp->rand_normal_2(sampler);
+                        Vec2f s2 = gp->rand_normal_2(sampler);
+                        Vec3f offset = { s1.x(), s1.y(), s2.x() };
+                        Vec3f p = cp + offset * 2;
+
+                        if (p.x() < 0 || p.y() < 0 || p.z() < 0 ||
+                            p.x() > NUM_SAMPLE_POINTS-1 || p.y() > NUM_SAMPLE_POINTS - 1 || p.z() > NUM_SAMPLE_POINTS - 1) {
+                            samples[s] = 0;
+                        }
+                        else {
+                            float meanSample = meanGridSampler.isSample(openvdb::Vec3R(p.x(), p.y(), p.z()));
+                            Vec3f bp = lerp(min, max, p / (NUM_SAMPLE_POINTS - 1));
+                            float occupiedSample = meanSample < 0;
+                            float occupiedStored = gp->mean(&bp, &derivs[idx], nullptr, Vec3f(1.0f, 0.0f, 0.0f), 1)(0) - 4.0f / NUM_SAMPLE_POINTS < 0;
+                            samples[s] = occupiedSample - occupiedStored;
+                            valid_samples++;
+                        }
+                    }
+
+                    variance[idx] = 0;
+                    if (valid_samples > 1) {
+                        for (int s = 0; s < numEstSamples; s++) {
+                            variance[idx] += sqr(samples[s]);
+                        }
+                        variance[idx] /= (valid_samples - 1);
+                    }
                 }
             }
         }
     }
 
     {
-        Eigen::VectorXf mean = gp->mean(points.data(), derivs.data(), nullptr, Vec3f(1.0f, 0.0f, 0.0f), points.size());
-        std::ofstream xfile("./data/testing/load-gen/mean-eval.bin", std::ios::out | std::ios::binary);
+        std::ofstream xfile("./data/testing/load-gen/mean-eval-avg.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)mean.data(), sizeof(float) * mean.rows() * mean.cols());
         xfile.close();
     }
 
     {
+        std::ofstream xfile("./data/testing/load-gen/var-eval-avg.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)variance.data(), sizeof(float) * variance.rows() * variance.cols());
+        xfile.close();
+    }
+
+    {
+
+
+        auto varGrid = openvdb::createGrid<openvdb::FloatGrid>();
+        openvdb::FloatGrid::Accessor varAccessor = varGrid->getAccessor();
+        varGrid->setName("density");
+
+
+        int idx = 0;
+        for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
+            std::cout << i << "\r";
+            for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
+                for (int k = 0; k < NUM_SAMPLE_POINTS; k++) {
+                    varAccessor.setValue({ i,j,k }, variance(idx));
+                    idx++;
+                }
+            }
+        }
+
+        {
+            openvdb::GridPtrVec grids;
+            grids.push_back(meanGrid);
+            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/mean-eval-avg.vdb"));
+            file.write(grids);
+            file.close();
+        }
+
+        {
+            openvdb::GridPtrVec grids;
+            grids.push_back(varGrid);
+            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/var-eval-avg.vdb"));
+            file.write(grids);
+            file.close();
+        }
+    }
+
+    /*{
         Eigen::VectorXf gradx = gp->mean(points.data(), fderivs.data(), nullptr, Vec3f(1.0f, 0.0f, 0.0f), points.size());
         std::ofstream xfile("./data/testing/load-gen/mean-dx-eval.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)gradx.data(), sizeof(float) * gradx.rows() * gradx.cols());
@@ -84,13 +207,20 @@ int main(int argc, char** argv) {
         std::ofstream xfile("./data/testing/load-gen/mean-dz-eval.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)gradz.data(), sizeof(float) * gradz.rows() * gradz.cols());
         xfile.close();
-    }
-
-    UniformPathSampler sampler(0);
-    sampler.next1D();
-    sampler.next1D();
+    }*/
 
 
+    return 0;
 
-   
+}
+
+int test2d(int argc, char** argv) {
+    return 0;
+}
+
+int main(int argc, char** argv) {
+
+    return gen3d(argc, argv);
+    //return test2d(argc, argv);
+
 }

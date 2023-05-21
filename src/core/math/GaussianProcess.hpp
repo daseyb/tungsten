@@ -29,7 +29,7 @@ namespace Tungsten {
     using Vec3Diff = autodiff::Vector3real2nd;
 
     inline Vec3f from_diff(const Vec3Diff& vd) {
-        return Vec3f{ (float)vd.x(), (float)vd.y(), (float)vd.z() };
+        return Vec3f{ (float)vd.x().val(), (float)vd.y().val(), (float)vd.z().val() };
     }
 
     inline Vec3Diff to_diff(const Vec3f& vd) {
@@ -80,13 +80,45 @@ namespace Tungsten {
 
         Vec3f _aniso;
 
-    private:
+    protected:
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const = 0;
         virtual float cov(Vec3f a, Vec3f b) const = 0;
 
         virtual FloatD dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA) const;
         virtual FloatD dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirB) const;
         virtual FloatD dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA, Eigen::Array3d dirB) const;
+
+        friend class NonstationaryCovariance;
+    };
+
+    class NonstationaryCovariance : public CovarianceFunction {
+    public:
+
+        NonstationaryCovariance(
+            std::shared_ptr<CovarianceFunction> stationaryCov = nullptr,
+            std::shared_ptr<Grid> grid = nullptr,
+            float offset = 0, float scale = 1) : _stationaryCov(stationaryCov), _grid(grid), _offset(offset), _scale(scale)
+        {
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override;
+        virtual rapidjson::Value toJson(Allocator& allocator) const override;
+        virtual void loadResources() override;
+
+        virtual std::string id() const {
+            return tinyformat::format("ns-%s", _stationaryCov->id());
+        }
+
+    private:
+        FloatD sampleGrid(Vec3Diff a) const;
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override;
+        virtual float cov(Vec3f a, Vec3f b) const override;
+        autodiff::Matrix4real2nd _invGridTransformD;
+
+        std::shared_ptr<CovarianceFunction> _stationaryCov;
+        std::shared_ptr<Grid> _grid;
+        float _offset;
+        float _scale;
     };
 
     class SquaredExponentialCovariance : public CovarianceFunction {
@@ -378,7 +410,7 @@ namespace Tungsten {
     class TabulatedMean : public MeanFunction {
     public:
 
-        TabulatedMean(std::shared_ptr<Grid> grid = nullptr) : _grid(grid) {}
+        TabulatedMean(std::shared_ptr<Grid> grid = nullptr, float offset = 0, float scale = 1) : _grid(grid), _offset(offset), _scale(scale) {}
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override;
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
@@ -386,6 +418,8 @@ namespace Tungsten {
 
     private:
         std::shared_ptr<Grid> _grid;
+        float _offset;
+        float _scale;
 
         virtual float mean(Vec3f a) const override;
         virtual Vec3f dmean_da(Vec3f a) const override;
@@ -394,7 +428,7 @@ namespace Tungsten {
     class MeshSdfMean : public MeanFunction {
     public:
 
-        MeshSdfMean(PathPtr path = nullptr) : _path(path) {}
+        MeshSdfMean(PathPtr path = nullptr, bool isSigned = false) : _path(path), _signed(isSigned) {}
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override;
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
@@ -402,6 +436,7 @@ namespace Tungsten {
 
     private:
         PathPtr _path;
+        bool _signed;
         std::shared_ptr<fcpw::Scene<3>> _scene;
 
         Mat4f _configTransform;
@@ -409,6 +444,7 @@ namespace Tungsten {
 
         std::vector<Vertex> _verts;
         std::vector<TriangleI> _tris;
+
 
         virtual float mean(Vec3f a) const override;
         virtual Vec3f dmean_da(Vec3f a) const override;

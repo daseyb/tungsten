@@ -269,7 +269,7 @@ void VdbGrid::loadResources()
     _invConfigTransform = _configTransform.invert();
 
 
-    if (_requestSDF && _densityGrid) {
+    if (_densityName != "density" && _requestSDF && _densityGrid) {
         std::cout << "Converting density grid to SDF...\n";
         /*auto sdfGrid = openvdb::tools::fogToSdf(*_densityGrid, 0.0f);
         for (openvdb::FloatGrid::ValueOnIter iter = sdfGrid->beginValueOn(); iter.test(); ++iter) {

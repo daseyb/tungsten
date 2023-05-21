@@ -15,106 +15,6 @@
 
 namespace Tungsten {
 
-template<typename T>
-struct Span {
-    T* _data;
-    size_t _size;
-
-    Span(T* data, size_t size) : _data(data), _size(size) { }
-    template<typename Container>
-    Span(const Container& c) : _data(c.data()), _size(c.size()) { }
-
-    size_t size() const {
-        return _size;
-    }
-};
-
-
-template<typename T>
-struct SpanList {
-    Span<Span<T>> _spans;
-    size_t _size;
-
-    SpanList(std::initializer_list<Span<T>> spans) {
-        _spans = spans;
-        _size = 0;
-        for (const auto& s : _spans) {
-            _size += s.size();
-        }
-    }
-
-    struct Iterator
-    {
-        using iterator_category = std::forward_iterator_tag;
-        using difference_type = std::ptrdiff_t;
-        using value_type = T;
-        using pointer = T*;
-        using reference = T&;
-
-        Iterator(const SpanList<T>* list, size_t spanIdx, size_t elemIdx) : list(list), spanIdx(spanIdx), elemIdx(elemIdx) {}
-
-        reference operator*() const { return list->_spans[spandIdx][elemIdx]; }
-        pointer operator->() { return &list->_spans[spandIdx][elemIdx]; }
-        Iterator& operator++() {
-            elemIdx++;
-            if (elemIdx >= list[spanIdx].size()) {
-                elemIdx = 0;
-                spanIdx++;
-            }
-            return *this;
-        }
-        Iterator operator++(int) { Iterator tmp = *this; ++(*this); return tmp; }
-        friend bool operator== (const Iterator& a, const Iterator& b) { return a.spanIdx == b.spanIdx && a.elemIdx == b.elemIdx; };
-        friend bool operator!= (const Iterator& a, const Iterator& b) { return a.spanIdx != b.spanIdx || a.elemIdx != b.elemIdx; };
-
-    private:
-
-        size_t spanIdx;
-        size_t elemIdx;
-        const SpanList<T>* list;
-    };
-
-    struct ConstantIterator
-    {
-        using iterator_category = std::forward_iterator_tag;
-        using difference_type = std::ptrdiff_t;
-        using value_type = T;
-        using pointer = T*;
-        using reference = T&;
-
-        ConstantIterator(const SpanList<const T>* list, size_t spanIdx, size_t elemIdx) : list(list), spanIdx(spanIdx), elemIdx(elemIdx) {}
-
-        const reference operator*() const { return list->_spans[spandIdx][elemIdx]; }
-        const pointer operator->() { return &list->_spans[spandIdx][elemIdx]; }
-        ConstantIterator& operator++() {
-            elemIdx++;
-            if (elemIdx >= list[spanIdx].size()) {
-                elemIdx = 0;
-                spanIdx++;
-            }
-            return *this;
-        }
-        ConstantIterator operator++(int) { ConstantIterator tmp = *this; ++(*this); return tmp; }
-        friend bool operator== (const ConstantIterator& a, const ConstantIterator& b) { return a.spanIdx == b.spanIdx && a.elemIdx == b.elemIdx; };
-        friend bool operator!= (const ConstantIterator& a, const ConstantIterator& b) { return a.spanIdx != b.spanIdx || a.elemIdx != b.elemIdx; };
-
-    private:
-
-        size_t spanIdx;
-        size_t elemIdx;
-        const SpanList<const T>* list;
-    };
-
-    Iterator begin() { return Iterator(this, 0, 0); }
-    Iterator end() { return Iterator(this, _spans.size() - 1, _spans[_spans.size() - 1].size()); }
-    ConstantIterator cbegin() { return Iterator(this, 0, 0); }
-    ConstantIterator cend() { return Iterator(this, _spans.size() - 1, _spans[_spans.size() - 1].size()); }
-
-    size_t size() const {
-        return _size;
-    }
-};
-
 
 #ifdef SPARSE_COV
 //#define SPARSE_SOLVE
@@ -132,24 +32,65 @@ FloatD CovarianceFunction::dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirB) 
 }
 
 FloatD CovarianceFunction::dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA, Eigen::Array3d dirB) const {
-    auto covDiff = autodiff::derivatives([&](auto a, auto b) { return cov(a, b); }, autodiff::along(Eigen::Array3d(dirA*0.5f), Eigen::Array3d(dirB*0.5f)), at(a, b));
+    auto covDiff = autodiff::derivatives([&](auto a, auto b) { return cov(a, b); }, autodiff::along(Eigen::Array3d(-dirA*0.5f), Eigen::Array3d(dirB*0.5f)), at(a, b));
     return -covDiff[2];
 }
 
-/*virtual FloatD dcov_da(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
-    FloatD absq = dist2(a, b);
-    FloatD ab = sqrt(absq);
-    return ((exp(-(absq / (2 * sqr(_l)))) * ab * sqr(_sigma)) / sqr(_l));
+
+void NonstationaryCovariance::fromJson(JsonPtr value, const Scene& scene) {
+    CovarianceFunction::fromJson(value, scene);
+
+    if (auto cov = value["cov"]) {
+        _stationaryCov = scene.fetchCovarianceFunction(cov);
+    }
+
+    if (auto grid = value["grid"]) {
+        _grid = scene.fetchGrid(grid);
+        _grid->requestSDF();
+        _grid->requestGradient();
+    }
+
+    value.getField("offset", _offset);
+    value.getField("scale", _scale);
 }
 
-virtual FloatD dcov_db(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
-    return dcov_da(b, a);
+rapidjson::Value NonstationaryCovariance::toJson(Allocator& allocator) const {
+    return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+        "type", "nonstationary",
+        "cov", *_stationaryCov,
+        "grid", *_grid,
+        "offset", _offset,
+        "scale", _scale
+    };
 }
 
-virtual FloatD dcov2_dadb(Vec3Diff a, Vec3Diff b, Vec3Diff dir) const override {
-    FloatD absq = dist2(a, b);
-    return ((exp(-(absq / (2 * sqr(_l)))) * sqr(_sigma)) / sqr(_l) - (exp(-(absq / (2 * sqr(_l)))) * absq * sqr(_sigma)) / powf(_l, 4));
-}*/
+void NonstationaryCovariance::loadResources() {
+    _grid->loadResources();
+    _stationaryCov->loadResources();
+}
+
+FloatD NonstationaryCovariance::sampleGrid(Vec3Diff a) const {
+    FloatD result;
+    Vec3f ap = from_diff(a);
+    result[0] = _grid->density(ap);
+    result[1] = _grid->gradient(ap).dot({ a.x()[1], a.y()[1] , a.z()[1] });
+    result[2] = 0; // linear interp
+    return result;
+}
+
+FloatD NonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
+    FloatD sigmaA = (sampleGrid(_invGridTransformD * a) + _offset) * _scale;
+    FloatD sigmaB = (sampleGrid(_invGridTransformD * b) + _offset) * _scale;
+
+    return sigmaA * sigmaB * _stationaryCov->cov(a, b);
+}
+
+float NonstationaryCovariance::cov(Vec3f a, Vec3f b) const {
+    float sigmaA = (_grid->density(_grid->invNaturalTransform() * a) + _offset) * _scale;
+    float sigmaB = (_grid->density(_grid->invNaturalTransform() * b) + _offset) * _scale;
+
+    return sigmaA * sigmaB * _stationaryCov->cov(a, b);
+}
 
 void TabulatedMean::fromJson(JsonPtr value, const Scene& scene) {
     MeanFunction::fromJson(value, scene);
@@ -159,24 +100,29 @@ void TabulatedMean::fromJson(JsonPtr value, const Scene& scene) {
         _grid->requestSDF();
         _grid->requestGradient();
     }
+
+    value.getField("offset", _offset);
+    value.getField("scale", _scale);
 }
 
 rapidjson::Value TabulatedMean::toJson(Allocator& allocator) const {
     return JsonObject{ JsonSerializable::toJson(allocator), allocator,
         "type", "tabulated",
-        "grid", *_grid
+        "grid", *_grid,
+        "offset", _offset,
+        "scale", _scale
     };
 }
 
 
 float TabulatedMean::mean(Vec3f a) const {
     Vec3f p = _grid->invNaturalTransform() * a;
-    return _grid->density(p);
+    return (_grid->density(p) + _offset) * _scale;
 }
 
 Vec3f TabulatedMean::dmean_da(Vec3f a) const {
     Vec3f p = _grid->invNaturalTransform() * a;
-    return _grid->naturalTransform().transformVector(_grid->gradient(p));
+    return _scale* _grid->naturalTransform().transformVector(_grid->gradient(p));
 }
 
 void TabulatedMean::loadResources() {
@@ -188,6 +134,7 @@ void MeshSdfMean::fromJson(JsonPtr value, const Scene& scene) {
     MeanFunction::fromJson(value, scene);
     if (auto path = value["file"]) _path = scene.fetchResource(path);
     value.getField("transform", _configTransform);
+    value.getField("signed", _signed);
     _invConfigTransform = _configTransform.invert();
 
 }
@@ -196,7 +143,8 @@ rapidjson::Value MeshSdfMean::toJson(Allocator& allocator) const {
     return JsonObject{ JsonSerializable::toJson(allocator), allocator,
         "type", "mesh",
         "file", *_path,
-        "transform", _configTransform
+        "transform", _configTransform,
+        "signed", _signed,
     };
 }
 
@@ -205,7 +153,12 @@ float MeshSdfMean::mean(Vec3f a) const {
     // perform a closest point query
     fcpw::Interaction<3> interaction;
     if (_scene->findClosestPoint({ a.x(), a.y(), a.z() }, interaction)) {
-        return interaction.signedDistance({ a.x(), a.y(), a.z() });
+        if (_signed) {
+            return interaction.signedDistance({ a.x(), a.y(), a.z() });
+        }
+        else {
+            return interaction.d;
+        }
     }
     else {
         return 1000000.f;
@@ -303,9 +256,11 @@ std::tuple<Eigen::VectorXf, CovMatrix> GaussianProcess::mean_and_cov(
 
     for (size_t i = 0; i < numPts; i++) {
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
+        const Vec3f& ddir_a = ddirs ? ddirs[i] : deriv_dir;
 
         for (size_t j = 0; j < numPts; j++) {
-            float cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], -deriv_dir, deriv_dir);
+            const Vec3f& ddir_b = ddirs ? ddirs[j] : deriv_dir;
+            float cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], ddir_a, ddir_b);
 
 #ifdef SPARSE_COV
             if (std::abs(cov_ij) > _covEps) {
@@ -349,7 +304,7 @@ CovMatrix GaussianProcess::cov(
 
 
     for (size_t i = 0; i < numPtsA; i++) {
-        const Vec3f& ddir_a = ddirs_a ? ddirs_a[i] : -deriv_dir;
+        const Vec3f& ddir_a = ddirs_a ? ddirs_a[i] : deriv_dir;
         for (size_t j = 0; j < numPtsB; j++) {
             const Vec3f& ddir_b = ddirs_b ? ddirs_b[j] : deriv_dir;
 
