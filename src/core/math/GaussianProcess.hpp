@@ -27,6 +27,7 @@ namespace fcpw {
 
 namespace Tungsten {
     using Vec3Diff = autodiff::Vector3real2nd;
+    using Vec4Diff = autodiff::Vector4real2nd;
 
     inline Vec3f from_diff(const Vec3Diff& vd) {
         return Vec3f{ (float)vd.x().val(), (float)vd.y().val(), (float)vd.z().val() };
@@ -80,7 +81,7 @@ namespace Tungsten {
 
         Vec3f _aniso;
 
-    protected:
+    private:
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const = 0;
         virtual float cov(Vec3f a, Vec3f b) const = 0;
 
@@ -110,11 +111,11 @@ namespace Tungsten {
         }
 
     private:
-        FloatD sampleGrid(Vec3Diff a) const;
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override;
         virtual float cov(Vec3f a, Vec3f b) const override;
-        autodiff::Matrix4real2nd _invGridTransformD;
 
+        FloatD sampleGrid(Vec3Diff a) const;
+        autodiff::Matrix4real2nd _invGridTransformD;
         std::shared_ptr<CovarianceFunction> _stationaryCov;
         std::shared_ptr<Grid> _grid;
         float _offset;

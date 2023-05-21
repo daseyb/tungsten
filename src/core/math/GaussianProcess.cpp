@@ -67,20 +67,37 @@ rapidjson::Value NonstationaryCovariance::toJson(Allocator& allocator) const {
 void NonstationaryCovariance::loadResources() {
     _grid->loadResources();
     _stationaryCov->loadResources();
+
+    auto gridTr = _grid->invNaturalTransform();
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            _invGridTransformD(r, c) = gridTr(r, c);
+        }
+    }
 }
 
 FloatD NonstationaryCovariance::sampleGrid(Vec3Diff a) const {
     FloatD result;
     Vec3f ap = from_diff(a);
     result[0] = _grid->density(ap);
-    result[1] = _grid->gradient(ap).dot({ a.x()[1], a.y()[1] , a.z()[1] });
+    result[1] = _grid->gradient(ap).dot({ (float)a.x()[1], (float)a.y()[1] , (float)a.z()[1] });
     result[2] = 0; // linear interp
     return result;
 }
 
+static inline Vec3Diff mult(const Mat4f& a, const Vec3Diff& b)
+{
+    return Vec3Diff(
+        a(0, 0) * b.x() + a(0, 1) * b.y() + a(0, 2) * b.z() + a(0, 3),
+        a(1, 0) * b.x() + a(1, 1) * b.y() + a(1, 2) * b.z() + a(1, 3),
+        a(2, 0) * b.x() + a(2, 1) * b.y() + a(2, 2) * b.z() + a(2, 3)
+    );
+}
+
 FloatD NonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
-    FloatD sigmaA = (sampleGrid(_invGridTransformD * a) + _offset) * _scale;
-    FloatD sigmaB = (sampleGrid(_invGridTransformD * b) + _offset) * _scale;
+
+    FloatD sigmaA = (sampleGrid(mult(_grid->invNaturalTransform(), a)) + _offset) * _scale;
+    FloatD sigmaB = (sampleGrid(mult(_grid->invNaturalTransform(), b)) + _offset) * _scale;
 
     return sigmaA * sigmaB * _stationaryCov->cov(a, b);
 }
@@ -531,11 +548,13 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
 
     Eigen::MatrixXf normTransform;
 
+    Eigen::MatrixXf reg = Eigen::MatrixXf::Identity(cov.rows(), cov.cols()) * 0.00001f;
+
 #ifndef SPARSE_SOLVE
     // Use the Cholesky decomposition to transform the standard normal vector to the desired multivariate normal distribution
 
 #ifdef SPARSE_COV
-    Eigen::SimplicialLLT<CovMatrix> chol(cov);
+    Eigen::SimplicialLLT<CovMatrix> chol(cov + reg);
 #else
     Eigen::LLT<Eigen::MatrixXf> chol(cov);
 #endif
@@ -553,7 +572,7 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
     {
 
 #ifdef SPARSE_SOLVE
-        Spectra::SparseGenMatProd<float> op(cov);
+        Spectra::SparseGenMatProd<float> op(cov + reg);
         Spectra::SymEigsSolver<Spectra::SparseGenMatProd<float>> eigs(
             op, 
             min(size_t(cov.rows()-2), _maxEigenvaluesN), 
@@ -564,7 +583,7 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
         eigs.init();
         int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
 #else
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> eigs(cov);
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> eigs(cov + reg);
 #endif
         normTransform = eigs.eigenvectors() 
             * eigs.eigenvalues().cwiseMax(0).cwiseSqrt().asDiagonal();
