@@ -144,7 +144,7 @@ int main() {
             Eigen::MatrixXf samples = gp->sample(
                 points.data(), derivs.data(), points.size(), nullptr,
                 nullptr, 0,
-                Vec3f(0.0f, 0.0f, 0.0f), num_reals, sampler);
+                Vec3f(0.0f, 0.0f, 0.0f), num_reals, sampler).cast<float>();
 
             {
                 std::ofstream xfile(tinyformat::format("realizations/%s-%d-grid-samples-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);

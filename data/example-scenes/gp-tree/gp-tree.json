@@ -17,7 +17,7 @@
 				"mean": {
 					"type": "mesh",
 					"file": "tree.obj",
-					"signed": false,
+					"signed": true,
 					"transform": {
 						"position": [
 							0.0,

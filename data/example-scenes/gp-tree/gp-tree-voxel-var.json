@@ -18,18 +18,18 @@
 				"covariance_epsilon": 0.00000,
 				"mean": {
 					"type": "tabulated",
-					"offset": -0.02,
-					"scale": 10,
+					"scale": 3,
+					"offset": 0,
 					"grid": {
 						"type": "vdb",
-						"file": "tree-mean.vdb",
+						"file": "tree2-mean-eval-avg-64.vdb",
 						"density_name": "density",
 						"normalize_size": false,
 						"integration_method": "raymarching",
 						"transform": {
 							"position": [
 								2.0,
-								0.2,
+								0.0,
 								2.0
 							],
 							"scale": 1,
@@ -43,22 +43,22 @@
 				},
 				"covariance": {
 					"type": "nonstationary",
-					"scale": 10,
+					"scale": 1,
 					"cov": {
 						"type": "squared_exponential",
-						"lengthScale": 0.1,
+						"lengthScale": 0.5,
 						"sigma": 1
 					},
 					"grid": {
 						"type": "vdb",
-						"file": "tree-var.vdb",
+						"file": "tree2-var-eval-avg-64.vdb",
 						"density_name": "density",
 						"normalize_size": false,
 						"integration_method": "raymarching",
 						"transform": {
 							"position": [
 								2.0,
-								0.2,
+								0.0,
 								2.0
 							],
 							"scale": 1,
@@ -194,18 +194,18 @@
         "tonemap": "filmic",
         "resolution": [
             256,
-			400
+			256
         ],
         "reconstruction_filter": "tent",
         "transform": {
             "position": [
                 -1,
-                2.0,
+                1.07,
                 3
             ],
             "look_at": [
                 0,
-                1.5,
+                1.2,
                 0
             ],
             "up": [
@@ -234,7 +234,7 @@
         "enable_resume_render": false,
         "stratified_sampler": true,
         "scene_bvh": true,
-        "spp": 16,
+        "spp": 64,
         "spp_step": 1,
         "timeout": "0",
         "output_file": "gp-tree-voxel-var.png",

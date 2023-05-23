@@ -36,7 +36,7 @@ int main() {
         std::vector<float> normalSamples;
         // Box muller transform
         for (int i = 0; i < 10000; i++) {
-            Vec2f samples = gp.rand_normal_2(sampler);
+            Vec2d samples = gp.rand_normal_2(sampler);
             normalSamples.push_back(samples.x());
             normalSamples.push_back(samples.y());
         }
@@ -54,7 +54,7 @@ int main() {
     }
 
     {
-        Eigen::VectorXf mean = gp.mean(points.data(), derivs.data(), nullptr, ray.dir(), points.size());
+        Eigen::VectorXf mean = gp.mean(points.data(), derivs.data(), nullptr, ray.dir(), points.size()).cast<float>();
         std::ofstream xfile("mean.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)mean.data(), sizeof(float) * mean.rows() * mean.cols());
         xfile.close();
@@ -76,14 +76,14 @@ int main() {
     }
 
     {
-        Eigen::MatrixXf cov = gp.cov(points.data(), points.data(), derivs.data(), derivs.data(), nullptr, nullptr, ray.dir(), points.size(), points.size());
+        Eigen::MatrixXf cov = gp.cov(points.data(), points.data(), derivs.data(), derivs.data(), nullptr, nullptr, ray.dir(), points.size(), points.size()).cast<float>();
         std::ofstream xfile("cov.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)cov.data(), sizeof(float) * cov.rows() * cov.cols());
         xfile.close();
     }
 
     {
-        Eigen::MatrixXf samples = gp.sample(points.data(), derivs.data(), points.size(), nullptr, nullptr, 0, ray.dir(), 50, sampler);
+        Eigen::MatrixXf samples = gp.sample(points.data(), derivs.data(), points.size(), nullptr, nullptr, 0, ray.dir(), 50, sampler).cast<float>();
         std::ofstream xfile("samples.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)samples.data(), sizeof(float) * samples.rows() * samples.cols());
         xfile.close();
@@ -91,7 +91,7 @@ int main() {
 
     {
         std::array<GaussianProcess::Constraint, 1> constraints = { { 0, 0, 0, FLT_MAX } };
-        Eigen::MatrixXf samples = gp.sample(points.data(), derivs.data(), points.size(), nullptr, constraints.data(), constraints.size(), ray.dir(), 50, sampler);
+        Eigen::MatrixXf samples = gp.sample(points.data(), derivs.data(), points.size(), nullptr, constraints.data(), constraints.size(), ray.dir(), 50, sampler).cast<float>();
         std::ofstream xfile("samples-free-space.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)samples.data(), sizeof(float) * samples.rows() * samples.cols());
         xfile.close();
@@ -100,17 +100,17 @@ int main() {
     {
         std::array<GaussianProcess::Constraint, 1> constraints = { { 0, 0, 0, FLT_MAX } };
 
-        Eigen::MatrixXf samples = gp.sample(
+        Eigen::MatrixXd samples = gp.sample(
             points.data(), derivs.data(), points.size(), nullptr,
             constraints.data(), constraints.size(),
             ray.dir(), 50000, sampler);
 
         std::vector<float> sampleTs;
         for (int s = 0; s < samples.cols(); s++) {
-            float prevV = samples(0, s);
+            float prevV = (float)samples(0, s);
             float prevT = ts[0];
             for (int p = 1; p < NUM_SAMPLE_POINTS; p++) {
-                float currV = samples(p, s);
+                float currV = (float)samples(p, s);
                 float currT = ts[p];
                 if (currV < 0) {
                     float offsetT = prevV / (prevV - currV);
@@ -138,7 +138,7 @@ int main() {
             points.data(), derivs.data(), points.size(), nullptr,
             cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
             nullptr, 0,
-            ray.dir(), 50, sampler);
+            ray.dir(), 50, sampler).cast<float>();
 
         std::ofstream xfile("samples-cond.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)samples.data(), sizeof(float) * samples.rows() * samples.cols());
@@ -156,7 +156,7 @@ int main() {
             points.data(), derivs.data(), points.size(), nullptr,
             cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
             constraints.data(), constraints.size(),
-            ray.dir(), 50, sampler);
+            ray.dir(), 50, sampler).cast<float>();
 
         std::ofstream xfile("samples-cond-const.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)samples.data(), sizeof(float) * samples.rows() * samples.cols());
@@ -173,7 +173,7 @@ int main() {
             points.data(), derivs.data(), points.size(), nullptr,
             cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
             constraints.data(), constraints.size(),
-            ray.dir(), 50000, sampler);
+            ray.dir(), 50000, sampler).cast<float>();
 
         std::vector<float> sampleTs;
         for (int s = 0; s < samples.cols(); s++) {

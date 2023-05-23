@@ -80,7 +80,7 @@ void normals_and_stuff(const GaussianProcess& gp) {
         Eigen::MatrixXf samples = gp.sample(
             points.data(), derivs.data(), points.size(), nullptr,
             nullptr, 0,
-            Vec3f(1.0f, 0.0f, 0.0f), 100, sampler);
+            Vec3f(1.0f, 0.0f, 0.0f), 100, sampler).cast<float>();
 
         std::cout << samples.minCoeff() << "-" << samples.maxCoeff() << std::endl;
 
@@ -133,7 +133,7 @@ void side_view(const GaussianProcess& gp, std::string output) {
         Eigen::MatrixXf samples = gp.sample(
             points.data(), derivs.data(), points.size(), nullptr,
             nullptr, 0,
-            Vec3f(1.0f, 0.0f, 0.0f), 1, sampler);
+            Vec3f(1.0f, 0.0f, 0.0f), 1, sampler).cast<float>();
 
         std::cout << samples.minCoeff() << "-" << samples.maxCoeff() << std::endl;
 
@@ -164,111 +164,8 @@ void side_view(const GaussianProcess& gp, std::string output) {
 }
 
 
-constexpr size_t NUM_RAY_SAMPLE_POINTS = 512;
+constexpr size_t NUM_RAY_SAMPLE_POINTS = 128;
 
-std::vector<std::tuple<float, Vec3f>> trace_ray(const Ray& ray, const GaussianProcess* _gp, int num, PathSampleGenerator& sampler) {
-    std::vector<Vec3f> points(NUM_RAY_SAMPLE_POINTS + 1);
-    std::vector<Derivative> derivs(NUM_RAY_SAMPLE_POINTS + 1);
-    std::vector<float> ts(NUM_RAY_SAMPLE_POINTS);
-
-    for (int i = 0; i < NUM_RAY_SAMPLE_POINTS; i++) {
-        float t = lerp(ray.nearT(), ray.farT(), clamp((i - sampler.next1D()) / NUM_RAY_SAMPLE_POINTS, 0.f, 1.f));
-        ts[i] = t;
-        points[i] = ray.pos() + t * ray.dir();
-        derivs[i] = Derivative::None;
-    }
-
-    Eigen::MatrixXf gpSamples;
-
-    int startSign = 1;
-
-    std::array<Vec3f, 1> cond_pts = { points[0] };
-    std::array<Derivative, 1> cond_deriv = { Derivative::None };
-    std::array<float, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
-    std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
-    gpSamples = _gp->sample_cond(
-        points.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS, nullptr,
-        cond_pts.data(), cond_vs.data(), cond_deriv.data(), 0, nullptr,
-        constraints.data(), constraints.size(),
-        ray.dir(), num, sampler);
-
-    std::vector<std::tuple<float, Vec3f>> result;
-
-    for (int s = 0; s < gpSamples.cols(); s++) {
-
-        if ((s + 1) % 100 == 0) {
-            std::cout << s << "/" << gpSamples.cols();
-            std::cout << "\r";
-        }
-
-        float prevV = gpSamples(0, s);
-        float prevT = ts[0];
-
-        if (prevV <= 0) {
-            std::cout << "started inside...\n";
-            break;
-        }
-
-        for (int p = 1; p < NUM_RAY_SAMPLE_POINTS; p++) {
-            float currV = gpSamples(p, s);
-            float currT = ts[p];
-            if (currV < 0) {
-
-                float offsetT = prevV / (prevV - currV);
-                float t = lerp(prevT, currT, offsetT);
-
-                Vec3f ip = ray.pos() + ray.dir() * t;
-
-                std::array<Vec3f, 1> gradPs{ ip };
-                std::array<Derivative, 1> gradDerivs{ Derivative::First };
-
-                points[NUM_RAY_SAMPLE_POINTS] = ip;
-                derivs[NUM_RAY_SAMPLE_POINTS] = Derivative::None;
-
-                Eigen::VectorXf sampleValues(NUM_RAY_SAMPLE_POINTS + 1);
-                sampleValues.block(0, 0, NUM_RAY_SAMPLE_POINTS, 1) = gpSamples.col(s);
-                sampleValues(NUM_RAY_SAMPLE_POINTS) = 0;
-
-                Vec3f grad;
-
-                grad.x() = _gp->sample_cond(
-                    gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-                    points.data(), sampleValues.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS+1, nullptr,
-                    nullptr, 0,
-                    Vec3f(1.f, 0.f, 0.f), 1, sampler)(0, 0);
-
-                grad.y() = _gp->sample_cond(
-                    gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-                    points.data(), sampleValues.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS+1, nullptr,
-                    nullptr, 0,
-                    Vec3f(0.f, 1.f, 0.f), 1, sampler)(0, 0);
-
-                grad.z() = _gp->sample_cond(
-                    gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-                    points.data(), sampleValues.data(), derivs.data(), NUM_RAY_SAMPLE_POINTS+1, nullptr,
-                    nullptr, 0,
-                    Vec3f(0.f, 0.f, 1.f), 1, sampler)(0, 0);
-
-                if (grad.z() < 0) {
-                    //std::cout << "Normal pointing down!\n";
-                }
-
-                if (!std::isfinite(grad.avg())) {
-                    std::cout << "Gradient invalid.\n";
-                }
-                else {
-                    result.emplace_back(t, grad);
-                }
-
-                break;
-            }
-            prevV = currV;
-            prevT = currT;
-        }
-    }
-
-    return result;
-}
 
 void sample_beckmann(float alpha) {
 
@@ -308,40 +205,71 @@ void v_ndf(std::shared_ptr<GaussianProcess> gp, float angle, int samples, std::s
 
     Eigen::MatrixXf normals(samples, 3);
 
+    int failed = 0;
 
-    for (int s = 0; s < samples; s++) {
+    std::vector<Eigen::MatrixXf> failedRealizations;
+    std::vector<Eigen::MatrixXf> successfulRealizations;
+    std::vector<Vec3f> failedNormals;
+
+    for (int s = 0; s < samples;) {
 
         if ((s + 1) % 100 == 0) {
-            std::cout << s << "/" << samples;
+            std::cout << s << "/" << samples << " - Failed: " << failed;
             std::cout << "\r";
         }
 
         Medium::MediumState state;
         state.reset();
         MediumSample sample;
-        gp_med->sampleDistance(sampler, ray, state, sample);
+        if (!gp_med->sampleDistance(sampler, ray, state, sample)) {
+            //Eigen::MatrixXd usedSamples = *sample.usedSamples;
+            //usedSamples.block((size_t)sample.usedSampleIdx, (size_t)0, usedSamples.rows() - sample.usedSampleIdx, 1).setZero();
+            failedNormals.push_back(sample.aniso.normalized());
+            //failedRealizations.push_back(usedSamples.cast<float>());
+            failed++;
+            continue;
+        }
+        else {
+            //Eigen::MatrixXd usedSamples = *sample.usedSamples;
+            //usedSamples.block((size_t)sample.usedSampleIdx, (size_t)0, usedSamples.rows() - sample.usedSampleIdx, 1).setZero();
+            //successfulRealizations.push_back(usedSamples.cast<float>());
+        }
+
         sample.aniso.normalize();
         normals(s, 0) = sample.aniso.x();
         normals(s, 1) = sample.aniso.y();
         normals(s, 2) = sample.aniso.z();
-    }
 
-#if 0
-    auto trace_results = trace_ray(ray, &gp, samples, sampler);
-
-    for (int i = 0; i < trace_results.size(); i++) {
-        auto [t, n] = trace_results[i];
-        n.normalize();
-        normals(i,0) = n[0];
-        normals(i,1) = n[1];
-        normals(i,2) = n[2];
+        s++;
     }
-#endif
 
     {
         std::ofstream xfile(incrementalFilename(Path(output) / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
-        //std::ofstream xfile((Path(output) / Path(gp._cov->id()) + Path(tinyformat::format("-%.1fdeg.bin",  180 * angle / PI))).asString(), std::ios::out | std::ios::binary);
         xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(incrementalFilename(Path(output) / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d-failed-realizations.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
+        for (const auto& real : failedRealizations) {
+
+            xfile.write((char*)real.data(), sizeof(float) * real.rows() * real.cols());
+        }
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(incrementalFilename(Path(output) / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d-successful-realizations.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
+        for (const auto& real : successfulRealizations) {
+
+            xfile.write((char*)real.data(), sizeof(float) * real.rows() * real.cols());
+        }
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(incrementalFilename(Path(output) / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d-failed-normals.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
+        xfile.write((char*)failedNormals.data(), sizeof(Vec3f) * failedNormals.size());
         xfile.close();
     }
 
@@ -399,7 +327,7 @@ int main(int argc, char** argv) {
                 continue;
             }*/
 
-            v_ndf(gp, angle, 1000, "microfacet/visible-normals/");
+            v_ndf(gp, angle, 10000, "microfacet/visible-normals/");
             //side_view(gp, "microfacet/side-view/");
         }
         catch (std::exception& e) {
@@ -407,3 +335,5 @@ int main(int argc, char** argv) {
         }
     }
 }
+
+

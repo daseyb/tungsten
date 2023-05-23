@@ -105,14 +105,16 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
             std::vector<Derivative> derivs(_samplePoints+1);
             std::vector<float> ts(_samplePoints);
 
+            float tOffset = sampler.next1D();
+
             for (int i = 0; i < _samplePoints; i++) {
-                float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i - sampler.next1D()) / _samplePoints, 0.f, 1.f));
+                float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i - tOffset) / _samplePoints, 0.f, 1.f));
                 ts[i] = t;
                 points[i] = ray.pos() + t * ray.dir();
                 derivs[i] = Derivative::None;
             }
 
-            Eigen::MatrixXf gpSamples;
+            Eigen::MatrixXd gpSamples;
 
             int startSign = 1;
 
@@ -155,8 +157,8 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
 
                     Vec3f ip = ray.pos() + ray.dir() * t;
 
-#if 1
-                    float eps = 0.0001f;
+#if 0
+                    float eps = 0.001f;
                     std::array<Vec3f, 6> gradPs{
                         ip + Vec3f(eps, 0.f, 0.f),
                         ip + Vec3f(0.f, eps, 0.f),
@@ -171,32 +173,37 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                         Derivative::None, Derivative::None, Derivative::None
                     };
 
-                    points[_samplePoints] = ip;
+                    //points[p] = ip;
+                    //gpSamples(p, 0) = 0;
 
-                    Eigen::VectorXf sampleValues(_samplePoints+1);
-                    sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0);
-                    sampleValues(_samplePoints) = 0;
+                    //Eigen::VectorXf sampleValues(_samplePoints+1);
+                    //sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0);
+                    //sampleValues(_samplePoints) = 0;
 
-                    Eigen::MatrixXf gradSamples = _gp->sample_cond(
+                    Eigen::MatrixXf fgpSamples = gpSamples.cast<float>();
+
+                    Eigen::MatrixXd gradSamples = _gp->sample_cond(
                         gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-                        points.data(), sampleValues.data(), derivs.data(), points.size(), nullptr,
+                        points.data(), fgpSamples.data(), derivs.data(), p, nullptr,
                         nullptr, 0,
                         ray.dir(), 1, sampler);
 
-                    Vec3f grad = Vec3f{
+                    Vec3d gradd = Vec3d{
                         gradSamples(0,0) - gradSamples(3,0),
                         gradSamples(1,0) - gradSamples(4,0),
                         gradSamples(2,0) - gradSamples(5,0),
                     } / (2 * eps);
 
-#elif 0
+                    Vec3f grad = Vec3f((float)gradd.x(), (float)gradd.y(), (float)gradd.z());
+
+#elif 1
                     std::array<Vec3f, 1> gradPs{ ip };
                     std::array<Derivative, 1> gradDerivs{ Derivative::First };
 
                     points[_samplePoints] = ip;
                     derivs[_samplePoints] = Derivative::None;
 
-                    Eigen::VectorXf sampleValues(_samplePoints + 1);
+                    Eigen::VectorXd sampleValues(_samplePoints + 1);
                     sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0);
                     sampleValues(_samplePoints) = 0;
 
@@ -232,7 +239,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                     derivs[_samplePoints] = Derivative::None;
 
                     Eigen::VectorXf sampleValues(_samplePoints + 1);
-                    sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0);
+                    sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0).cast<float>();
                     sampleValues(_samplePoints) = 0;
 
                     auto gradSamples = _gp->sample_cond(
@@ -242,19 +249,25 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                         ray.dir(), 1, sampler);
 
                     Vec3f grad = {
-                        gradSamples(0,0), gradSamples(1,0), gradSamples(2,0)
+                        (float)gradSamples(0,0), (float)gradSamples(1,0), (float)gradSamples(2,0)
                     };
 #endif
+
+                    if (grad.dot(ray.dir()) > 0) {
+                        return false;
+                    }
 
                     sample.aniso = grad * startSign;
                     if (!std::isfinite(sample.aniso.avg())) {
                         sample.aniso = Vec3f(1.f, 0.f, 0.f);
                         std::cout << "Gradient invalid.\n";
+                        return false;
                     }
 
                     if (sample.aniso.lengthSq() < 0.0000001f) {
                         sample.aniso = Vec3f(1.f, 0.f, 0.f);
                         std::cout << "Gradient zero.\n";
+                        return false;
                     }
                     break;
                 }
@@ -295,7 +308,7 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
         derivs[i] = Derivative::None;
     }
 
-    Eigen::MatrixXf gpSamples;
+    Eigen::MatrixXd gpSamples;
     int startSign = 1;
 
     if (startOnSurface) {

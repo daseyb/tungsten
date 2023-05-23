@@ -93,12 +93,16 @@ add_subdirectory(src/thirdparty/autodiff)
 
 add_subdirectory(src/thirdparty/spectra)
 
+
+add_subdirectory(src/thirdparty/libigl)
+
+
 if (CMAKE_COMPILER_IS_GNUCXX)
     set(CXX_WARNINGS "-Wall -Wextra -Wpointer-arith -Wcast-align -fstrict-aliasing -Wno-unused-local-typedefs -Wno-misleading-indentation -Wno-maybe-uninitialized -Wno-int-in-bool-context -Wno-implicit-fallthrough -Wno-class-memaccess")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARNINGS} -fvisibility-inlines-hidden")
 endif()
 
-set(core_libs core thirdparty embree Eigen3::Eigen fcpw autodiff::autodiff Spectra)
+set(core_libs core thirdparty embree Eigen3::Eigen fcpw autodiff::autodiff Spectra igl::core)
 
 include_directories(
 	src/core src/thirdparty 
@@ -106,6 +110,7 @@ include_directories(
 	src/thirdparty/eigen/ src/thirdparty/fcpw/include 
 	src/thirdparty/autodiff
 	src/thirdparty/spectra/include
+	src/thirdparty/libigl/include
 	${FCPW_EIGEN_INCLUDES} ${FCPW_ENOKI_INCLUDES})
 
 find_package(Imath CONFIG REQUIRED)

@@ -2,6 +2,7 @@
 #define MEDIUMSAMPLE_HPP_
 
 #include "math/Vec.hpp"
+#include <Eigen/Dense>
 
 namespace Tungsten {
 
@@ -19,6 +20,9 @@ struct MediumSample
     float pdf;
     bool exited;
     Vec3f aniso;
+
+    Eigen::MatrixXd* usedSamples;
+    int usedSampleIdx;
 };
 
 }

@@ -10,3 +10,6 @@
 [submodule "src/thirdparty/spectra"]
 	path = src/thirdparty/spectra
 	url = https://github.com/yixuan/spectra
+[submodule "src/thirdparty/libigl"]
+	path = src/thirdparty/libigl
+	url = https://github.com/libigl/libigl.git

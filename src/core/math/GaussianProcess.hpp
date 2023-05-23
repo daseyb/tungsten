@@ -18,6 +18,7 @@
 
 #include <autodiff/forward/real/real.hpp>
 #include <autodiff/forward/real/eigen.hpp>
+#include <igl/signed_distance.h>
 
 using FloatD = autodiff::real2nd;
 
@@ -265,7 +266,7 @@ namespace Tungsten {
 
         virtual rapidjson::Value toJson(Allocator& allocator) const override {
             return JsonObject{ JsonSerializable::toJson(allocator), allocator,
-                "type", "thin-plate",
+                "type", "thin_plate",
                 "sigma", _sigma,
                 "R", _R,
                 "aniso", _aniso
@@ -438,14 +439,18 @@ namespace Tungsten {
     private:
         PathPtr _path;
         bool _signed;
-        std::shared_ptr<fcpw::Scene<3>> _scene;
+
+        Eigen::MatrixXd V;
+        Eigen::MatrixXi T, F;
+        Eigen::MatrixXd FN, VN, EN;
+        Eigen::MatrixXi E;
+        Eigen::VectorXi EMAP;
+
+        igl::FastWindingNumberBVH fwn_bvh;
+        igl::AABB<Eigen::MatrixXd, 3> tree;
 
         Mat4f _configTransform;
         Mat4f _invConfigTransform;
-
-        std::vector<Vertex> _verts;
-        std::vector<TriangleI> _tris;
-
 
         virtual float mean(Vec3f a) const override;
         virtual Vec3f dmean_da(Vec3f a) const override;
@@ -454,9 +459,9 @@ namespace Tungsten {
 #define SPARSE_COV
 
 #ifdef SPARSE_COV
-    using CovMatrix = Eigen::SparseMatrix<float>;
+    using CovMatrix = Eigen::SparseMatrix<double>;
 #else
-    using CovMatrix = Eigen::MatrixXf;
+    using CovMatrix = Eigen::MatrixXd;
 #endif
 
     class GaussianProcess : public JsonSerializable {
@@ -474,10 +479,10 @@ namespace Tungsten {
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
         virtual void loadResources() override;
 
-        std::tuple<Eigen::VectorXf, CovMatrix> mean_and_cov(
+        std::tuple<Eigen::VectorXd, CovMatrix> mean_and_cov(
             const Vec3f* points, const Derivative* derivative_types, const Vec3f* ddirs,
             Vec3f deriv_dir, size_t numPts) const;
-        Eigen::VectorXf mean(
+        Eigen::VectorXd mean(
             const Vec3f* points, const Derivative* derivative_types, const Vec3f* ddirs,
             Vec3f deriv_dir, size_t numPts) const;
 
@@ -489,16 +494,16 @@ namespace Tungsten {
 
         float sample_start_value(Vec3f p, PathSampleGenerator& sampler) const;
 
-        Eigen::MatrixXf sample(
+        Eigen::MatrixXd sample(
             const Vec3f* points, const Derivative* derivative_types, size_t numPts,
             const Vec3f* ddirs,
             const Constraint* constraints, size_t numConstraints,
             Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const;
 
-        Eigen::MatrixXf sample_cond(
+        Eigen::MatrixXd sample_cond(
             const Vec3f* points, const Derivative* derivative_types, size_t numPts,
             const Vec3f* ddirs,
-            const Vec3f* cond_points, const float* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+            const Vec3f* cond_points, const double* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
             const Vec3f* cond_ddirs,
             const Constraint* constraints, size_t numConstraints,
             Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const;
@@ -507,7 +512,7 @@ namespace Tungsten {
         void setConditioning(std::vector<Vec3f> globalCondPs, 
             std::vector<Derivative> globalCondDerivs, 
             std::vector<Vec3f> globalCondDerivDirs,
-            std::vector<float> globalCondValues) {
+            std::vector<double> globalCondValues) {
             _globalCondPs = globalCondPs;
             _globalCondDerivs = globalCondDerivs;
             _globalCondDerivDirs = globalCondDerivDirs;
@@ -522,18 +527,20 @@ namespace Tungsten {
         double random_standard_normal(PathSampleGenerator& sampler) const;
 
         // Box muller transform
-        Vec2f rand_normal_2(PathSampleGenerator& sampler) const;
+        Vec2d rand_normal_2(PathSampleGenerator& sampler) const;
         float rand_truncated_normal(float mean, float sigma, float a, PathSampleGenerator& sampler) const;
 
-        Eigen::MatrixXf sample_multivariate_normal(
-            const Eigen::VectorXf& mean, const CovMatrix& cov,
+        Eigen::MatrixXd sample_multivariate_normal(
+            const Eigen::VectorXd& mean, const CovMatrix& cov,
             const Constraint* constraints, int numConstraints,
             int samples, PathSampleGenerator& sampler) const;
 
         std::vector<Vec3f> _globalCondPs;
         std::vector<Derivative> _globalCondDerivs;
         std::vector<Vec3f> _globalCondDerivDirs;
-        std::vector<float> _globalCondValues;
+        std::vector<double> _globalCondValues;
+
+        PathPtr _conditioningDataPath;
 
         std::shared_ptr<MeanFunction> _mean;
         std::shared_ptr<CovarianceFunction> _cov;

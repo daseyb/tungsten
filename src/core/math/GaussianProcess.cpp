@@ -12,6 +12,10 @@
 #include <Spectra/SymEigsSolver.h>
 
 #include <Spectra/MatOp/SparseGenMatProd.h>
+#include <igl/per_edge_normals.h>
+#include <igl/per_face_normals.h>
+#include <igl/per_vertex_normals.h>
+
 
 namespace Tungsten {
 
@@ -168,18 +172,15 @@ rapidjson::Value MeshSdfMean::toJson(Allocator& allocator) const {
 
 float MeshSdfMean::mean(Vec3f a) const {
     // perform a closest point query
-    fcpw::Interaction<3> interaction;
-    if (_scene->findClosestPoint({ a.x(), a.y(), a.z() }, interaction)) {
-        if (_signed) {
-            return interaction.signedDistance({ a.x(), a.y(), a.z() });
-        }
-        else {
-            return interaction.d;
-        }
-    }
-    else {
-        return 1000000.f;
-    }
+    Eigen::MatrixXd V_vis(1, 3);
+    V_vis(0, 0) = a.x();
+    V_vis(1, 0) = a.y();
+    V_vis(2, 0) = a.z();
+
+    Eigen::VectorXd S_vis;
+    igl::signed_distance_fast_winding_number(V_vis, V, F, tree, fwn_bvh, S_vis);
+
+    return (float)S_vis(0);
 }
 
 Vec3f MeshSdfMean::dmean_da(Vec3f a) const {
@@ -195,7 +196,12 @@ Vec3f MeshSdfMean::dmean_da(Vec3f a) const {
 }
 
 void MeshSdfMean::loadResources() {
+
+    std::vector<Vertex> _verts;
+    std::vector<TriangleI> _tris;
+
     if (_path && MeshIO::load(*_path, _verts, _tris)) {
+#if 0
         _scene = std::make_shared<fcpw::Scene<3>>();
 
         // set the types of primitives the objects in the scene contain;
@@ -206,10 +212,15 @@ void MeshSdfMean::loadResources() {
         _scene->setObjectVertexCount(_verts.size(), 0);
         _scene->setObjectTriangleCount(_tris.size() , 0);
 
+        _scene->getSceneData()->soups[0].vNormals.resize(_verts.size());
+
         // specify the vertex positions
         for (int i = 0; i < _verts.size(); i++) {
             Vec3f tpos = _configTransform * _verts[i].pos();
             _scene->setObjectVertex({ tpos.x(), tpos.y(), tpos.z() }, i, 0);
+            
+            Vec3f tnorm = _configTransform.transformVector(_verts[i].normal());
+            _scene->getSceneData()->soups[0].vNormals[i] = { tnorm.x(), tnorm.y(), tnorm.z() };
         }
 
         // specify the triangle indices
@@ -223,10 +234,39 @@ void MeshSdfMean::loadResources() {
             _scene->setObjectTriangle(tri, i, 0);
         }
 
-        _scene->computeObjectNormals(0);
+        //_scene->computeObjectNormals(0);
 
-        // now that the geometry has been specified, build the acceleration structure
+// now that the geometry has been specified, build the acceleration structure
         _scene->build(fcpw::AggregateType::Bvh_SurfaceArea, true); // the second boolean argument enables vectorization
+#endif
+        V.resize(_verts.size(), 3);
+
+        for (int i = 0; i < _verts.size(); i++) {
+            Vec3f tpos = _configTransform * _verts[i].pos();
+            V(i, 0) = tpos.x();
+            V(i, 1) = tpos.y();
+            V(i, 2) = tpos.z();
+
+            Vec3f tnorm = _configTransform.transformVector(_verts[i].normal());
+        }
+
+        F.resize(_tris.size(), 3);
+
+        // specify the triangle indices
+        for (int i = 0; i < _tris.size(); i++) {
+            F(i, 0) = _tris[i].v0;
+            F(i, 1) = _tris[i].v1;
+            F(i, 2) = _tris[i].v2;
+        }
+        
+        tree.init(V, F);
+        igl::per_face_normals(V, F, FN);
+        igl::per_vertex_normals(
+            V, F, igl::PER_VERTEX_NORMALS_WEIGHTING_TYPE_ANGLE, FN, VN);
+        igl::per_edge_normals(
+            V, F, igl::PER_EDGE_NORMALS_WEIGHTING_TYPE_UNIFORM, FN, EN, E, EMAP);
+
+        igl::fast_winding_number(V, F, 2, fwn_bvh);
     }
 }
 
@@ -242,11 +282,16 @@ void GaussianProcess::fromJson(JsonPtr value, const Scene& scene) {
 
     value.getField("max_num_eigenvalues", _maxEigenvaluesN);
     value.getField("covariance_epsilon", _covEps);
+
+    if (auto conditioningDataPath = value["conditioning_data"])
+        _conditioningDataPath = scene.fetchResource(conditioningDataPath);
+
 }
 
 rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
     return JsonObject{ JsonSerializable::toJson(allocator), allocator,
         "type", "standard",
+        "conditioning_data",* _conditioningDataPath,
         "mean", *_mean,
         "covariance", *_cov,
         "max_num_eigenvalues", _maxEigenvaluesN,
@@ -257,13 +302,30 @@ rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
 void GaussianProcess::loadResources() {
     _mean->loadResources();
     _cov->loadResources();
+
+    std::vector<Vertex> verts;
+    std::vector<TriangleI> tris;
+    if (_conditioningDataPath && MeshIO::load(*_conditioningDataPath, verts, tris)) {
+        for (const auto& v : verts) {
+            _globalCondPs.push_back(v.pos());
+            _globalCondDerivs.push_back(Derivative::None);
+            _globalCondDerivDirs.push_back(v.normal());
+            _globalCondValues.push_back(0);
+
+            _globalCondPs.push_back(v.pos());
+            _globalCondDerivs.push_back(Derivative::First);
+            _globalCondDerivDirs.push_back(v.normal());
+            _globalCondValues.push_back(1);
+        }
+    }
+
 }
 
-std::tuple<Eigen::VectorXf, CovMatrix> GaussianProcess::mean_and_cov(
+std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
     const Vec3f* points, const Derivative* derivative_types, const Vec3f* ddirs,
     Vec3f deriv_dir, size_t numPts) const {
 
-    Eigen::VectorXf ps_mean(numPts);
+    Eigen::VectorXd ps_mean(numPts);
     CovMatrix ps_cov(numPts, numPts);
 
 #ifdef SPARSE_COV
@@ -291,15 +353,16 @@ std::tuple<Eigen::VectorXf, CovMatrix> GaussianProcess::mean_and_cov(
 
 #ifdef SPARSE_COV
     ps_cov.setFromTriplets(tripletList.begin(), tripletList.end());
+    ps_cov.makeCompressed();
 #endif
 
     return { ps_mean, ps_cov };
 }
 
-Eigen::VectorXf GaussianProcess::mean(
+Eigen::VectorXd GaussianProcess::mean(
     const Vec3f* points, const Derivative* derivative_types, const Vec3f* ddirs,
     Vec3f deriv_dir, size_t numPts) const {
-    Eigen::VectorXf ps_mean(numPts);
+    Eigen::VectorXd ps_mean(numPts);
     for (size_t i = 0; i < numPts; i++) {
         const Vec3f& ddir= ddirs ? ddirs[i] : deriv_dir;
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
@@ -339,6 +402,7 @@ CovMatrix GaussianProcess::cov(
 
 #ifdef SPARSE_COV
     ps_cov.setFromTriplets(tripletList.begin(), tripletList.end());
+    ps_cov.makeCompressed();
 #endif
 
     return ps_cov;
@@ -352,7 +416,7 @@ float GaussianProcess::sample_start_value(Vec3f p, PathSampleGenerator& sampler)
 }
 
 
-Eigen::MatrixXf GaussianProcess::sample(
+Eigen::MatrixXd GaussianProcess::sample(
     const Vec3f* points, const Derivative* derivative_types, size_t numPts,
     const Vec3f* deriv_dirs,
     const Constraint* constraints, size_t numConstraints,
@@ -360,8 +424,7 @@ Eigen::MatrixXf GaussianProcess::sample(
 
     if (_globalCondPs.size() == 0) {
         auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dirs, deriv_dir, numPts);
-        Eigen::MatrixXf s = sample_multivariate_normal(ps_mean, ps_cov, constraints, numConstraints, samples, sampler);
-        return s;
+        return sample_multivariate_normal(ps_mean, ps_cov, constraints, numConstraints, samples, sampler);
     }
     else {
 
@@ -374,18 +437,22 @@ Eigen::MatrixXf GaussianProcess::sample(
     }
 }
 
-Eigen::MatrixXf GaussianProcess::sample_cond(
+Eigen::MatrixXd GaussianProcess::sample_cond(
     const Vec3f* points, const Derivative* derivative_types, size_t numPts,
     const Vec3f* deriv_dirs,
-    const Vec3f* cond_points, const float* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+    const Vec3f* cond_points, const double* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
     const Vec3f* cond_deriv_dirs,
     const Constraint* constraints, size_t numConstraints,
     Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
+    if (numCondPts == 0) {
+        return sample(points, derivative_types, numPts, deriv_dirs, constraints, numConstraints, deriv_dir, samples, sampler);
+    }
+
     std::vector<Vec3f> cond_ps;
     std::vector<Derivative> cond_derivs;
     std::vector<Vec3f> cond_dds;
-    std::vector<float> cond_vs;
+    std::vector<double> cond_vs;
 
     if (_globalCondPs.size() > 0) {
         cond_ps.resize(_globalCondPs.size() + numCondPts);
@@ -431,14 +498,19 @@ Eigen::MatrixXf GaussianProcess::sample_cond(
         deriv_dir, numCondPts, numPts);
 
 #ifdef SPARSE_COV
-    Eigen::SparseQR<Eigen::SparseMatrix<float>, Eigen::AMDOrdering<int>> solver(s11);
+    Eigen::SparseQR<CovMatrix, Eigen::AMDOrdering<int>> solver(s11);
+    if (solver.info() != Eigen::ComputationInfo::Success) {
+        std::cerr << "Conditioning failed!\n";
+    }
 #else
-    Eigen::LDLT<CovMatrix> solver(s11);
+    Eigen::HouseholderQR<CovMatrix> solver(s11);
 #endif
+
     CovMatrix solved = solver.solve(s12).transpose();
 
-    Eigen::Map<const Eigen::VectorXf> cond_values_view(cond_values, numCondPts);
-    Eigen::VectorXf m2 = mean(points, derivative_types, deriv_dirs, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, cond_deriv_dirs, deriv_dir, numCondPts)));
+
+    Eigen::Map<const Eigen::VectorXd> cond_values_view(cond_values, numCondPts);
+    Eigen::VectorXd m2 = mean(points, derivative_types, deriv_dirs, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, cond_deriv_dirs, deriv_dir, numCondPts)));
 
     CovMatrix s22 = cov(
         points, points, 
@@ -496,17 +568,17 @@ double GaussianProcess::random_standard_normal(PathSampleGenerator& sampler) con
 }
 
 // Box muller transform
-Vec2f GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
-    float u1 = sampler.next1D();
-    float u2 = sampler.next1D();
+Vec2d GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
+    double u1 = sampler.next1D();
+    double u2 = sampler.next1D();
 
-    float r = sqrtf(-2 * log(1. - u1));
-    float x = cos(2 * PI * u2);
-    float y = sin(2 * PI * u2);
-    float z1 = r * x;
-    float z2 = r * y;
+    double r = sqrt(-2 * log(1. - u1));
+    double x = cos(2 * PI * u2);
+    double y = sin(2 * PI * u2);
+    double z1 = r * x;
+    double z2 = r * y;
 
-    return Vec2f(z1, z2);
+    return Vec2d(z1, z2);
 
 }
 
@@ -541,22 +613,20 @@ float GaussianProcess::rand_truncated_normal(float mean, float sigma, float a, P
     return sigma * x_bar + mean;
 }
 
-Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
-    const Eigen::VectorXf& mean, const CovMatrix& cov,
+Eigen::MatrixXd GaussianProcess::sample_multivariate_normal(
+    const Eigen::VectorXd& mean, const CovMatrix& cov,
     const Constraint* constraints, int numConstraints,
     int samples, PathSampleGenerator& sampler) const {
 
-    Eigen::MatrixXf normTransform;
-
-    Eigen::MatrixXf reg = Eigen::MatrixXf::Identity(cov.rows(), cov.cols()) * 0.00001f;
+    Eigen::MatrixXd normTransform;
 
 #ifndef SPARSE_SOLVE
     // Use the Cholesky decomposition to transform the standard normal vector to the desired multivariate normal distribution
 
 #ifdef SPARSE_COV
-    Eigen::SimplicialLLT<CovMatrix> chol(cov + reg);
+    Eigen::SimplicialLLT<CovMatrix> chol(cov);
 #else
-    Eigen::LLT<Eigen::MatrixXf> chol(cov);
+    Eigen::LLT<Eigen::MatrixXd> chol(cov);
 #endif
 
     // We can only use the cholesky decomposition if 
@@ -583,15 +653,20 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
         eigs.init();
         int nconv = eigs.compute(Spectra::SortRule::LargestMagn);
 #else
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXf> eigs(cov + reg);
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigs(cov);
 #endif
+
+        if (eigs.info() != Eigen::ComputationInfo::Success) {
+            std::cerr << "Matrix square root failed!\n";
+        }
+
         normTransform = eigs.eigenvectors() 
             * eigs.eigenvalues().cwiseMax(0).cwiseSqrt().asDiagonal();
     }
 
     // Generate a vector of standard normal variates with the same dimension as the mean
-    Eigen::VectorXf z = Eigen::VectorXf(mean.size());
-    Eigen::MatrixXf sample(mean.size(), samples);
+    Eigen::VectorXd z = Eigen::VectorXd(mean.size());
+    Eigen::MatrixXd sample(mean.size(), samples);
 
     int numTries = 0;
     for (int j = 0; j < samples; /*only advance sample idx if the sample passes all constraints*/) {
@@ -600,18 +675,18 @@ Eigen::MatrixXf GaussianProcess::sample_multivariate_normal(
 
         // We're always getting two samples, so make use of that
         for (int i = 0; i < mean.size() / 2; i++) {
-            Vec2f norm_samp = rand_normal_2(sampler); // { (float)random_standard_normal(sampler), (float)random_standard_normal(sampler) };
+            Vec2d norm_samp = rand_normal_2(sampler); // { (float)random_standard_normal(sampler), (float)random_standard_normal(sampler) };
             z(i*2) = norm_samp.x();
             z(i*2 + 1) = norm_samp.y();
         }
 
         // Fill up the last one for an uneven number of samples
         if (mean.size() % 2) {
-            Vec2f norm_samp = rand_normal_2(sampler);
+            Vec2d norm_samp = rand_normal_2(sampler);
             z(mean.size()-1) = norm_samp.x();
         }
 
-        Eigen::VectorXf currSample = mean + normTransform * z;
+        Eigen::VectorXd currSample = mean + normTransform * z;
 
         // Check constraints
         bool passedConstraints = true;
