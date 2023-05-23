@@ -121,7 +121,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
             if (state.firstScatter) {
                 std::array<Vec3f, 1> cond_pts = { points[0] };
                 std::array<Derivative, 1> cond_deriv = { Derivative::None };
-                std::array<float, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
+                std::array<double, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
                 std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
@@ -136,7 +136,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
 
                 float deriv = state.lastAniso.dot(ray.dir().normalized());
                 startSign = deriv < 0 ? -1 : 1;
-                std::array<float, 2> cond_vs = { 0, deriv };
+                std::array<double, 2> cond_vs = { 0, deriv };
 
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
@@ -314,7 +314,7 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
     if (startOnSurface) {
         std::array<Vec3f, 1> cond_pts = { points[0] };
         std::array<Derivative, 1> cond_deriv = { Derivative::None };
-        std::array<float, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
+        std::array<double, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
         std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
         gpSamples = _gp->sample_cond(
             points.data(), derivs.data(), points.size(), nullptr,
@@ -334,7 +334,7 @@ Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator &sampler, const R
 
         float deriv = sample->aniso.dot(ray.dir().normalized());
         startSign = deriv < 0 ? -1 : 1;
-        std::array<float, 2> cond_vs = { 0, deriv };
+        std::array<double, 2> cond_vs = { 0, deriv };
 
         gpSamples = _gp->sample_cond(
             points.data(), derivs.data(), points.size(), nullptr,

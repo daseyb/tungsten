@@ -132,7 +132,7 @@ int main() {
     {
         std::array<Vec3f, 2> cond_pts = { points[0]};
         std::array<Derivative, 2> cond_deriv = { Derivative::None };
-        std::array<float, 2> cond_vs = { 0 };
+        std::array<double, 2> cond_vs = { 0 };
 
         Eigen::MatrixXf samples = gp.sample_cond(
             points.data(), derivs.data(), points.size(), nullptr,
@@ -148,7 +148,7 @@ int main() {
     {
         std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
         std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
-        std::array<float, 2> cond_vs = { 0, 1 };
+        std::array<double, 2> cond_vs = { 0, 1 };
         std::array<GaussianProcess::Constraint, 0> constraints = {  };
 
 
@@ -166,7 +166,7 @@ int main() {
     {
         std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
         std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
-        std::array<float, 2> cond_vs = { 0, 1 };
+        std::array<double, 2> cond_vs = { 0, 1 };
         std::array<GaussianProcess::Constraint, 0> constraints = {  };
 
         Eigen::MatrixXf samples = gp.sample_cond(

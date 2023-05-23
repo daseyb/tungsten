@@ -18,11 +18,11 @@
 				"covariance_epsilon": 0.00000,
 				"mean": {
 					"type": "tabulated",
-					"scale": 3,
+					"scale": 6,
 					"offset": 0,
 					"grid": {
 						"type": "vdb",
-						"file": "tree2-mean-eval-avg-64.vdb",
+						"file": "tree-voxelized-mean-eval-avg-128.vdb",
 						"density_name": "density",
 						"normalize_size": false,
 						"integration_method": "raymarching",
@@ -46,12 +46,12 @@
 					"scale": 1,
 					"cov": {
 						"type": "squared_exponential",
-						"lengthScale": 0.5,
+						"lengthScale": 0.2,
 						"sigma": 1
 					},
 					"grid": {
 						"type": "vdb",
-						"file": "tree2-var-eval-avg-64.vdb",
+						"file": "tree-voxelized-var-eval-avg-128.vdb",
 						"density_name": "density",
 						"normalize_size": false,
 						"integration_method": "raymarching",

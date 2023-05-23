@@ -147,7 +147,7 @@ namespace Tungsten {
         }
 
         virtual std::string id() const {
-            return tinyformat::format("se/aniso=[%.1f,%.1f,%.1f]-s=%.3f-l=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l);
+            return tinyformat::format("se/aniso=[%.4f,%.4f,%.4f]-s=%.3f-l=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l);
         }
 
     private:
@@ -180,7 +180,7 @@ namespace Tungsten {
         }
 
         virtual std::string id() const {
-            return tinyformat::format("rq/aniso=[%.1f,%.1f,%.1f]-s=%.3f-l=%.3f-a=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l, _a);
+            return tinyformat::format("rq/aniso=[%.4f,%.4f,%.4f]-s=%.3f-l=%.3f-a=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l, _a);
         }
 
         virtual rapidjson::Value toJson(Allocator& allocator) const override {
@@ -232,7 +232,7 @@ namespace Tungsten {
         }
 
         virtual std::string id() const {
-            return tinyformat::format("per/aniso=[%.1f,%.1f,%.1f]-s=%.3f-l=%.3f-w=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l, _w);
+            return tinyformat::format("per/aniso=[%.4f,%.4f,%.4f]-s=%.3f-l=%.3f-w=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l, _w);
         }
 
     private:
@@ -274,7 +274,7 @@ namespace Tungsten {
         }
 
         virtual std::string id() const {
-            return tinyformat::format("tp/aniso=[%.1f,%.1f,%.1f]-s=%.3f-R=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _R);
+            return tinyformat::format("tp/aniso=[%.4f,%.4f,%.4f]-s=%.3f-R=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _R);
         }
 
     private:

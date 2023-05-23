@@ -183,7 +183,7 @@ void sample_beckmann(float alpha) {
     }
 
     {
-        std::ofstream xfile(incrementalFilename("microfacet/visible-normals/beckmann.bin", "", false).asString(), std::ios::out | std::ios::binary);
+        std::ofstream xfile(incrementalFilename(Path(tinyformat::format("microfacet/visible-normals/beckmann-%.4f.bin", alpha)), "", false).asString(), std::ios::out | std::ios::binary);
         xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
         xfile.close();
     }
@@ -207,10 +207,6 @@ void v_ndf(std::shared_ptr<GaussianProcess> gp, float angle, int samples, std::s
 
     int failed = 0;
 
-    std::vector<Eigen::MatrixXf> failedRealizations;
-    std::vector<Eigen::MatrixXf> successfulRealizations;
-    std::vector<Vec3f> failedNormals;
-
     for (int s = 0; s < samples;) {
 
         if ((s + 1) % 100 == 0) {
@@ -222,17 +218,8 @@ void v_ndf(std::shared_ptr<GaussianProcess> gp, float angle, int samples, std::s
         state.reset();
         MediumSample sample;
         if (!gp_med->sampleDistance(sampler, ray, state, sample)) {
-            //Eigen::MatrixXd usedSamples = *sample.usedSamples;
-            //usedSamples.block((size_t)sample.usedSampleIdx, (size_t)0, usedSamples.rows() - sample.usedSampleIdx, 1).setZero();
-            failedNormals.push_back(sample.aniso.normalized());
-            //failedRealizations.push_back(usedSamples.cast<float>());
             failed++;
             continue;
-        }
-        else {
-            //Eigen::MatrixXd usedSamples = *sample.usedSamples;
-            //usedSamples.block((size_t)sample.usedSampleIdx, (size_t)0, usedSamples.rows() - sample.usedSampleIdx, 1).setZero();
-            //successfulRealizations.push_back(usedSamples.cast<float>());
         }
 
         sample.aniso.normalize();
@@ -248,31 +235,6 @@ void v_ndf(std::shared_ptr<GaussianProcess> gp, float angle, int samples, std::s
         xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
         xfile.close();
     }
-
-    {
-        std::ofstream xfile(incrementalFilename(Path(output) / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d-failed-realizations.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
-        for (const auto& real : failedRealizations) {
-
-            xfile.write((char*)real.data(), sizeof(float) * real.rows() * real.cols());
-        }
-        xfile.close();
-    }
-
-    {
-        std::ofstream xfile(incrementalFilename(Path(output) / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d-successful-realizations.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
-        for (const auto& real : successfulRealizations) {
-
-            xfile.write((char*)real.data(), sizeof(float) * real.rows() * real.cols());
-        }
-        xfile.close();
-    }
-
-    {
-        std::ofstream xfile(incrementalFilename(Path(output) / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d-failed-normals.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
-        xfile.write((char*)failedNormals.data(), sizeof(Vec3f) * failedNormals.size());
-        xfile.close();
-    }
-
 }
 
 template<typename T>
@@ -295,7 +257,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    float aniso = 0.5;
+    float aniso = 1.0;
     float angle =  0.;
     Scene scene;
 
@@ -320,6 +282,8 @@ int main(int argc, char** argv) {
 
             float alpha = compute_beckmann_roughness(*gp->_cov);
             std::cout << "Beckmann roughness: " << alpha << "\n";
+
+            //sample_beckmann(alpha);
 
             /*auto testFile = Path("microfacet/visible-normals/") / Path(gp._cov->id()) + Path(tinyformat::format("-%.1fdeg.bin", 180 * angle / PI));
             if (testFile.exists()) {

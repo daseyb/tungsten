@@ -13,7 +13,7 @@
 
 using namespace Tungsten;
 
-constexpr size_t NUM_SAMPLE_POINTS = 64;
+constexpr size_t NUM_SAMPLE_POINTS = 256;
 
 int gen3d(int argc, char** argv) {
 
@@ -76,7 +76,7 @@ int gen3d(int argc, char** argv) {
                         Vec2d s1 = gp->rand_normal_2(sampler);
                         Vec2d s2 = gp->rand_normal_2(sampler);
                         Vec3f offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
-                        Vec3f p = points[idx] + offset * sqr(4.0f / NUM_SAMPLE_POINTS);
+                        Vec3f p = points[idx] + offset * 4.0f / NUM_SAMPLE_POINTS;
                         samples[s] = gp->mean(&p, &derivs[idx], nullptr, Vec3f(1.0f, 0.0f, 0.0f), 1)(0);
                         mean[idx] += samples[s];
                     }
@@ -114,7 +114,7 @@ int gen3d(int argc, char** argv) {
                         Vec2d s1 = gp->rand_normal_2(sampler);
                         Vec2d s2 = gp->rand_normal_2(sampler);
                         Vec3f offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
-                        Vec3f p = cp + offset * 2;
+                        Vec3f p = cp + offset * 4;
 
                         if (p.x() < 0 || p.y() < 0 || p.z() < 0 ||
                             p.x() > NUM_SAMPLE_POINTS-1 || p.y() > NUM_SAMPLE_POINTS - 1 || p.z() > NUM_SAMPLE_POINTS - 1) {
@@ -143,13 +143,13 @@ int gen3d(int argc, char** argv) {
     }
 
     {
-        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/tree-orig-mean-eval-avg-%d.bin", NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
+        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/tree-voxelized-mean-eval-avg-%d.bin", NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
         xfile.write((char*)mean.data(), sizeof(float) * mean.rows() * mean.cols());
         xfile.close();
     }
 
     {
-        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/tree-orig-var-eval-avg-%d.bin", NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
+        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/tree-voxelized-var-eval-avg-%d.bin", NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
         xfile.write((char*)variance.data(), sizeof(float) * variance.rows() * variance.cols());
         xfile.close();
     }
@@ -176,7 +176,7 @@ int gen3d(int argc, char** argv) {
         {
             openvdb::GridPtrVec grids;
             grids.push_back(meanGrid);
-            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/tree-orig-mean-eval-avg-%d.vdb", NUM_SAMPLE_POINTS));
+            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/tree-voxelized-mean-eval-avg-%d.vdb", NUM_SAMPLE_POINTS));
             file.write(grids);
             file.close();
         }
@@ -184,7 +184,7 @@ int gen3d(int argc, char** argv) {
         {
             openvdb::GridPtrVec grids;
             grids.push_back(varGrid);
-            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/tree-orig-var-eval-avg-%d.vdb", NUM_SAMPLE_POINTS));
+            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/tree-voxelized-var-eval-avg-%d.vdb", NUM_SAMPLE_POINTS));
             file.write(grids);
             file.close();
         }

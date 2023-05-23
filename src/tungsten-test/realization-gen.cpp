@@ -10,11 +10,11 @@ using namespace Tungsten;
 
 constexpr size_t NUM_SAMPLE_POINTS = 32;
 
-std::tuple<std::vector<Vec3f>, std::vector<Vec3f>, std::vector<float>, std::vector<Derivative>> sample_surface() {
+std::tuple<std::vector<Vec3f>, std::vector<Vec3f>, std::vector<double>, std::vector<Derivative>> sample_surface() {
 
     std::vector<Vec3f> ps;
     std::vector<Vec3f> ns;
-    std::vector<float> vs;
+    std::vector<double> vs;
     std::vector<Derivative> ds;
 
     Vec3f c = Vec3f(0.75, 0, 0.f);

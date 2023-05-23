@@ -16,7 +16,7 @@
 				"type": "standard",
 				"mean": {
 					"type": "mesh",
-					"file": "tree.obj",
+					"file": "tree-voxelized.obj",
 					"signed": true,
 					"transform": {
 						"position": [
