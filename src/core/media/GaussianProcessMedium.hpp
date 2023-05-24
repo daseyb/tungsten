@@ -8,6 +8,12 @@ namespace Tungsten {
 
 class GaussianProcess;
 
+enum class GPCorrelationContext {
+    Elephant,
+    Goldfish,
+    Dori
+};
+
 class GaussianProcessMedium : public Medium
 {
     Vec3f _materialSigmaA, _materialSigmaS;
@@ -19,7 +25,14 @@ class GaussianProcessMedium : public Medium
 
     int _samplePoints;
 
+    GPCorrelationContext _ctxt = GPCorrelationContext::Goldfish;
+
+    static GPCorrelationContext stringToCorrelationContext(const std::string& name);
+    static std::string correlationContextToString(GPCorrelationContext ctxt);
+
+
 public:
+
     std::shared_ptr<GaussianProcess> _gp;
     GaussianProcessMedium();
     GaussianProcessMedium(std::shared_ptr<GaussianProcess> gp, 

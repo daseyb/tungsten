@@ -200,8 +200,8 @@ void v_ndf(std::shared_ptr<GaussianProcess> gp, float angle, int samples, std::s
 
     Ray ray = Ray(Vec3f(0.f, 0.f, 50.f), Vec3f(sin(angle), 0.f, -cos(angle)));
 
-    ray.setNearT(-(ray.pos().z()-10.0f) / ray.dir().z());
-    ray.setFarT(-(ray.pos().z()+10.0f) / ray.dir().z());
+    ray.setNearT(-(ray.pos().z()-5.0f) / ray.dir().z());
+    ray.setFarT(-(ray.pos().z()+5.0f) / ray.dir().z());
 
     Eigen::MatrixXf normals(samples, 3);
 
@@ -250,7 +250,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<JsonDocument> document;
     try {
-        document = std::make_shared<JsonDocument>(argc > 1 ? argv[1] : "microfacet/covariances-problem.json");
+        document = std::make_shared<JsonDocument>(argc > 1 ? argv[1] : "microfacet/covariances-paper.json");
     }
     catch (std::exception& e) {
         std::cerr << e.what() << "\n";
@@ -272,7 +272,7 @@ int main(int argc, char** argv) {
         try {
             auto cov = instantiate<CovarianceFunction>(jcov, scene);
             cov->loadResources();
-            cov->_aniso[2] = aniso;
+            //cov->_aniso[2] = aniso;
 
             std::cout << cov->id() << "\n";
 
@@ -283,13 +283,13 @@ int main(int argc, char** argv) {
             float alpha = compute_beckmann_roughness(*gp->_cov);
             std::cout << "Beckmann roughness: " << alpha << "\n";
 
-            //sample_beckmann(alpha);
+            sample_beckmann(alpha);
 
-            /*auto testFile = Path("microfacet/visible-normals/") / Path(gp._cov->id()) + Path(tinyformat::format("-%.1fdeg.bin", 180 * angle / PI));
+            auto testFile = Path("microfacet/visible-normals/") / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS));
             if (testFile.exists()) {
                 std::cout << "skipping...\n";
                 continue;
-            }*/
+            }
 
             v_ndf(gp, angle, 10000, "microfacet/visible-normals/");
             //side_view(gp, "microfacet/side-view/");

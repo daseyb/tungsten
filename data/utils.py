@@ -20,18 +20,17 @@ def ray_points(o, d, tmin, tmax, n):
     return ps, ts
 
 def plot_realization(realization, ax, xx, yy):
-    realization = -realization
-    max_v = np.max(realization)
-    min_v = np.min(realization)
+    with plt.style.context("default", True):
+        realization = -realization
+        max_v = np.max(realization)
+        min_v = np.min(realization)
 
-    abs_range = np.maximum(np.abs(max_v), np.abs(min_v))
-    levels = np.linspace(-abs_range, abs_range, 11)
+        abs_range = np.maximum(np.abs(max_v), np.abs(min_v))
+        levels = np.linspace(-abs_range, abs_range, 11)
 
-    cs = ax.contour(xx, yy, realization, alpha=0.5, levels = levels, cmap="coolwarm")
-    if(len(cs.collections) > 5):
-        cs.collections[5].set_linewidth(3)
-        cs.collections[5].set_color("black")
-        cs.collections[5].set_alpha(1.0)
 
-        ax.contourf(xx, yy, realization, alpha=0.5,  levels = levels, cmap="coolwarm")
-        ax.set_aspect("equal")
+        cs = ax.contour(xx, yy, realization, alpha=0.5, levels = levels, cmap="coolwarm")
+        ax.contour(xx, yy, realization, alpha=1, levels = [0], linewidths=3, colors="black")
+        if(len(cs.collections) > 5):
+            ax.contourf(xx, yy, realization, alpha=0.5,  levels = levels, cmap="coolwarm")
+            ax.set_aspect("equal")

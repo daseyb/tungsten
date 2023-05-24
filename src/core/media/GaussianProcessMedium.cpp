@@ -13,13 +13,35 @@
 
 namespace Tungsten {
 
+std::string GaussianProcessMedium::correlationContextToString(GPCorrelationContext ctxt)
+{
+    switch (ctxt) {
+    default:
+    case GPCorrelationContext::Elephant:  return "elephant";
+    case GPCorrelationContext::Goldfish:   return "goldfish";
+    case GPCorrelationContext::Dori:   return "dori";
+    }
+}
+
+GPCorrelationContext GaussianProcessMedium::stringToCorrelationContext(const std::string& name)
+{
+    if (name == "elephant")
+        return GPCorrelationContext::Elephant;
+    else if (name == "goldfish")
+        return GPCorrelationContext::Goldfish;
+    else if (name == "dori")
+        return GPCorrelationContext::Dori;
+    FAIL("Invalid correaltion context: '%s'", name);
+}
+
 
     GaussianProcessMedium::GaussianProcessMedium()
 : _materialSigmaA(0.0f),
   _materialSigmaS(0.0f),
   _density(1.0f),
   _gp(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(), std::make_shared<SquaredExponentialCovariance>())),
-  _samplePoints(32)
+  _samplePoints(32),
+  _ctxt(GPCorrelationContext::Goldfish)
 {
 }
 
@@ -30,6 +52,10 @@ void GaussianProcessMedium::fromJson(JsonPtr value, const Scene &scene)
     value.getField("sigma_s", _materialSigmaS);
     value.getField("density", _density);
     value.getField("sample_points", _samplePoints);
+
+    std::string ctxtString;
+    value.getField("correlation_context", ctxtString);
+    _ctxt = stringToCorrelationContext(ctxtString);
 
     if (auto gp = value["gaussian_process"])
         _gp = scene.fetchGaussianProcess(gp);
@@ -44,7 +70,8 @@ rapidjson::Value GaussianProcessMedium::toJson(Allocator &allocator) const
         "sigma_s", _materialSigmaS,
         "density", _density,
         "sample_points", _samplePoints,
-        "gaussian_process", *_gp
+        "gaussian_process", *_gp,
+        "correlation_context", correlationContextToString(_ctxt)
     };
 }
 
@@ -140,13 +167,18 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
 
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
-                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
+                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), _ctxt == GPCorrelationContext::Dori ? cond_pts.size() : 1, nullptr,
                     nullptr, 0,
                     ray.dir(), 1, sampler) * startSign;
             }
             
 
             float prevV = gpSamples(0, 0);
+
+            if (state.firstScatter && prevV < 0) {
+                return false;
+            }
+
             float prevT = ts[0];
             for (int p = 1; p < _samplePoints; p++) {
                 float currV = gpSamples(p, 0);

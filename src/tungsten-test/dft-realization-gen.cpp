@@ -16,7 +16,7 @@
 
 using namespace Tungsten;
 
-constexpr int NUM_SAMPLE_POINTS = 256;
+constexpr int NUM_SAMPLE_POINTS = 8;
 constexpr int NUM_PT_EVAL_POINTS = 512;
 
 void fft_shift(const std::vector<std::complex<double>>& dft, std::vector<std::complex<double>>& dft_shift, int offset) {
@@ -77,8 +77,9 @@ float eval_idft_point(Vec3f p, const std::vector<std::complex<double>>& dft) {
 }
 
 
+
 void rational_quadratic_sphere() {
-    GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(1.2f, 0.0f, 0.f), 1.f), std::make_shared<RationalQuadraticCovariance>(0.5f, 0.5f, 0.5f, Vec3f(1.f, 1.0f, 1.f)));
+    GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(1.2f, 0.0f, 0.f), 1.f), std::make_shared<RationalQuadraticCovariance>(1.0f, 0.2f, 0.25f, Vec3f(1.f, 1.0f, 1.f)));
     UniformPathSampler sampler(0);
     sampler.next2D();
 
@@ -111,7 +112,7 @@ void rational_quadratic_sphere() {
     std::vector<std::complex<double>> real(points.size());
     plan = fftw_plan_dft_2d(NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, (fftw_complex*)Fcov_sample.data(), (fftw_complex*)real.data(), FFTW_BACKWARD, FFTW_ESTIMATE);
 
-    for (int num_reals = 0; num_reals < 500; num_reals++) {
+    for (int num_reals = 0; num_reals < 1; num_reals++) {
         for (int i = 0; i < Fcov.size(); i++) {
             Vec2d u = gp.rand_normal_2(sampler);
             Fcov_sample[i] = sqrt(Fcov[i] / std::complex<double>(cov.size())) * (std::complex<double>(u.x(), u.y()));
@@ -125,7 +126,7 @@ void rational_quadratic_sphere() {
         }
 
         {
-            std::ofstream xfile(tinyformat::format("2d-reals/%s-sample-%d.bin", gp._cov->id(), num_reals), std::ios::out | std::ios::binary);
+            std::ofstream xfile(tinyformat::format("2d-reals/%s-sample-%d-%d.bin", gp._cov->id(), NUM_SAMPLE_POINTS, num_reals), std::ios::out | std::ios::binary);
             xfile.write((char*)real.data(), sizeof(fftw_complex) * real.size());
             xfile.close();
         }
@@ -137,7 +138,7 @@ void rational_quadratic_sphere() {
     }
 
     {
-        std::ofstream xfile(tinyformat::format("2d-reals/%s-mean-%d.bin", gp._cov->id(), 0), std::ios::out | std::ios::binary);
+        std::ofstream xfile(tinyformat::format("2d-reals/%s-mean-%d-%d.bin", gp._cov->id(), NUM_SAMPLE_POINTS, 0), std::ios::out | std::ios::binary);
         xfile.write((char*)real.data(), sizeof(fftw_complex) * real.size());
         xfile.close();
     }
@@ -253,7 +254,7 @@ void rational_quadratic_sphere_3D() {
 int main() {
 
     try {
-        rational_quadratic_sphere_3D();
+        rational_quadratic_sphere();
     }
     catch (std::exception& e) {
         std::cerr << e.what();
