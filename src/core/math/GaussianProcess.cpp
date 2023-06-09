@@ -103,14 +103,14 @@ FloatD NonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
     FloatD sigmaA = (sampleGrid(mult(_grid->invNaturalTransform(), a)) + _offset) * _scale;
     FloatD sigmaB = (sampleGrid(mult(_grid->invNaturalTransform(), b)) + _offset) * _scale;
 
-    return sigmaA * sigmaB * _stationaryCov->cov(a, b);
+    return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
 }
 
 float NonstationaryCovariance::cov(Vec3f a, Vec3f b) const {
     float sigmaA = (_grid->density(_grid->invNaturalTransform() * a) + _offset) * _scale;
     float sigmaB = (_grid->density(_grid->invNaturalTransform() * b) + _offset) * _scale;
 
-    return sigmaA * sigmaB * _stationaryCov->cov(a, b);
+    return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
 }
 
 void TabulatedMean::fromJson(JsonPtr value, const Scene& scene) {

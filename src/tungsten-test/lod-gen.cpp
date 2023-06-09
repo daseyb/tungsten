@@ -13,7 +13,7 @@
 
 using namespace Tungsten;
 
-constexpr size_t NUM_SAMPLE_POINTS = 256;
+constexpr size_t NUM_SAMPLE_POINTS = 128;
 
 int gen3d(int argc, char** argv) {
 
@@ -114,7 +114,7 @@ int gen3d(int argc, char** argv) {
                         Vec2d s1 = gp->rand_normal_2(sampler);
                         Vec2d s2 = gp->rand_normal_2(sampler);
                         Vec3f offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
-                        Vec3f p = cp + offset * 4;
+                        Vec3f p = cp + offset;
 
                         if (p.x() < 0 || p.y() < 0 || p.z() < 0 ||
                             p.x() > NUM_SAMPLE_POINTS-1 || p.y() > NUM_SAMPLE_POINTS - 1 || p.z() > NUM_SAMPLE_POINTS - 1) {
@@ -125,7 +125,7 @@ int gen3d(int argc, char** argv) {
                             Vec3f bp = lerp(min, max, p / (NUM_SAMPLE_POINTS - 1));
                             float occupiedSample = meanSample < 0;
                             float occupiedStored = gp->mean(&bp, &derivs[idx], nullptr, Vec3f(1.0f, 0.0f, 0.0f), 1)(0) < 0;
-                            samples[s] = occupiedSample - occupiedStored;
+                            samples[s] = gp->mean(&bp, &derivs[idx], nullptr, Vec3f(1.0f, 0.0f, 0.0f), 1)(0) - meanSample;
                             valid_samples++;
                         }
                     }

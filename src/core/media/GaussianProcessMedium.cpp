@@ -53,7 +53,7 @@ void GaussianProcessMedium::fromJson(JsonPtr value, const Scene &scene)
     value.getField("density", _density);
     value.getField("sample_points", _samplePoints);
 
-    std::string ctxtString;
+    std::string ctxtString = "goldfish";
     value.getField("correlation_context", ctxtString);
     _ctxt = stringToCorrelationContext(ctxtString);
 
