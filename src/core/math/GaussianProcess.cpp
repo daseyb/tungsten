@@ -84,7 +84,20 @@ FloatD NonstationaryCovariance::sampleGrid(Vec3Diff a) const {
     FloatD result;
     Vec3f ap = from_diff(a);
     result[0] = _grid->density(ap);
-    result[1] = _grid->gradient(ap).dot({ (float)a.x()[1], (float)a.y()[1] , (float)a.z()[1] });
+
+    /**/
+    float eps = 0.001f;
+    float vals[] = {
+        _grid->density(ap + Vec3f(eps, 0.f, 0.f)),
+        _grid->density(ap + Vec3f(0.f, eps, 0.f)),
+        _grid->density(ap + Vec3f(0.f, 0.f, eps)),
+        _grid->density(ap - Vec3f(eps, 0.f, 0.f)),
+        _grid->density(ap - Vec3f(0.f, eps, 0.f)),
+        _grid->density(ap - Vec3f(0.f, 0.f, eps))
+    };
+    auto grad = Vec3f(vals[0] - vals[3], vals[1] - vals[4], vals[2] - vals[5]) / (2 * eps);
+
+    result[1] = grad.dot({ (float)a.x()[1], (float)a.y()[1] , (float)a.z()[1] });
     result[2] = 0; // linear interp
     return result;
 }
@@ -100,7 +113,7 @@ static inline Vec3Diff mult(const Mat4f& a, const Vec3Diff& b)
 
 FloatD NonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
 
-    FloatD sigmaA = (sampleGrid(mult(_grid->invNaturalTransform(), a)) + _offset) * _scale;
+    FloatD sigmaA = (sampleGrid(mult(_grid->invNaturalTransform(), a)) + _offset)* _scale;
     FloatD sigmaB = (sampleGrid(mult(_grid->invNaturalTransform(), b)) + _offset) * _scale;
 
     return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
@@ -142,8 +155,19 @@ float TabulatedMean::mean(Vec3f a) const {
 }
 
 Vec3f TabulatedMean::dmean_da(Vec3f a) const {
-    Vec3f p = _grid->invNaturalTransform() * a;
-    return _scale* _grid->naturalTransform().transformVector(_grid->gradient(p));
+    float eps = 0.001f;
+    float vals[] = {
+        mean(a + Vec3f(eps, 0.f, 0.f)),
+        mean(a + Vec3f(0.f, eps, 0.f)),
+        mean(a + Vec3f(0.f, 0.f, eps)),
+        mean(a - Vec3f(eps, 0.f, 0.f)),
+        mean(a - Vec3f(0.f, eps, 0.f)),
+        mean(a - Vec3f(0.f, 0.f, eps))
+    };
+
+    return Vec3f(vals[0] - vals[3], vals[1] - vals[4], vals[2] - vals[5]) / (2*eps);
+    /*Vec3f p = _grid->invNaturalTransform() * a;
+    return _scale* _grid->naturalTransform().transformVector(_grid->gradient(p));*/
 }
 
 void TabulatedMean::loadResources() {
