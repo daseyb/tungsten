@@ -29,6 +29,7 @@ namespace fcpw {
 namespace Tungsten {
     using Vec3Diff = autodiff::Vector3real2nd;
     using Vec4Diff = autodiff::Vector4real2nd;
+    using Mat3Diff = autodiff::Matrix3real2nd;
 
     inline Vec3f from_diff(const Vec3Diff& vd) {
         return Vec3f{ (float)vd.x().val(), (float)vd.y().val(), (float)vd.z().val() };
@@ -36,6 +37,11 @@ namespace Tungsten {
 
     inline Vec3Diff to_diff(const Vec3f& vd) {
         return Vec3Diff{ vd.x(), vd.y(), vd.z() };
+    }
+
+    template<typename To, typename From>
+    inline To vec_conv(const From& vd) {
+        return To{ (float)vd.x(), (float)vd.y(), (float)vd.z() };
     }
 
     template<typename Vec>
@@ -89,7 +95,23 @@ namespace Tungsten {
         virtual FloatD dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA) const;
         virtual FloatD dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirB) const;
         virtual FloatD dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA, Eigen::Array3d dirB) const;
+    };
 
+    class StationaryCovariance : public CovarianceFunction {
+    private:
+        virtual FloatD cov(FloatD absq) const = 0;
+        virtual float cov(float absq) const = 0;
+
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
+            FloatD absq = dist2(a, b, _aniso);
+            return cov(absq);
+        }
+
+        virtual float cov(Vec3f a, Vec3f b) const override {
+            float absq = dist2(a, b, _aniso);
+            return cov(absq);
+        }
+      
         friend class NonstationaryCovariance;
     };
 
@@ -97,9 +119,10 @@ namespace Tungsten {
     public:
 
         NonstationaryCovariance(
-            std::shared_ptr<CovarianceFunction> stationaryCov = nullptr,
-            std::shared_ptr<Grid> grid = nullptr,
-            float offset = 0, float scale = 1) : _stationaryCov(stationaryCov), _grid(grid), _offset(offset), _scale(scale)
+            std::shared_ptr<StationaryCovariance> stationaryCov = nullptr,
+            std::shared_ptr<Grid> variance = nullptr,
+            std::shared_ptr<Grid> aniso = nullptr,
+            float offset = 0, float scale = 1) : _stationaryCov(stationaryCov), _variance(variance), _aniso(aniso), _offset(offset), _scale(scale)
         {
         }
 
@@ -116,14 +139,16 @@ namespace Tungsten {
         virtual float cov(Vec3f a, Vec3f b) const override;
 
         FloatD sampleGrid(Vec3Diff a) const;
-        autodiff::Matrix4real2nd _invGridTransformD;
-        std::shared_ptr<CovarianceFunction> _stationaryCov;
-        std::shared_ptr<Grid> _grid;
+        std::shared_ptr<StationaryCovariance> _stationaryCov;
+        std::shared_ptr<Grid> _variance;
+        std::shared_ptr<Grid> _aniso;
         float _offset;
         float _scale;
     };
 
-    class SquaredExponentialCovariance : public CovarianceFunction {
+
+    
+    class SquaredExponentialCovariance : public StationaryCovariance {
     public:
 
         SquaredExponentialCovariance(float sigma = 1.f, float l = 1., Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l) {
@@ -153,18 +178,16 @@ namespace Tungsten {
     private:
         float _sigma, _l;
 
-        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
-            FloatD absq = dist2(a, b, _aniso);
-            return sqr(_sigma)* exp(-(absq / (2 * sqr(_l))));
+        virtual FloatD cov(FloatD absq) const override {
+            return sqr(_sigma)* exp(-(absq / (sqr(_l))));
         }
 
-        virtual float cov(Vec3f a, Vec3f b) const override {
-            float absq = dist2(a, b, _aniso);
-            return sqr(_sigma) * exp(-(absq / (2 * sqr(_l))));
+        virtual float cov(float absq) const override {
+            return sqr(_sigma) * exp(-(absq / (sqr(_l))));
         }
     };
 
-    class RationalQuadraticCovariance : public CovarianceFunction {
+    class RationalQuadraticCovariance : public StationaryCovariance {
     public:
 
         RationalQuadraticCovariance(float sigma = 1.f, float l = 1., float a = 1.0f, Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _a(a) {
@@ -195,18 +218,16 @@ namespace Tungsten {
     private:
         float _sigma, _a, _l;
 
-        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
-            auto absq = dist2(a, b, _aniso);
+        virtual FloatD cov(FloatD absq) const override {
             return sqr(_sigma) * pow((1.0f + absq / (2 * _a * _l * _l)), -_a);
         }
 
-        virtual float cov(Vec3f a, Vec3f b) const override {
-            auto absq = dist2(a, b, _aniso);
+        virtual float cov(float absq) const override {
             return sqr(_sigma) * pow((1.0f + absq / (2 * _a * _l * _l)), -_a);
         }
     };
 
-    class PeriodicCovariance : public CovarianceFunction {
+    class PeriodicCovariance : public StationaryCovariance {
     public:
 
         PeriodicCovariance(float sigma = 1.f, float l = 1., float w = TWO_PI, Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _w(w) {
@@ -238,19 +259,17 @@ namespace Tungsten {
     private:
         float _sigma, _w, _l;
 
-        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
-            auto absq = dist2(a, b, _aniso);
+        virtual FloatD cov(FloatD absq) const override {
             return sqr(_sigma) * exp(-2 * pow(sin(PI * sqrt(absq) * _w), 2.f)) / (_l * _l);
         }
 
-        virtual float cov(Vec3f a, Vec3f b) const override {
-            auto absq = dist2(a, b, _aniso);
+        virtual float cov(float absq) const override {
             return sqr(_sigma) * exp(-2 * pow(sin(PI * sqrt(absq) * _w), 2.f)) / (_l * _l);
         }
     };
 
 
-    class ThinPlateCovariance : public CovarianceFunction {
+    class ThinPlateCovariance : public StationaryCovariance {
     public:
 
         ThinPlateCovariance(float sigma = 1.f, float R = 1., Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _R(R) {
@@ -280,14 +299,12 @@ namespace Tungsten {
     private:
         float _sigma, _R;
 
-        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
-            auto absq = dist2(a, b, _aniso);
+        virtual FloatD cov(FloatD absq) const override {
             auto ab = sqrt(absq);
             return sqr(_sigma) / 12 * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
         }
 
-        virtual float cov(Vec3f a, Vec3f b) const override {
-            auto absq = dist2(a, b, _aniso);
+        virtual float cov(float absq) const override {
             auto ab = sqrt(absq);
             return sqr(_sigma) / 12 * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
         }

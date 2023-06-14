@@ -43,6 +43,7 @@ class Scene : public JsonSerializable
 
     std::vector<std::shared_ptr<Primitive>> _primitives;
     std::vector<std::shared_ptr<Medium>> _media;
+    std::vector<std::shared_ptr<Grid>> _grids;
     std::vector<std::shared_ptr<Bsdf>> _bsdfs;
     std::shared_ptr<TextureCache> _textureCache;
     std::shared_ptr<Camera> _camera;

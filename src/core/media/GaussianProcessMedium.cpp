@@ -228,7 +228,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
 
                     Vec3f grad = Vec3f((float)gradd.x(), (float)gradd.y(), (float)gradd.z());
 
-#elif 1
+#elif 0
                     std::array<Vec3f, 1> gradPs{ ip };
                     std::array<Derivative, 1> gradDerivs{ Derivative::First };
 
@@ -270,8 +270,8 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                     points[_samplePoints] = ip;
                     derivs[_samplePoints] = Derivative::None;
 
-                    Eigen::VectorXf sampleValues(_samplePoints + 1);
-                    sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0).cast<float>();
+                    Eigen::VectorXd sampleValues(_samplePoints + 1);
+                    sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0);
                     sampleValues(_samplePoints) = 0;
 
                     auto gradSamples = _gp->sample_cond(
@@ -285,11 +285,15 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                     };
 #endif
 
+                    grad *= startSign;
+
                     if (grad.dot(ray.dir()) > 0) {
-                        return false;
+                        //std::cout << "Gradient wrong direction: " << grad.dot(ray.dir()) << "\n";
+                        //return false;
+                        grad *= -1;
                     }
 
-                    sample.aniso = grad * startSign;
+                    sample.aniso = grad;
                     if (!std::isfinite(sample.aniso.avg())) {
                         sample.aniso = Vec3f(1.f, 0.f, 0.f);
                         std::cout << "Gradient invalid.\n";

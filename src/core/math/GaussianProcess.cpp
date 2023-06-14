@@ -45,13 +45,23 @@ void NonstationaryCovariance::fromJson(JsonPtr value, const Scene& scene) {
     CovarianceFunction::fromJson(value, scene);
 
     if (auto cov = value["cov"]) {
-        _stationaryCov = scene.fetchCovarianceFunction(cov);
+        _stationaryCov = std::dynamic_pointer_cast<StationaryCovariance>(scene.fetchCovarianceFunction(cov));
     }
 
-    if (auto grid = value["grid"]) {
-        _grid = scene.fetchGrid(grid);
-        _grid->requestSDF();
-        _grid->requestGradient();
+    if (auto variance = value["grid"]) {
+        _variance = scene.fetchGrid(variance);
+    }
+    else if (auto variance = value["variance"]) {
+        _variance = scene.fetchGrid(variance);
+    }
+    
+    if (_variance) {
+        _variance->requestGradient();
+    }
+
+    if (auto aniso = value["ansio"]) {
+        _aniso = scene.fetchGrid(aniso);
+        _aniso->requestGradient();
     }
 
     value.getField("offset", _offset);
@@ -62,38 +72,36 @@ rapidjson::Value NonstationaryCovariance::toJson(Allocator& allocator) const {
     return JsonObject{ JsonSerializable::toJson(allocator), allocator,
         "type", "nonstationary",
         "cov", *_stationaryCov,
-        "grid", *_grid,
+        "variance", *_variance,
         "offset", _offset,
         "scale", _scale
     };
 }
 
 void NonstationaryCovariance::loadResources() {
-    _grid->loadResources();
+    _variance->loadResources();
     _stationaryCov->loadResources();
 
-    auto gridTr = _grid->invNaturalTransform();
-    for (int r = 0; r < 4; r++) {
-        for (int c = 0; c < 4; c++) {
-            _invGridTransformD(r, c) = gridTr(r, c);
-        }
+    if (_aniso) {
+        _variance->loadResources();
     }
+
 }
 
 FloatD NonstationaryCovariance::sampleGrid(Vec3Diff a) const {
     FloatD result;
     Vec3f ap = from_diff(a);
-    result[0] = _grid->density(ap);
+    result[0] = _variance->density(ap);
 
     /**/
     float eps = 0.001f;
     float vals[] = {
-        _grid->density(ap + Vec3f(eps, 0.f, 0.f)),
-        _grid->density(ap + Vec3f(0.f, eps, 0.f)),
-        _grid->density(ap + Vec3f(0.f, 0.f, eps)),
-        _grid->density(ap - Vec3f(eps, 0.f, 0.f)),
-        _grid->density(ap - Vec3f(0.f, eps, 0.f)),
-        _grid->density(ap - Vec3f(0.f, 0.f, eps))
+        _variance->density(ap + Vec3f(eps, 0.f, 0.f)),
+        _variance->density(ap + Vec3f(0.f, eps, 0.f)),
+        _variance->density(ap + Vec3f(0.f, 0.f, eps)),
+        _variance->density(ap - Vec3f(eps, 0.f, 0.f)),
+        _variance->density(ap - Vec3f(0.f, eps, 0.f)),
+        _variance->density(ap - Vec3f(0.f, 0.f, eps))
     };
     auto grad = Vec3f(vals[0] - vals[3], vals[1] - vals[4], vals[2] - vals[5]) / (2 * eps);
 
@@ -113,17 +121,45 @@ static inline Vec3Diff mult(const Mat4f& a, const Vec3Diff& b)
 
 FloatD NonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
 
-    FloatD sigmaA = (sampleGrid(mult(_grid->invNaturalTransform(), a)) + _offset)* _scale;
-    FloatD sigmaB = (sampleGrid(mult(_grid->invNaturalTransform(), b)) + _offset) * _scale;
+    FloatD sigmaA = (sampleGrid(mult(_variance->invNaturalTransform(), a)) + _offset)* _scale;
+    FloatD sigmaB = (sampleGrid(mult(_variance->invNaturalTransform(), b)) + _offset) * _scale;
+    //return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
 
-    return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+    Mat3Diff anisoA = Mat3Diff::Identity();
+    Mat3Diff anisoB = Mat3Diff::Identity();
+
+    FloatD detAnisoA = anisoA.determinant();
+    FloatD detAnisoB = anisoB.determinant();
+
+    Mat3Diff anisoABavg = 0.5 * (anisoA + anisoB);
+    FloatD detAnisoABavg = anisoABavg.determinant();
+
+    FloatD ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
+
+    Vec3Diff d = b - a;
+    FloatD dsq = d.transpose() * anisoABavg.inverse() * d;
+    return sqrt(sigmaA) * sqrt(sigmaB) * ansioFac * _stationaryCov->cov(dsq);
 }
 
 float NonstationaryCovariance::cov(Vec3f a, Vec3f b) const {
-    float sigmaA = (_grid->density(_grid->invNaturalTransform() * a) + _offset) * _scale;
-    float sigmaB = (_grid->density(_grid->invNaturalTransform() * b) + _offset) * _scale;
+    float sigmaA = (_variance->density(_variance->invNaturalTransform() * a) + _offset) * _scale;
+    float sigmaB = (_variance->density(_variance->invNaturalTransform() * b) + _offset) * _scale;
+    //return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
 
-    return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+    Eigen::Matrix3f anisoA = Eigen::Matrix3f::Identity();
+    Eigen::Matrix3f anisoB = Eigen::Matrix3f::Identity();
+
+    float detAnisoA = anisoA.determinant();
+    float detAnisoB = anisoB.determinant();
+
+    Eigen::Matrix3f anisoABavg = 0.5 * (anisoA + anisoB);
+    float detAnisoABavg = anisoABavg.determinant();
+
+    float ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
+
+    Eigen::Vector3f d = vec_conv<Eigen::Vector3f>(b - a);
+    float dsq = d.transpose() * anisoABavg.inverse() * d;
+    return sqrt(sigmaA) * sqrt(sigmaB) * ansioFac * _stationaryCov->cov(dsq);
 }
 
 void TabulatedMean::fromJson(JsonPtr value, const Scene& scene) {
@@ -388,8 +424,8 @@ Eigen::VectorXd GaussianProcess::mean(
     Vec3f deriv_dir, size_t numPts) const {
     Eigen::VectorXd ps_mean(numPts);
     for (size_t i = 0; i < numPts; i++) {
-        const Vec3f& ddir= ddirs ? ddirs[i] : deriv_dir;
-        ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
+        const Vec3f& ddir = ddirs ? ddirs[i] : deriv_dir;
+        ps_mean(i) = (*_mean)(derivative_types[i], points[i], ddir);
     }
     return ps_mean;
 }

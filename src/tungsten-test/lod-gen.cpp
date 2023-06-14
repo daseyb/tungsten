@@ -19,6 +19,8 @@ int gen3d(int argc, char** argv) {
 
     EmbreeUtil::initDevice();
 
+    std::string prefix = "sphere";
+
 #ifdef OPENVDB_AVAILABLE
     openvdb::initialize();
 #endif
@@ -37,7 +39,6 @@ int gen3d(int argc, char** argv) {
 
     auto gp = gp_medium->_gp;
 
-
     UniformPathSampler sampler(0);
     sampler.next1D();
     sampler.next1D();
@@ -51,6 +52,8 @@ int gen3d(int argc, char** argv) {
 
     Eigen::VectorXf mean(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     Eigen::VectorXf variance(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+    Eigen::VectorXf aniso(6 * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+
     auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(4.f);
     meanGrid->setGridClass(openvdb::GRID_LEVEL_SET);
     meanGrid->setName("density");
@@ -137,20 +140,67 @@ int gen3d(int argc, char** argv) {
                         }
                         variance[idx] /= (valid_samples - 1);
                     }
+
+                    {
+                        Vec3f bp = lerp(min, max, cp / (NUM_SAMPLE_POINTS - 1));
+
+                        Vec3f ps[] = {
+                            bp,bp,bp
+                        };
+
+                        Derivative derivs[]{
+                            Derivative::First, Derivative::First, Derivative::First
+                        };
+
+                        Vec3f ddirs[] = {
+                            Vec3f(1.f, 0.f, 0.f),
+                            Vec3f(0.f, 1.f, 0.f),
+                            Vec3f(0.f, 0.f, 1.f),
+                        };
+
+                        auto gps = gp->mean(ps, derivs, ddirs, Vec3f(0.f), 3);
+                        auto grad = vec_conv<Vec3f>(gps);
+                        TangentFrame tf(grad);
+
+                        Eigen::Matrix3f vmat;
+                        vmat.col(0) = vec_conv<Eigen::Vector3f>(tf.tangent);
+                        vmat.col(1) = vec_conv<Eigen::Vector3f>(tf.bitangent);
+                        vmat.col(2) = vec_conv<Eigen::Vector3f>(tf.normal);
+
+
+                        Eigen::Matrix3f smat = Eigen::Matrix3f::Identity();
+                        smat.diagonal() = Eigen::Vector3f{ 1.f, 1.f, 5.f };
+
+                        Eigen::Matrix3f mat = vmat * smat * vmat.transpose();
+
+                        aniso[idx * 6 + 0] = mat(0, 0);
+                        aniso[idx * 6 + 1] = mat(1, 1);
+                        aniso[idx * 6 + 2] = mat(2, 2);
+
+                        aniso[idx * 6 + 3] = mat(0, 1);
+                        aniso[idx * 6 + 4] = mat(0, 2);
+                        aniso[idx * 6 + 5] = mat(1, 2);
+                    }
                 }
             }
         }
     }
 
     {
-        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/tree-voxelized-mean-eval-avg-%d.bin", NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
+        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/%s-mean-eval-avg-%d.bin", prefix, NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
         xfile.write((char*)mean.data(), sizeof(float) * mean.rows() * mean.cols());
         xfile.close();
     }
 
     {
-        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/tree-voxelized-var-eval-avg-%d.bin", NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
+        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/%s-var-eval-avg-%d.bin", prefix, NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
         xfile.write((char*)variance.data(), sizeof(float) * variance.rows() * variance.cols());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/%s-aniso-%d.bin", prefix, NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
+        xfile.write((char*)aniso.data(), sizeof(float) * aniso.rows() * aniso.cols());
         xfile.close();
     }
 
@@ -161,6 +211,23 @@ int gen3d(int argc, char** argv) {
         openvdb::FloatGrid::Accessor varAccessor = varGrid->getAccessor();
         varGrid->setName("density");
         varGrid->setTransform(openvdb::math::Transform::createLinearTransform(4.0 / NUM_SAMPLE_POINTS));
+        
+        openvdb::GridPtrVec anisoGrids;
+        std::vector<openvdb::FloatGrid::Accessor> anisoAccessors;
+
+        std::string names[] = {
+            "sigma_xx", "sigma_yy", "sigma_zz",
+            "sigma_xy", "sigma_xz", "sigma_yz",
+        };
+
+        for (int i = 0; i < 6; i++) {
+            auto anisoGrid = openvdb::createGrid<openvdb::FloatGrid>();
+            anisoGrid->setName(names[i]);
+            anisoGrid->setTransform(openvdb::math::Transform::createLinearTransform(4.0 / NUM_SAMPLE_POINTS));
+            anisoAccessors.push_back(anisoGrid->getAccessor());
+            anisoGrids.push_back(anisoGrid);
+        }
+
 
         int idx = 0;
         for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
@@ -168,6 +235,11 @@ int gen3d(int argc, char** argv) {
             for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
                 for (int k = 0; k < NUM_SAMPLE_POINTS; k++) {
                     varAccessor.setValue({ i,j,k }, variance(idx));
+
+                    for (int anisoIdx = 0; anisoIdx < 6; anisoIdx++) {
+                        anisoAccessors[anisoIdx].setValue({ i,j,k }, aniso[idx * 6 + anisoIdx]);
+                    }
+
                     idx++;
                 }
             }
@@ -176,7 +248,7 @@ int gen3d(int argc, char** argv) {
         {
             openvdb::GridPtrVec grids;
             grids.push_back(meanGrid);
-            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/tree-voxelized-mean-eval-avg-%d.vdb", NUM_SAMPLE_POINTS));
+            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/%s-mean-eval-avg-%d.vdb", prefix, NUM_SAMPLE_POINTS));
             file.write(grids);
             file.close();
         }
@@ -184,8 +256,14 @@ int gen3d(int argc, char** argv) {
         {
             openvdb::GridPtrVec grids;
             grids.push_back(varGrid);
-            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/tree-voxelized-var-eval-avg-%d.vdb", NUM_SAMPLE_POINTS));
+            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/%s-var-eval-avg-%d.vdb", prefix, NUM_SAMPLE_POINTS));
             file.write(grids);
+            file.close();
+        }
+
+        {
+            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/%s-aniso-%d.vdb", prefix, NUM_SAMPLE_POINTS));
+            file.write(anisoGrids);
             file.close();
         }
     }

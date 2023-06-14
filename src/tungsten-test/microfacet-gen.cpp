@@ -55,7 +55,7 @@ float compute_beckmann_roughness(const CovarianceFunction& cov) {
 }
 
 
-void normals_and_stuff(const GaussianProcess& gp) {
+void normals_and_stuff(const GaussianProcess& gp, std::string output) {
     UniformPathSampler sampler(0);
     sampler.next1D();
     sampler.next1D();
@@ -80,7 +80,7 @@ void normals_and_stuff(const GaussianProcess& gp) {
         Eigen::MatrixXf samples = gp.sample(
             points.data(), derivs.data(), points.size(), nullptr,
             nullptr, 0,
-            Vec3f(1.0f, 0.0f, 0.0f), 100, sampler).cast<float>();
+            Vec3f(1.0f, 0.0f, 0.0f), 1, sampler).cast<float>();
 
         std::cout << samples.minCoeff() << "-" << samples.maxCoeff() << std::endl;
 
@@ -94,6 +94,12 @@ void normals_and_stuff(const GaussianProcess& gp) {
             }
         }
 
+        Path basePath = Path(output) / Path(gp._cov->id());
+
+        if (!basePath.exists()) {
+            FileUtils::createDirectory(basePath);
+        }
+
         for (int i = 0; i < samples.cols(); i++) {
             Eigen::MatrixXf normals = compute_normals(samples.col(i));
             normals.array() += 1.0f;
@@ -102,9 +108,9 @@ void normals_and_stuff(const GaussianProcess& gp) {
             samples.col(i).array() -= samples.col(i).minCoeff();
             samples.col(i).array() /= samples.col(i).maxCoeff();
 
-            ImageIO::saveHdr(incrementalFilename("microfacet/normals/squared-exponential-0.5/rel.exr", "", false), samples.col(i).data(), NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 1);
-            ImageIO::saveHdr(incrementalFilename("microfacet/normals/squared-exponential-0.5/thr.exr", "", false), thresholded.col(i).data(), NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 1);
-            ImageIO::saveHdr(incrementalFilename("microfacet/normals/squared-exponential-0.5/normals.exr", "", false), normals.data(), NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 3);
+            ImageIO::saveHdr(incrementalFilename(basePath / Path("rel.exr"), "", false), samples.col(i).data(), NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 1);
+            ImageIO::saveHdr(incrementalFilename(basePath / Path("thr.exr"), "", false), thresholded.col(i).data(), NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 1);
+            ImageIO::saveHdr(incrementalFilename(basePath / Path("normals.exr"), "", false), normals.data(), NUM_SAMPLE_POINTS, NUM_SAMPLE_POINTS, 3);
         }
     }
 }
@@ -147,8 +153,12 @@ void side_view(const GaussianProcess& gp, std::string output) {
             }
         }
 
+        Path basePath = Path(output) / Path(gp._cov->id());
+        if (!basePath.exists()) {
+            FileUtils::createDirectory(basePath);
+        }
+
         for (int i = 0; i < samples.cols(); i++) {
-            Path basePath = Path(output) / Path(gp._cov->id());
 
             std::ofstream xfile(incrementalFilename(basePath + Path("-rel.bin"), "", false).asString(), std::ios::out | std::ios::binary);
             xfile.write((char*)samples.col(i).data(), sizeof(float) * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
@@ -285,13 +295,17 @@ int main(int argc, char** argv) {
 
             sample_beckmann(alpha);
 
+            normals_and_stuff(*gp, "microfacet/normals/");
+
+            /*
             auto testFile = Path("microfacet/visible-normals/") / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS));
             if (testFile.exists()) {
                 std::cout << "skipping...\n";
                 continue;
             }
+            */
 
-            v_ndf(gp, angle, 10000, "microfacet/visible-normals/");
+            //v_ndf(gp, angle, 10000, "microfacet/visible-normals/");
             //side_view(gp, "microfacet/side-view/");
         }
         catch (std::exception& e) {

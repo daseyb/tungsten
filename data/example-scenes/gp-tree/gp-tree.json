@@ -16,7 +16,7 @@
 				"type": "standard",
 				"mean": {
 					"type": "mesh",
-					"file": "tree-voxelized.obj",
+					"file": "tree.obj",
 					"signed": true,
 					"transform": {
 						"position": [
@@ -146,22 +146,22 @@
             "sample": true
         }
     ],
-    "camera": {
+	"camera": {
         "tonemap": "filmic",
         "resolution": [
-            256,
-            400
+            512,
+			512
         ],
         "reconstruction_filter": "tent",
         "transform": {
             "position": [
                 -1,
-                2.0,
+                1.07,
                 3
             ],
             "look_at": [
                 0,
-                1.0,
+                1.2,
                 0
             ],
             "up": [
@@ -171,7 +171,7 @@
             ]
         },
         "type": "pinhole",
-        "fov": 30.0
+        "fov": 50.0
     },
     "integrator": {
         "min_bounces": 0,
