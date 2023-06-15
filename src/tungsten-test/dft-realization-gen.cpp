@@ -258,7 +258,7 @@ void rational_quadratic_sphere_3D() {
 
 int main() {
     try {
-        GaussianProcess gp(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.0f, 0.25f, Vec3f(1.f, 1.0f, 1.f)));
+        GaussianProcess gp(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.0f, 0.25f, Vec3f(1.f, 1.f, 1.f)));
         real_2D(gp);
     }
     catch (std::exception& e) {
