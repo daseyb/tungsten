@@ -69,7 +69,6 @@ public:
 
         switch (dist) {
         case Beckmann: {
-            return 1;
             float cosThetaSq = v.z()*v.z();
             float tanTheta = std::abs(std::sqrt(max(1.0f - cosThetaSq, 0.0f))/v.z());
             float a = 1.0f/(alpha*tanTheta);
