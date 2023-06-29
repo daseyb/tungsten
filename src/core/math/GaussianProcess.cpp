@@ -394,8 +394,8 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
 #endif
 
     for (size_t i = 0; i < numPts; i++) {
-        ps_mean(i) = (*_mean)(derivative_types[i], points[i], deriv_dir);
         const Vec3f& ddir_a = ddirs ? ddirs[i] : deriv_dir;
+        ps_mean(i) = (*_mean)(derivative_types[i], points[i], ddir_a);
 
         for (size_t j = 0; j < numPts; j++) {
             const Vec3f& ddir_b = ddirs ? ddirs[j] : deriv_dir;

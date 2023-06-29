@@ -63,8 +63,8 @@ namespace Tungsten {
         float operator()(Derivative a, Derivative b, Vec3f pa, Vec3f pb, Vec3f gradDirA, Vec3f gradDirB) const {
             Vec3Diff pad = to_diff(pa);
             Vec3Diff pbd = to_diff(pb);
-            Eigen::Array3d gradDirAD = Eigen::Array3d{ gradDirA.x(), gradDirA.y(), gradDirA.z() };
-            Eigen::Array3d gradDirBD = Eigen::Array3d{ gradDirB.x(), gradDirB.y(), gradDirB.z() };
+            Eigen::Array3d gradDirAD = vec_conv<Eigen::Array3d>(gradDirA);
+            Eigen::Array3d gradDirBD = vec_conv<Eigen::Array3d>(gradDirB);
 
             if (a == Derivative::None && b == Derivative::None) {
                 return cov(pa, pb);
@@ -82,6 +82,11 @@ namespace Tungsten {
 
         virtual bool isMonotonic() const {
             return true;
+        }
+
+        float compute_beckmann_roughness() {
+            float L2 = (*this)(Derivative::First, Derivative::First, Vec3f(0.f), Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), Vec3f(1.f, 0.f, 0.f));
+            return sqrt(2 * L2);
         }
 
         virtual std::string id() const = 0;
@@ -179,11 +184,11 @@ namespace Tungsten {
         float _sigma, _l;
 
         virtual FloatD cov(FloatD absq) const override {
-            return sqr(_sigma)* exp(-(absq / (sqr(_l))));
+            return sqr(_sigma)* exp(-(absq / (2*sqr(_l))));
         }
 
         virtual float cov(float absq) const override {
-            return sqr(_sigma) * exp(-(absq / (sqr(_l))));
+            return sqr(_sigma) * exp(-(absq / (2*sqr(_l))));
         }
     };
 

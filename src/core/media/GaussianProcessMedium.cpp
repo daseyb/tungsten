@@ -10,6 +10,7 @@
 
 #include "io/JsonObject.hpp"
 #include "io/Scene.hpp"
+#include "bsdfs/Microfacet.hpp"
 
 namespace Tungsten {
 
@@ -167,7 +168,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
 
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
-                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), _ctxt == GPCorrelationContext::Dori ? cond_pts.size() : 1, nullptr,
+                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), _ctxt == GPCorrelationContext::Goldfish ? cond_pts.size() : 1, nullptr,
                     nullptr, 0,
                     ray.dir(), 1, sampler) * startSign;
             }
@@ -189,6 +190,16 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
 
                     Vec3f ip = ray.pos() + ray.dir() * t;
 
+                    //points[_samplePoints] = ip;
+                    //derivs[_samplePoints] = Derivative::None;
+                    //Eigen::VectorXd sampleValues(_samplePoints + 1);
+                    //sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0);
+                    //sampleValues(_samplePoints) = 0;
+
+
+                    points[p] = ip;
+                    gpSamples(p, 0) = 0;
+                    int numNormCondPoints = 0;
 #if 0
                     float eps = 0.001f;
                     std::array<Vec3f, 6> gradPs{
@@ -205,18 +216,9 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                         Derivative::None, Derivative::None, Derivative::None
                     };
 
-                    //points[p] = ip;
-                    //gpSamples(p, 0) = 0;
-
-                    //Eigen::VectorXf sampleValues(_samplePoints+1);
-                    //sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0);
-                    //sampleValues(_samplePoints) = 0;
-
-                    Eigen::MatrixXf fgpSamples = gpSamples.cast<float>();
-
                     Eigen::MatrixXd gradSamples = _gp->sample_cond(
                         gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-                        points.data(), fgpSamples.data(), derivs.data(), p, nullptr,
+                        points.data(), gpSamples.data(), derivs.data(), numNormCondPoints, nullptr,
                         nullptr, 0,
                         ray.dir(), 1, sampler);
 
@@ -232,33 +234,26 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                     std::array<Vec3f, 1> gradPs{ ip };
                     std::array<Derivative, 1> gradDerivs{ Derivative::First };
 
-                    points[_samplePoints] = ip;
-                    derivs[_samplePoints] = Derivative::None;
-
-                    Eigen::VectorXd sampleValues(_samplePoints + 1);
-                    sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0);
-                    sampleValues(_samplePoints) = 0;
-
                     Vec3f grad;
 
                     grad.x() = _gp->sample_cond(
                         gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-                        points.data(), sampleValues.data(), derivs.data(), _samplePoints + 1, nullptr,
+                        points.data(), gpSamples.data(), derivs.data(), numNormCondPoints, nullptr,
                         nullptr, 0,
                         Vec3f(1.f, 0.f, 0.f), 1, sampler)(0, 0);
 
                     grad.y() = _gp->sample_cond(
                         gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-                        points.data(), sampleValues.data(), derivs.data(), _samplePoints + 1, nullptr,
+                        points.data(), gpSamples.data(), derivs.data(), numNormCondPoints, nullptr,
                         nullptr, 0,
                         Vec3f(0.f, 1.f, 0.f), 1, sampler)(0, 0);
 
                     grad.z() = _gp->sample_cond(
                         gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-                        points.data(), sampleValues.data(), derivs.data(), _samplePoints + 1, nullptr,
+                        points.data(), gpSamples.data(), derivs.data(), numNormCondPoints, nullptr,
                         nullptr, 0,
                         Vec3f(0.f, 0.f, 1.f), 1, sampler)(0, 0);
-#else
+#elif 0
                     std::array<Vec3f, 3> gradPs{ ip, ip, ip };
                     std::array<Derivative, 3> gradDerivs{ Derivative::First, Derivative::First, Derivative::First };
                     std::array<Vec3f, 3> gradDirs{
@@ -267,30 +262,27 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                         Vec3f(0.f, 0.f, 1.f),
                     };
 
-                    points[_samplePoints] = ip;
-                    derivs[_samplePoints] = Derivative::None;
-
-                    Eigen::VectorXd sampleValues(_samplePoints + 1);
-                    sampleValues.block(0, 0, _samplePoints, 1) = gpSamples.col(0);
-                    sampleValues(_samplePoints) = 0;
-
                     auto gradSamples = _gp->sample_cond(
                         gradPs.data(), gradDerivs.data(), gradPs.size(), gradDirs.data(),
-                        points.data(), sampleValues.data(), derivs.data(), _samplePoints+1, nullptr,
+                        points.data(), gpSamples.data(), derivs.data(), numNormCondPoints, nullptr,
                         nullptr, 0,
                         ray.dir(), 1, sampler);
 
                     Vec3f grad = {
                         (float)gradSamples(0,0), (float)gradSamples(1,0), (float)gradSamples(2,0)
                     };
+#else
+                    static Microfacet::Distribution distribution("beckmann");
+                    Vec3f grad = Microfacet::sample(distribution, _gp->_cov->compute_beckmann_roughness(), sampler.next2D());
+                    std::swap(grad.y(), grad.z());
 #endif
 
                     grad *= startSign;
 
                     if (grad.dot(ray.dir()) > 0) {
                         //std::cout << "Gradient wrong direction: " << grad.dot(ray.dir()) << "\n";
-                        //return false;
-                        grad *= -1;
+                        return false;
+                        //grad *= -1;
                     }
 
                     sample.aniso = grad;
