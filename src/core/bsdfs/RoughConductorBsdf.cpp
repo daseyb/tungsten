@@ -83,8 +83,8 @@ bool RoughConductorBsdf::sample(SurfaceScatterEvent &event) const
     float weight = wiDotM*G*D/(event.wi.z()*mPdf);
     Vec3f F = Fresnel::conductorReflectance(_eta, _k, wiDotM);
 
-    event.pdf = pdf;
-    event.weight = albedo(event.info)*(F*weight);
+    event.pdf = mPdf;// pdf;
+    event.weight = albedo(event.info); // *(F * weight);
     event.sampledLobe = BsdfLobes::GlossyReflectionLobe;
     return true;
 }
@@ -106,7 +106,7 @@ Vec3f RoughConductorBsdf::eval(const SurfaceScatterEvent &event) const
     float D = Microfacet::D(_distribution, alpha, hr);
     float fr = (G*D*0.25f)/event.wi.z();
 
-    return albedo(event.info)*(F*fr);
+    return albedo(event.info) * D; // (F * fr);
 }
 
 bool RoughConductorBsdf::invert(WritablePathSampleGenerator &sampler, const SurfaceScatterEvent &event) const
@@ -139,7 +139,7 @@ float RoughConductorBsdf::pdf(const SurfaceScatterEvent &event) const
     float sampleAlpha = Microfacet::roughnessToAlpha(_distribution, sampleRoughness);
 
     Vec3f hr = (event.wi + event.wo).normalized();
-    return Microfacet::pdf(_distribution, sampleAlpha, hr)*0.25f/event.wi.dot(hr);
+    return Microfacet::pdf(_distribution, sampleAlpha, hr); // *0.25f / event.wi.dot(hr);
 }
 
 }

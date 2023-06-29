@@ -109,7 +109,7 @@ std::shared_ptr<Medium> Scene::fetchMedium(JsonPtr value) const
 
 std::shared_ptr<Grid> Scene::fetchGrid(JsonPtr value) const
 {
-    return instantiate<Grid>(value, *this);
+    return fetchObject(_grids, *this, value);
 }
 
 std::shared_ptr<Primitive> Scene::fetchPrimitive(JsonPtr value) const
@@ -255,6 +255,9 @@ void Scene::fromJson(JsonPtr value, const Scene &scene)
     if (auto bsdfs = value["bsdfs"])
         for (unsigned i = 0; i < bsdfs.size(); ++i)
             _bsdfs.emplace_back(instantiate<Bsdf>(bsdfs[i], *this));
+    if (auto grids = value["grids"])
+        for (unsigned i = 0; i < grids.size(); ++i)
+            _grids.emplace_back(instantiate<Grid>(grids[i], *this));
     if (auto media = value["media"])
         for (unsigned i = 0; i < media.size(); ++i)
             _media.emplace_back(instantiate<Medium>(media[i], *this));

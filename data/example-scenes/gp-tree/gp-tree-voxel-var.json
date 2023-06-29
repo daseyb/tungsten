@@ -18,7 +18,7 @@
 				"covariance_epsilon": 0.00000,
 				"mean": {
 					"type": "tabulated",
-					"scale": 6,
+					"scale": 1,
 					"offset": 0,
 					"grid": {
 						"type": "vdb",
@@ -46,7 +46,7 @@
 					"scale": 1,
 					"cov": {
 						"type": "squared_exponential",
-						"lengthScale": 0.2,
+						"lengthScale": 0.01,
 						"sigma": 1
 					},
 					"grid": {
@@ -234,7 +234,7 @@
         "enable_resume_render": false,
         "stratified_sampler": true,
         "scene_bvh": true,
-        "spp": 64,
+        "spp": 2,
         "spp_step": 1,
         "timeout": "0",
         "output_file": "gp-tree-voxel-var.png",
