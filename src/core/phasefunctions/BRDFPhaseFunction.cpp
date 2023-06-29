@@ -62,7 +62,7 @@ bool BRDFPhaseFunction::sample(PathSampleGenerator &sampler, const Vec3f &wi, co
     se.info = &info;
 
     if (!_bsdf->sample(se)) return false;
-    sample.w = se.frame.toGlobal(se.wo);
+    sample.w = se.frame.toGlobal(se.wo).normalized();
     sample.weight = se.weight;
     sample.pdf = se.pdf;
     return true;
