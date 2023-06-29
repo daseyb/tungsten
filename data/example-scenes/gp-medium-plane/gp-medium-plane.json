@@ -209,7 +209,7 @@
         "max_bounces": 5,
         "enable_consistency_checks": false,
         "enable_two_sided_shading": true,
-        "enable_light_sampling": false,
+        "enable_light_sampling": true,
         "enable_volume_light_sampling": false
     },
     "renderer": {
