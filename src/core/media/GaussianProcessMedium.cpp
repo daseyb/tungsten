@@ -199,7 +199,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
 
                     points[p] = ip;
                     gpSamples(p, 0) = 0;
-                    int numNormCondPoints = 0;
+                    int numNormCondPoints = p+1;
 #if 0
                     float eps = 0.001f;
                     std::array<Vec3f, 6> gradPs{
@@ -253,7 +253,7 @@ bool GaussianProcessMedium::sampleDistance(PathSampleGenerator &sampler, const R
                         points.data(), gpSamples.data(), derivs.data(), numNormCondPoints, nullptr,
                         nullptr, 0,
                         Vec3f(0.f, 0.f, 1.f), 1, sampler)(0, 0);
-#elif 0
+#elif 1
                     std::array<Vec3f, 3> gradPs{ ip, ip, ip };
                     std::array<Derivative, 3> gradDerivs{ Derivative::First, Derivative::First, Derivative::First };
                     std::array<Vec3f, 3> gradDirs{
