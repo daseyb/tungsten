@@ -247,6 +247,52 @@ void v_ndf(std::shared_ptr<GaussianProcess> gp, float angle, int samples, std::s
     }
 }
 
+void ndf(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
+
+    Path basePath = Path(output) / Path(gp->_cov->id());
+
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
+
+    auto gp_med = std::make_shared<GaussianProcessMedium>(gp, 0, 1, 1, NUM_RAY_SAMPLE_POINTS);
+
+    UniformPathSampler sampler(0);
+    sampler.next1D();
+    sampler.next1D();
+
+    Eigen::MatrixXf normals(samples, 3);
+
+
+    Ray ray = Ray(Vec3f(0.f, 0.f, 50.f), Vec3f(0.f, 0.f, -1.f));
+    ray.setNearT(-5.f);
+    ray.setFarT(5.f);
+
+    for (int s = 0; s < samples;) {
+
+        if ((s + 1) % 10000 == 0) {
+            std::cout << s << "/" << samples;
+            std::cout << "\r";
+        }
+
+        Vec3f grad;
+        gp_med->sampleGradient(sampler, ray, Vec3f(-10.f, 20.0f, -5.f), nullptr, nullptr, nullptr, 0, grad);
+
+        grad.normalize();
+        normals(s, 0) = grad.x();
+        normals(s, 1) = grad.y();
+        normals(s, 2) = grad.z();
+
+        s++;
+    }
+
+    {
+        std::ofstream xfile(incrementalFilename(basePath + Path("-ndf.bin"), "", false).asString(), std::ios::out | std::ios::binary);
+        xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
+        xfile.close();
+    }
+}
+
 template<typename T>
 static std::shared_ptr<T> instantiate(JsonPtr value, const Scene& scene)
 {
@@ -295,7 +341,7 @@ int main(int argc, char** argv) {
 
             sample_beckmann(alpha);
 
-            normals_and_stuff(*gp, "microfacet/normals/");
+            //normals_and_stuff(*gp, "microfacet/normals/");
 
             /*
             auto testFile = Path("microfacet/visible-normals/") / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS));
@@ -305,7 +351,7 @@ int main(int argc, char** argv) {
             }
             */
 
-            //v_ndf(gp, angle, 10000, "microfacet/visible-normals/");
+            ndf(gp, 10000000, "microfacet/normals/");
             //side_view(gp, "microfacet/side-view/");
         }
         catch (std::exception& e) {

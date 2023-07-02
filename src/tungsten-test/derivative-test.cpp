@@ -4,12 +4,43 @@
 #include <core/math/Ray.hpp>
 #include <fstream>
 #include <cfloat>
+#include <autodiff/forward/dual.hpp>
+#include <autodiff/forward/dual/eigen.hpp>
 
 using namespace Tungsten;
 
 constexpr size_t NUM_SAMPLE_POINTS = 128;
 
+using FloatDD = autodiff::dual2nd;
+using Vec3DD = autodiff::Vector3dual2nd;
+using VecXDD = autodiff::VectorXdual2nd;
+
+FloatDD test_f(Vec3DD x, Vec3DD y) {
+    return x.dot(y);
+}
+
+void directional_deriv_testing() {
+    
+    Vec3DD x = -Vec3DD::Ones();
+    Vec3DD y = Vec3DD::Ones();
+
+    auto hess = autodiff::hessian(test_f, wrt(x, y), at(x, y)).block(3, 0, 3, 3);
+    auto grad = autodiff::gradient(test_f, wrt(x, y), at(x, y));
+    std::cout << hess << std::endl;
+    std::cout << "------------" << std::endl;
+    std::cout << grad.transpose() << std::endl;
+
+
+    //Eigen::VectorXd dirX = 
+
+
+}
+
 int main() {
+
+    directional_deriv_testing();
+
+    return 0;
 
 	auto gp = std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.0f, 1.0f));
 
