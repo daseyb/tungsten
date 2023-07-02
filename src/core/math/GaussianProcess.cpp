@@ -35,9 +35,10 @@ FloatD CovarianceFunction::dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirB) 
     return dcov_da(b, a, dirB);
 }
 
-FloatD CovarianceFunction::dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA, Eigen::Array3d dirB) const {
-    auto covDiff = autodiff::derivatives([&](auto a, auto b) { return cov(a, b); }, autodiff::along(Eigen::Array3d(-dirA*0.5f), Eigen::Array3d(dirB*0.5f)), at(a, b));
-    return -covDiff[2];
+FloatDD CovarianceFunction::dcov2_dadb(Vec3DD a, Vec3DD b, Eigen::Array3d dirA, Eigen::Array3d dirB) const {
+    Eigen::Matrix3d hess = autodiff::hessian([&](auto a, auto b) { return cov(a, b); }, wrt(a, b), at(a, b)).block(3, 0, 3, 3);
+    double res = dirA.transpose().matrix() * hess * dirB.matrix();
+    return res;
 }
 
 
@@ -110,9 +111,32 @@ FloatD NonstationaryCovariance::sampleGrid(Vec3Diff a) const {
     return result;
 }
 
-static inline Vec3Diff mult(const Mat4f& a, const Vec3Diff& b)
+FloatDD NonstationaryCovariance::sampleGrid(Vec3DD a) const {
+    FloatDD result;
+    Vec3f ap = vec_conv<Vec3f>(a);
+    result.val = _variance->density(ap);
+
+    /**/
+    float eps = 0.001f;
+    float vals[] = {
+        _variance->density(ap + Vec3f(eps, 0.f, 0.f)),
+        _variance->density(ap + Vec3f(0.f, eps, 0.f)),
+        _variance->density(ap + Vec3f(0.f, 0.f, eps)),
+        _variance->density(ap - Vec3f(eps, 0.f, 0.f)),
+        _variance->density(ap - Vec3f(0.f, eps, 0.f)),
+        _variance->density(ap - Vec3f(0.f, 0.f, eps))
+    };
+    auto grad = Vec3f(vals[0] - vals[3], vals[1] - vals[4], vals[2] - vals[5]) / (2 * eps);
+
+    result.grad.val = grad.dot({ (float)a.x().grad.val, (float)a.y().grad.val , (float)a.z().grad.val });
+    result.grad.grad = 0; // linear interp
+    return result;
+}
+
+template<typename Vec>
+static inline Vec mult(const Mat4f& a, const Vec& b)
 {
-    return Vec3Diff(
+    return Vec(
         a(0, 0) * b.x() + a(0, 1) * b.y() + a(0, 2) * b.z() + a(0, 3),
         a(1, 0) * b.x() + a(1, 1) * b.y() + a(1, 2) * b.z() + a(1, 3),
         a(2, 0) * b.x() + a(2, 1) * b.y() + a(2, 2) * b.z() + a(2, 3)
@@ -138,6 +162,28 @@ FloatD NonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
 
     Vec3Diff d = b - a;
     FloatD dsq = d.transpose() * anisoABavg.inverse() * d;
+    return sqrt(sigmaA) * sqrt(sigmaB) * ansioFac * _stationaryCov->cov(dsq);
+}
+
+FloatDD NonstationaryCovariance::cov(Vec3DD a, Vec3DD b) const {
+
+    auto sigmaA = (sampleGrid(mult(_variance->invNaturalTransform(), a)) + _offset) * _scale;
+    auto sigmaB = (sampleGrid(mult(_variance->invNaturalTransform(), b)) + _offset) * _scale;
+    //return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+
+    auto anisoA = Mat3DD::Identity();
+    auto anisoB = Mat3DD::Identity();
+
+    auto detAnisoA = anisoA.determinant();
+    auto detAnisoB = anisoB.determinant();
+
+    auto anisoABavg = 0.5 * (anisoA + anisoB);
+    auto detAnisoABavg = anisoABavg.determinant();
+
+    auto ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
+
+    auto d = b - a;
+    auto dsq = d.transpose() * anisoABavg.inverse() * d;
     return sqrt(sigmaA) * sqrt(sigmaB) * ansioFac * _stationaryCov->cov(dsq);
 }
 
