@@ -2,7 +2,7 @@
 #define GAUSSIANPROCESSMEDIUM_HPP_
 
 #include "Medium.hpp"
-
+#include "math/GaussianProcess.hpp"
 
 namespace Tungsten {
 
@@ -51,6 +51,10 @@ public:
     virtual Vec3f sigmaS(Vec3f p) const override;
     virtual Vec3f sigmaT(Vec3f p) const override;
 
+    bool sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3f& ip,
+        const Vec3f *cond_ps, const double *cond_vs, const Derivative *cond_derivs, int numCondPoints, 
+        Vec3f& grad) const;
+        
     virtual bool sampleDistance(PathSampleGenerator &sampler, const Ray &ray,
             MediumState &state, MediumSample &sample) const override;
     virtual Vec3f transmittance(PathSampleGenerator &sampler, const Ray &ray, bool startOnSurface, bool endOnSurface, MediumSample* sample) const override;

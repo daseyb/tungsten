@@ -18,15 +18,18 @@
 
 #include <autodiff/forward/real/real.hpp>
 #include <autodiff/forward/real/eigen.hpp>
+
+#include <autodiff/forward/dual.hpp>
+#include <autodiff/forward/dual/eigen.hpp>
+
 #include <igl/signed_distance.h>
 
-using FloatD = autodiff::real2nd;
-
-namespace fcpw {
-    template<size_t DIM> class Scene;
-}
-
 namespace Tungsten {
+    using FloatDD = autodiff::dual2nd;
+    using Vec3DD = autodiff::Vector3dual2nd;
+    using Mat3DD = autodiff::Matrix3dual2nd;
+
+    using FloatD = autodiff::real2nd;
     using Vec3Diff = autodiff::Vector3real2nd;
     using Vec4Diff = autodiff::Vector4real2nd;
     using Mat3Diff = autodiff::Matrix3real2nd;
@@ -61,22 +64,17 @@ namespace Tungsten {
 
     public:
         float operator()(Derivative a, Derivative b, Vec3f pa, Vec3f pb, Vec3f gradDirA, Vec3f gradDirB) const {
-            Vec3Diff pad = to_diff(pa);
-            Vec3Diff pbd = to_diff(pb);
-            Eigen::Array3d gradDirAD = vec_conv<Eigen::Array3d>(gradDirA);
-            Eigen::Array3d gradDirBD = vec_conv<Eigen::Array3d>(gradDirB);
-
             if (a == Derivative::None && b == Derivative::None) {
                 return cov(pa, pb);
             }
             else if (a == Derivative::First && b == Derivative::None) {
-                return (float)dcov_da(pad, pbd, gradDirAD);
+                return (float)dcov_da(to_diff(pa), to_diff(pb), vec_conv<Eigen::Array3d>(gradDirA));
             }
             else if (a == Derivative::None && b == Derivative::First) {
-                return (float)dcov_db(pad, pbd, gradDirBD);
+                return (float)dcov_db(to_diff(pa), to_diff(pb), vec_conv<Eigen::Array3d>(gradDirB));
             }
             else {
-                return (float)dcov2_dadb(pad, pbd, gradDirAD, gradDirBD);
+                return (float)dcov2_dadb(vec_conv<Vec3DD>(pa), vec_conv<Vec3DD>(pb), vec_conv<Eigen::Array3d>(gradDirA), vec_conv<Eigen::Array3d>(gradDirB));
             }
         }
 
@@ -95,20 +93,27 @@ namespace Tungsten {
 
     private:
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const = 0;
+        virtual FloatDD cov(Vec3DD a, Vec3DD b) const = 0;
         virtual float cov(Vec3f a, Vec3f b) const = 0;
 
         virtual FloatD dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA) const;
         virtual FloatD dcov_db(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirB) const;
-        virtual FloatD dcov2_dadb(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA, Eigen::Array3d dirB) const;
+        virtual FloatDD dcov2_dadb(Vec3DD a, Vec3DD b, Eigen::Array3d dirA, Eigen::Array3d dirB) const;
     };
 
     class StationaryCovariance : public CovarianceFunction {
     private:
         virtual FloatD cov(FloatD absq) const = 0;
+        virtual FloatDD cov(FloatDD absq) const = 0;
         virtual float cov(float absq) const = 0;
 
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
             FloatD absq = dist2(a, b, _aniso);
+            return cov(absq);
+        }
+
+        virtual FloatDD cov(Vec3DD a, Vec3DD b) const override {
+            FloatDD absq = dist2(a, b, _aniso);
             return cov(absq);
         }
 
@@ -141,9 +146,12 @@ namespace Tungsten {
 
     private:
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override;
+        virtual FloatDD cov(Vec3DD a, Vec3DD b) const override;
         virtual float cov(Vec3f a, Vec3f b) const override;
 
         FloatD sampleGrid(Vec3Diff a) const;
+        FloatDD sampleGrid(Vec3DD a) const;
+
         std::shared_ptr<StationaryCovariance> _stationaryCov;
         std::shared_ptr<Grid> _variance;
         std::shared_ptr<Grid> _aniso;
@@ -187,6 +195,10 @@ namespace Tungsten {
             return sqr(_sigma)* exp(-(absq / (2*sqr(_l))));
         }
 
+        virtual FloatDD cov(FloatDD absq) const override {
+            return sqr(_sigma) * exp(-(absq / (2 * sqr(_l))));
+        }
+
         virtual float cov(float absq) const override {
             return sqr(_sigma) * exp(-(absq / (2*sqr(_l))));
         }
@@ -224,6 +236,10 @@ namespace Tungsten {
         float _sigma, _a, _l;
 
         virtual FloatD cov(FloatD absq) const override {
+            return sqr(_sigma) * pow((1.0f + absq / (2 * _a * _l * _l)), -_a);
+        }
+
+        virtual FloatDD cov(FloatDD absq) const override {
             return sqr(_sigma) * pow((1.0f + absq / (2 * _a * _l * _l)), -_a);
         }
 
@@ -268,6 +284,10 @@ namespace Tungsten {
             return sqr(_sigma) * exp(-2 * pow(sin(PI * sqrt(absq) * _w), 2.f)) / (_l * _l);
         }
 
+        virtual FloatDD cov(FloatDD absq) const override {
+            return sqr(_sigma) * exp(-2 * pow(sin(PI * sqrt(absq) * _w), 2.f)) / (_l * _l);
+        }
+
         virtual float cov(float absq) const override {
             return sqr(_sigma) * exp(-2 * pow(sin(PI * sqrt(absq) * _w), 2.f)) / (_l * _l);
         }
@@ -305,6 +325,11 @@ namespace Tungsten {
         float _sigma, _R;
 
         virtual FloatD cov(FloatD absq) const override {
+            auto ab = sqrt(absq);
+            return sqr(_sigma) / 12 * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
+        }
+
+        virtual FloatDD cov(FloatDD absq) const override {
             auto ab = sqrt(absq);
             return sqr(_sigma) / 12 * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
         }
