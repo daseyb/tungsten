@@ -275,8 +275,9 @@ void ndf(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
             std::cout << "\r";
         }
 
+        Medium::MediumState state;
         Vec3f grad;
-        gp_med->sampleGradient(sampler, ray, Vec3f(-10.f, 20.0f, -5.f), nullptr, nullptr, nullptr, 0, grad);
+        gp_med->sampleGradient(sampler, ray, Vec3f(-10.f, 20.0f, -5.f), state, grad);
 
         grad.normalize();
         normals(s, 0) = grad.x();

@@ -18,6 +18,7 @@
 namespace Tungsten {
 
 class Scene;
+struct GPContext;
 
 class Medium : public JsonSerializable
 {
@@ -33,6 +34,7 @@ public:
         int component;
         int bounce;
         Vec3f lastAniso;
+        std::shared_ptr<GPContext> gpContext;
 
         void reset()
         {

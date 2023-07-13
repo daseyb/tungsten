@@ -8,6 +8,20 @@ namespace Tungsten {
 
 class GaussianProcess;
 
+struct GPContext {
+
+};
+
+struct GPContextWeightSpace : public GPContext {
+
+};
+
+struct GPContextFunctionSpace : public GPContext {
+    std::vector<Vec3f> points;
+    Eigen::MatrixXd values;
+    std::vector<Derivative> derivs;
+};
+
 enum class GPCorrelationContext {
     Elephant,
     Goldfish,
@@ -52,9 +66,10 @@ public:
     virtual Vec3f sigmaT(Vec3f p) const override;
 
     bool sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3f& ip,
-        const Vec3f *cond_ps, const double *cond_vs, const Derivative *cond_derivs, int numCondPoints, 
+        MediumState& state,
         Vec3f& grad) const;
-        
+    bool intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
+
     virtual bool sampleDistance(PathSampleGenerator &sampler, const Ray &ray,
             MediumState &state, MediumSample &sample) const override;
     virtual Vec3f transmittance(PathSampleGenerator &sampler, const Ray &ray, bool startOnSurface, bool endOnSurface, MediumSample* sample) const override;
