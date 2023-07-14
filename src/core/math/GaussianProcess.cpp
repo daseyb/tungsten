@@ -6,7 +6,6 @@
 #include "ziggurat_constants.h"
 #include "primitives/Triangle.hpp"
 #include "primitives/Vertex.hpp"
-#include <fcpw/fcpw.h>
 #include <Eigen/SparseQR>
 #include <Eigen/Core>
 #include <Spectra/SymEigsSolver.h>

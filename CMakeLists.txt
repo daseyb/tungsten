@@ -80,16 +80,11 @@ add_library(thirdparty STATIC
 
 add_subdirectory(src/thirdparty/eigen)
 
-
-set(ENOKI_AUTODIFF ON)
-add_subdirectory(src/thirdparty/fcpw)
-
 set(AUTODIFF_BUILD_TESTS OFF)
 set(AUTODIFF_BUILD_PYTHON OFF)
 set(AUTODIFF_BUILD_EXAMPLES OFF)
 set(AUTODIFF_BUILD_DOCS OFF)
 add_subdirectory(src/thirdparty/autodiff)
-
 
 add_subdirectory(src/thirdparty/spectra)
 
@@ -102,16 +97,16 @@ if (CMAKE_COMPILER_IS_GNUCXX)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARNINGS} -fvisibility-inlines-hidden")
 endif()
 
-set(core_libs core thirdparty embree Eigen3::Eigen fcpw autodiff::autodiff Spectra igl::core)
+set(core_libs core thirdparty embree Eigen3::Eigen autodiff::autodiff Spectra igl::core)
 
 include_directories(
 	src/core src/thirdparty 
 	src/thirdparty/embree/include src 
-	src/thirdparty/eigen/ src/thirdparty/fcpw/include 
+	src/thirdparty/eigen/
 	src/thirdparty/autodiff
 	src/thirdparty/spectra/include
 	src/thirdparty/libigl/include
-	${FCPW_EIGEN_INCLUDES} ${FCPW_ENOKI_INCLUDES})
+	${FCPW_EIGEN_INCLUDES})
 
 find_package(Imath CONFIG REQUIRED)
 find_package(OpenEXR CONFIG REQUIRED)

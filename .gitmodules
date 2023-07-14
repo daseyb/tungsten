@@ -1,9 +1,6 @@
 [submodule "src/thirdparty/eigen"]
 	path = src/thirdparty/eigen
 	url = https://gitlab.com/libeigen/eigen
-[submodule "src/thirdparty/fcpw"]
-	path = src/thirdparty/fcpw
-	url = https://github.com/rohan-sawhney/fcpw
 [submodule "src/thirdparty/autodiff"]
 	path = src/thirdparty/autodiff
 	url = https://github.com/autodiff/autodiff

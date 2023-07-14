@@ -200,6 +200,7 @@ namespace Tungsten {
                 } / (2 * eps);
 
                 grad = Vec3f((float)gradd.x(), (float)gradd.y(), (float)gradd.z());
+                break;
             }
             case GPNormalSamplingMethod::ConditionedGaussian:
             {
@@ -220,12 +221,14 @@ namespace Tungsten {
                 grad = {
                     (float)gradSamples(0,0), (float)gradSamples(1,0), (float)gradSamples(2,0)
                 };
+                break;
             }
             case GPNormalSamplingMethod::Beckmann:
             {
                 static Microfacet::Distribution distribution("beckmann");
                 grad = Microfacet::sample(distribution, _gp->_cov->compute_beckmann_roughness(), sampler.next2D());
                 std::swap(grad.y(), grad.z());
+                break;
             }
         }
 
@@ -235,11 +238,13 @@ namespace Tungsten {
     }
 
     bool GaussianProcessMedium::intersect(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
-        switch(_intersectMethod) {
-            case GPIntersectMethod::Mean:
-                return intersectMean(sampler, ray, state, t);
-            case GPIntersectMethod::GPDiscrete:
-                return intersectGP(sampler, ray, state, t);
+        switch (_intersectMethod) {
+        case GPIntersectMethod::Mean:
+            return intersectMean(sampler, ray, state, t);
+        case GPIntersectMethod::GPDiscrete:
+            return intersectGP(sampler, ray, state, t);
+        default:
+            return false;
         }
     }
 
@@ -250,7 +255,12 @@ namespace Tungsten {
             float m = (*_gp->_mean)(Derivative::None, p, Vec3f(0.f));
 
             if(m < 0.001f) {
-                state.gpContext = std::make_shared<GPContextFunctionSpace>();
+                auto ctxt = std::make_shared<GPContextFunctionSpace>();
+                ctxt->derivs = { Derivative::None };
+                ctxt->points = { p };
+                ctxt->values = Eigen::MatrixXd(1, 1);
+                ctxt->values(0, 0) = 0;
+                state.gpContext = ctxt;
                 return true;
             }
 
@@ -264,8 +274,8 @@ namespace Tungsten {
     }
 
     bool GaussianProcessMedium::intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
-        std::vector<Vec3f> points(_samplePoints + 1);
-        std::vector<Derivative> derivs(_samplePoints + 1);
+        std::vector<Vec3f> points(_samplePoints);
+        std::vector<Derivative> derivs(_samplePoints);
         std::vector<float> ts(_samplePoints);
         float tOffset = sampler.next1D();
         for (int i = 0; i < _samplePoints; i++) {
@@ -414,64 +424,76 @@ namespace Tungsten {
         if (ray.farT() == Ray::infinity())
             return Vec3f(0.0f);
 
-        std::vector<Vec3f> points(_samplePoints);
-        std::vector<Derivative> derivs(_samplePoints);
+        switch (_intersectMethod) {
+            case GPIntersectMethod::GPDiscrete:
+            {
+                std::vector<Vec3f> points(_samplePoints);
+                std::vector<Derivative> derivs(_samplePoints);
 
-        for (int i = 0; i < points.size(); i++) {
-            float t = lerp(ray.nearT(), ray.farT(), (i + sampler.next1D()) / _samplePoints);
-            points[i] = ray.pos() + t * ray.dir();
-            derivs[i] = Derivative::None;
-        }
-
-        Eigen::MatrixXd gpSamples;
-        int startSign = 1;
-
-        if (startOnSurface) {
-            std::array<Vec3f, 1> cond_pts = { points[0] };
-            std::array<Derivative, 1> cond_deriv = { Derivative::None };
-            std::array<double, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
-            std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
-            gpSamples = _gp->sample_cond(
-                points.data(), derivs.data(), points.size(), nullptr,
-                cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
-                constraints.data(), constraints.size(),
-                ray.dir(), 10, sampler);
-        }
-        else {
-            if (!sample) {
-                std::cout << "what\n";
-                return Vec3f(0.f);
-            }
-
-            std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
-            std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
-
-            float deriv = sample->aniso.dot(ray.dir().normalized());
-            startSign = deriv < 0 ? -1 : 1;
-            std::array<double, 2> cond_vs = { 0, deriv };
-
-            gpSamples = _gp->sample_cond(
-                points.data(), derivs.data(), points.size(), nullptr,
-                cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
-                nullptr, 0,
-                ray.dir(), 10, sampler) * startSign;
-        }
-
-        int madeItCnt = 0;
-        for (int s = 0; s < gpSamples.cols(); s++) {
-
-            bool madeIt = true;
-            for (int p = 0; p < _samplePoints; p++) {
-                if (gpSamples(p, s) < 0) {
-                    madeIt = false;
-                    break;
+                for (int i = 0; i < points.size(); i++) {
+                    float t = lerp(ray.nearT(), ray.farT(), (i + sampler.next1D()) / _samplePoints);
+                    points[i] = ray.pos() + t * ray.dir();
+                    derivs[i] = Derivative::None;
                 }
+
+                Eigen::MatrixXd gpSamples;
+                int startSign = 1;
+
+                if (startOnSurface) {
+                    std::array<Vec3f, 1> cond_pts = { points[0] };
+                    std::array<Derivative, 1> cond_deriv = { Derivative::None };
+                    std::array<double, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
+                    std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
+                    gpSamples = _gp->sample_cond(
+                        points.data(), derivs.data(), points.size(), nullptr,
+                        cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
+                        constraints.data(), constraints.size(),
+                        ray.dir(), 10, sampler);
+                }
+                else {
+                    if (!sample) {
+                        std::cout << "what\n";
+                        return Vec3f(0.f);
+                    }
+
+                    std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
+                    std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
+
+                    float deriv = sample->aniso.dot(ray.dir().normalized());
+                    startSign = deriv < 0 ? -1 : 1;
+                    std::array<double, 2> cond_vs = { 0, deriv };
+
+                    gpSamples = _gp->sample_cond(
+                        points.data(), derivs.data(), points.size(), nullptr,
+                        cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
+                        nullptr, 0,
+                        ray.dir(), 10, sampler) * startSign;
+                }
+
+                int madeItCnt = 0;
+                for (int s = 0; s < gpSamples.cols(); s++) {
+
+                    bool madeIt = true;
+                    for (int p = 0; p < _samplePoints; p++) {
+                        if (gpSamples(p, s) < 0) {
+                            madeIt = false;
+                            break;
+                        }
+                    }
+
+                    if (madeIt) madeItCnt++;
+                }
+
+                return Vec3f(float(madeItCnt) / gpSamples.cols());
             }
-
-            if (madeIt) madeItCnt++;
+            case GPIntersectMethod::Mean:
+            {
+                MediumState state;
+                state.firstScatter = startOnSurface;
+                float t;
+                return intersectMean(sampler, ray, state, t) ? Vec3f(0.f) : Vec3f(1.f);
+            }
         }
-
-        return Vec3f(float(madeItCnt) / gpSamples.cols());
     }
 
     float GaussianProcessMedium::pdf(PathSampleGenerator&/*sampler*/, const Ray & ray, bool startOnSurface, bool endOnSurface) const

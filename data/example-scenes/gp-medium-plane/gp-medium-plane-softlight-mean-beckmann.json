@@ -183,8 +183,8 @@
         "enable_volume_light_sampling": false
     },
     "renderer": {
-        "output_file": "gp-medium-plane.png",
-        "hdr_output_file": "gp-medium-plane.exr",
+        "output_file": "gp-medium-plane-softlight-mean-beckmann.png",
+        "hdr_output_file": "gp-medium-plane-softlight-mean-beckmann.exr",
         "resume_render_file": "",
         "overwrite_output_files": false,
         "adaptive_sampling": false,
