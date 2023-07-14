@@ -14,7 +14,7 @@
 
 //#define NORMALS_FD
 //#define NORMALS_NC
-//#define NORMALS_WC
+#define NORMALS_WC
 
 namespace Tungsten {
 
@@ -36,7 +36,46 @@ namespace Tungsten {
             return GPCorrelationContext::Goldfish;
         else if (name == "dori")
             return GPCorrelationContext::Dori;
-        FAIL("Invalid correaltion context: '%s'", name);
+        FAIL("Invalid correlation context: '%s'", name);
+    }
+
+    std::string GaussianProcessMedium::intersectMethodToString(GPIntersectMethod ctxt)
+    {
+        switch (ctxt) {
+        default:
+        case GPIntersectMethod::Mean:  return "mean";
+        case GPIntersectMethod::GPDiscrete:   return "gp_discrete";
+        }
+    }
+
+    GPIntersectMethod GaussianProcessMedium::stringToIntersectMethod(const std::string& name)
+    {
+        if (name == "mean")
+            return GPIntersectMethod::Mean;
+        else if (name == "gp_discrete")
+            return GPIntersectMethod::GPDiscrete;
+        FAIL("Invalid intersect method: '%s'", name);
+    }
+
+    std::string GaussianProcessMedium::normalSamplingMethodToString(GPNormalSamplingMethod val)
+    {
+        switch (val) {
+        default:
+        case GPNormalSamplingMethod::FiniteDifferences:  return "finite_differences";
+        case GPNormalSamplingMethod::ConditionedGaussian:   return "conditioned_gaussian";
+        case GPNormalSamplingMethod::Beckmann:   return "beckmann";
+        }
+    }
+
+    GPNormalSamplingMethod GaussianProcessMedium::stringToNormalSamplingMethod(const std::string& name)
+    {
+        if (name == "finite_differences")
+            return GPNormalSamplingMethod::FiniteDifferences;
+        else if (name == "conditioned_gaussian")
+            return GPNormalSamplingMethod::ConditionedGaussian;
+        else if (name == "beckmann")
+            return GPNormalSamplingMethod::Beckmann;
+        FAIL("Invalid normal sampling method: '%s'", name);
     }
 
 
@@ -46,7 +85,9 @@ namespace Tungsten {
         _density(1.0f),
         _gp(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(), std::make_shared<SquaredExponentialCovariance>())),
         _samplePoints(32),
-        _ctxt(GPCorrelationContext::Goldfish)
+        _ctxt(GPCorrelationContext::Goldfish),
+        _intersectMethod(GPIntersectMethod::GPDiscrete),
+        _normalSamplingMethod(GPNormalSamplingMethod::ConditionedGaussian)
     {
     }
 
@@ -62,6 +103,14 @@ namespace Tungsten {
         value.getField("correlation_context", ctxtString);
         _ctxt = stringToCorrelationContext(ctxtString);
 
+        std::string intersectString = "gp_discrete";
+        value.getField("intersect_method", intersectString);
+        _intersectMethod = stringToIntersectMethod(intersectString);
+
+        std::string normalString = "conditioned_gaussian";
+        value.getField("normal_method", normalString);
+        _normalSamplingMethod = stringToNormalSamplingMethod(normalString);
+
         if (auto gp = value["gaussian_process"])
             _gp = scene.fetchGaussianProcess(gp);
 
@@ -76,7 +125,9 @@ namespace Tungsten {
             "density", _density,
             "sample_points", _samplePoints,
             "gaussian_process", *_gp,
-            "correlation_context", correlationContextToString(_ctxt)
+            "correlation_context", correlationContextToString(_ctxt),
+            "intersect_method", intersectMethodToString(_intersectMethod),
+            "normal_method", normalSamplingMethodToString(_normalSamplingMethod),
         };
     }
 
@@ -117,84 +168,99 @@ namespace Tungsten {
         MediumState& state, Vec3f& grad) const {
 
         GPContextFunctionSpace& ctxt = *(GPContextFunctionSpace*)state.gpContext.get();
-#ifdef NORMALS_FD
-        float eps = 0.001f;
-        std::array<Vec3f, 6> gradPs{
-            ip + Vec3f(eps, 0.f, 0.f),
-            ip + Vec3f(0.f, eps, 0.f),
-            ip + Vec3f(0.f, 0.f, eps),
-            ip - Vec3f(eps, 0.f, 0.f),
-            ip - Vec3f(0.f, eps, 0.f),
-            ip - Vec3f(0.f, 0.f, eps),
-        };
 
-        std::array<Derivative, 6> gradDerivs{
-            Derivative::None, Derivative::None, Derivative::None,
-            Derivative::None, Derivative::None, Derivative::None
-        };
+        switch(_normalSamplingMethod) {
+            case GPNormalSamplingMethod::FiniteDifferences:
+            {
+                float eps = 0.001f;
+                std::array<Vec3f, 6> gradPs{
+                    ip + Vec3f(eps, 0.f, 0.f),
+                    ip + Vec3f(0.f, eps, 0.f),
+                    ip + Vec3f(0.f, 0.f, eps),
+                    ip - Vec3f(eps, 0.f, 0.f),
+                    ip - Vec3f(0.f, eps, 0.f),
+                    ip - Vec3f(0.f, 0.f, eps),
+                };
 
-        Eigen::MatrixXd gradSamples = _gp->sample_cond(
-            gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-            ctxt.points.data(), ctxt.values.data(), ctxt.derivs.data(), ctxt.points.size(), nullptr,
-            nullptr, 0,
-            ray.dir(), 1, sampler);
+                std::array<Derivative, 6> gradDerivs{
+                    Derivative::None, Derivative::None, Derivative::None,
+                    Derivative::None, Derivative::None, Derivative::None
+                };
 
-        Vec3d gradd = Vec3d{
-            gradSamples(0,0) - gradSamples(3,0),
-            gradSamples(1,0) - gradSamples(4,0),
-            gradSamples(2,0) - gradSamples(5,0),
-        } / (2 * eps);
+                Eigen::MatrixXd gradSamples = _gp->sample_cond(
+                    gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
+                    ctxt.points.data(), ctxt.values.data(), ctxt.derivs.data(), ctxt.points.size(), nullptr,
+                    nullptr, 0,
+                    ray.dir(), 1, sampler);
 
-        grad = Vec3f((float)gradd.x(), (float)gradd.y(), (float)gradd.z());
+                Vec3d gradd = Vec3d{
+                    gradSamples(0,0) - gradSamples(3,0),
+                    gradSamples(1,0) - gradSamples(4,0),
+                    gradSamples(2,0) - gradSamples(5,0),
+                } / (2 * eps);
 
-#elif defined(NORMALS_NC)
-        std::array<Vec3f, 1> gradPs{ ip };
-        std::array<Derivative, 1> gradDerivs{ Derivative::First };
+                grad = Vec3f((float)gradd.x(), (float)gradd.y(), (float)gradd.z());
+            }
+            case GPNormalSamplingMethod::ConditionedGaussian:
+            {
+                std::array<Vec3f, 3> gradPs{ ip, ip, ip };
+                std::array<Derivative, 3> gradDerivs{ Derivative::First, Derivative::First, Derivative::First };
+                std::array<Vec3f, 3> gradDirs{
+                    Vec3f(1.f, 0.f, 0.f),
+                    Vec3f(0.f, 1.f, 0.f),
+                    Vec3f(0.f, 0.f, 1.f),
+                };
 
-        grad.x() = _gp->sample_cond(
-            gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-            ctxt.points.data(), ctxt.values.data(), ctxt.derivs.data(), ctxt.points.size(), nullptr,
-            nullptr, 0,
-            Vec3f(1.f, 0.f, 0.f), 1, sampler)(0, 0);
+                auto gradSamples = _gp->sample_cond(
+                    gradPs.data(), gradDerivs.data(), gradPs.size(), gradDirs.data(),
+                    ctxt.points.data(), ctxt.values.data(), ctxt.derivs.data(), ctxt.points.size(), nullptr,
+                    nullptr, 0,
+                    ray.dir(), 1, sampler);
 
-        grad.y() = _gp->sample_cond(
-            gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-            ctxt.points.data(), ctxt.values.data(), ctxt.derivs.data(), ctxt.points.size(), nullptr,
-            nullptr, 0,
-            Vec3f(0.f, 1.f, 0.f), 1, sampler)(0, 0);
-
-        grad.z() = _gp->sample_cond(
-            gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
-            ctxt.points.data(), ctxt.values.data(), ctxt.derivs.data(), ctxt.points.size(), nullptr,
-            nullptr, 0,
-            Vec3f(0.f, 0.f, 1.f), 1, sampler)(0, 0);
-#elif  defined(NORMALS_WC)
-        std::array<Vec3f, 3> gradPs{ ip, ip, ip };
-        std::array<Derivative, 3> gradDerivs{ Derivative::First, Derivative::First, Derivative::First };
-        std::array<Vec3f, 3> gradDirs{
-            Vec3f(1.f, 0.f, 0.f),
-            Vec3f(0.f, 1.f, 0.f),
-            Vec3f(0.f, 0.f, 1.f),
-        };
-
-        auto gradSamples = _gp->sample_cond(
-            gradPs.data(), gradDerivs.data(), gradPs.size(), gradDirs.data(),
-            ctxt.points.data(), ctxt.values.data(), ctxt.derivs.data(), ctxt.points.size(), nullptr,
-            nullptr, 0,
-            ray.dir(), 1, sampler);
-
-        grad = {
-            (float)gradSamples(0,0), (float)gradSamples(1,0), (float)gradSamples(2,0)
-        };
-#else
-        static Microfacet::Distribution distribution("beckmann");
-        grad = Microfacet::sample(distribution, _gp->_cov->compute_beckmann_roughness(), sampler.next2D());
-        std::swap(grad.y(), grad.z());
-#endif
+                grad = {
+                    (float)gradSamples(0,0), (float)gradSamples(1,0), (float)gradSamples(2,0)
+                };
+            }
+            case GPNormalSamplingMethod::Beckmann:
+            {
+                static Microfacet::Distribution distribution("beckmann");
+                grad = Microfacet::sample(distribution, _gp->_cov->compute_beckmann_roughness(), sampler.next2D());
+                std::swap(grad.y(), grad.z());
+            }
+        }
 
         //grad *= state.startSign;
 
         return true;
+    }
+
+    bool GaussianProcessMedium::intersect(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
+        switch(_intersectMethod) {
+            case GPIntersectMethod::Mean:
+                return intersectMean(sampler, ray, state, t);
+            case GPIntersectMethod::GPDiscrete:
+                return intersectGP(sampler, ray, state, t);
+        }
+    }
+
+    bool GaussianProcessMedium::intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
+        t = ray.nearT() + 0.01f;
+        for(int i = 0; i < 256; i++) {
+            auto p = ray.pos() + t * ray.dir();
+            float m = (*_gp->_mean)(Derivative::None, p, Vec3f(0.f));
+
+            if(m < 0.001f) {
+                state.gpContext = std::make_shared<GPContextFunctionSpace>();
+                return true;
+            }
+
+            t += m;
+
+            if(t >= ray.farT()) {
+                return false;
+            }
+        }
+        return false;
     }
 
     bool GaussianProcessMedium::intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
@@ -293,7 +359,7 @@ namespace Tungsten {
         else {
             float t = maxT;
 
-            if (intersectGP(sampler, ray, state, t)) {
+            if (intersect(sampler, ray, state, t)) {
                 Vec3f ip = ray.pos() + ray.dir() * t;
 
                 Vec3f grad;

@@ -28,6 +28,17 @@ enum class GPCorrelationContext {
     Dori
 };
 
+enum class GPIntersectMethod {
+    Mean,
+    GPDiscrete
+};
+
+enum class GPNormalSamplingMethod {
+    FiniteDifferences,
+    ConditionedGaussian,
+    Beckmann
+};
+
 class GaussianProcessMedium : public Medium
 {
     Vec3f _materialSigmaA, _materialSigmaS;
@@ -40,10 +51,17 @@ class GaussianProcessMedium : public Medium
     int _samplePoints;
 
     GPCorrelationContext _ctxt = GPCorrelationContext::Goldfish;
+    GPIntersectMethod _intersectMethod = GPIntersectMethod::GPDiscrete;
+    GPNormalSamplingMethod _normalSamplingMethod = GPNormalSamplingMethod::ConditionedGaussian;
 
     static GPCorrelationContext stringToCorrelationContext(const std::string& name);
     static std::string correlationContextToString(GPCorrelationContext ctxt);
 
+    static GPIntersectMethod stringToIntersectMethod(const std::string& name);
+    static std::string intersectMethodToString(GPIntersectMethod ctxt);
+
+    static GPNormalSamplingMethod stringToNormalSamplingMethod(const std::string& name);
+    static std::string normalSamplingMethodToString(GPNormalSamplingMethod ctxt);
 
 public:
 
@@ -68,7 +86,10 @@ public:
     bool sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3f& ip,
         MediumState& state,
         Vec3f& grad) const;
+
+    bool intersect(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
     bool intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
+    bool intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
 
     virtual bool sampleDistance(PathSampleGenerator &sampler, const Ray &ray,
             MediumState &state, MediumSample &sample) const override;
