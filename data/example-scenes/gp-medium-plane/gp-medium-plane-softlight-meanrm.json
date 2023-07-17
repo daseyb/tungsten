@@ -19,6 +19,7 @@
             "sigma_s": 1.0,
             "density": 1,
             "sample_points": 32,
+            "intersect_method": "mean_raymarch",
 			"gaussian_process": {
 				"type": "standard",
 				"covariance_epsilon": 0,

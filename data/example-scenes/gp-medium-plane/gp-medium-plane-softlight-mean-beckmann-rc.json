@@ -7,9 +7,10 @@
 				"bsdf": {
 					"name": "rough_beckmann",
 					"albedo": 1,
-					"type": "mirror",
+					"type": "rough_conductor",
 					"k": 0,
 					"eta": 0,
+                    "roughness": 0.01,
 					"distribution": "beckmann"
 				}
             },
@@ -19,6 +20,8 @@
             "sigma_s": 1.0,
             "density": 1,
             "sample_points": 32,
+            "intersect_method": "mean",
+            "normal_method": "beckmann",
 			"gaussian_process": {
 				"type": "standard",
 				"covariance_epsilon": 0,
@@ -174,15 +177,15 @@
     "integrator": {
         "type": "path_tracer",
         "min_bounces": 0,
-        "max_bounces": 20,
+        "max_bounces": 64,
         "enable_consistency_checks": false,
         "enable_two_sided_shading": true,
         "enable_light_sampling": false,
         "enable_volume_light_sampling": false
     },
     "renderer": {
-        "output_file": "gp-medium-plane.png",
-        "hdr_output_file": "gp-medium-plane.exr",
+        "output_file": "gp-medium-plane-softlight-mean-beckmann.png",
+        "hdr_output_file": "gp-medium-plane-softlight-mean-beckmann.exr",
         "resume_render_file": "",
         "overwrite_output_files": false,
         "adaptive_sampling": false,

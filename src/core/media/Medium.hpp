@@ -40,6 +40,7 @@ public:
         {
             firstScatter = true;
             bounce = 0;
+            gpContext.reset();
         }
 
         void advance()

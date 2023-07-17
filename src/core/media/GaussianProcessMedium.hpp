@@ -30,6 +30,7 @@ enum class GPCorrelationContext {
 
 enum class GPIntersectMethod {
     Mean,
+    MeanRaymarch,
     GPDiscrete
 };
 
@@ -90,6 +91,7 @@ public:
     bool intersect(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
     bool intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
     bool intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
+    bool intersectMeanRaymarch(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
 
     virtual bool sampleDistance(PathSampleGenerator &sampler, const Ray &ray,
             MediumState &state, MediumSample &sample) const override;

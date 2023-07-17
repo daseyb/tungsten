@@ -2,7 +2,6 @@
     "media": [
         {
             "name": "gp",
-            "correlation_context": "dori",
             "phase_function": {
                 "type": "brdf",
 				"bsdf": {
@@ -20,6 +19,7 @@
             "sigma_s": 1.0,
             "density": 1,
             "sample_points": 32,
+            "correlation_context": "dori",
 			"gaussian_process": {
 				"type": "standard",
 				"covariance_epsilon": 0,
@@ -178,7 +178,7 @@
         "max_bounces": 20,
         "enable_consistency_checks": false,
         "enable_two_sided_shading": true,
-        "enable_light_sampling": true,
+        "enable_light_sampling": false,
         "enable_volume_light_sampling": false
     },
     "renderer": {

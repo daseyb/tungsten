@@ -44,6 +44,7 @@ namespace Tungsten {
         switch (ctxt) {
         default:
         case GPIntersectMethod::Mean:  return "mean";
+        case GPIntersectMethod::MeanRaymarch:  return "mean_raymarch";
         case GPIntersectMethod::GPDiscrete:   return "gp_discrete";
         }
     }
@@ -52,6 +53,8 @@ namespace Tungsten {
     {
         if (name == "mean")
             return GPIntersectMethod::Mean;
+        else if (name == "mean_raymarch")
+            return GPIntersectMethod::MeanRaymarch;
         else if (name == "gp_discrete")
             return GPIntersectMethod::GPDiscrete;
         FAIL("Invalid intersect method: '%s'", name);
@@ -241,6 +244,8 @@ namespace Tungsten {
         switch (_intersectMethod) {
         case GPIntersectMethod::Mean:
             return intersectMean(sampler, ray, state, t);
+        case GPIntersectMethod::MeanRaymarch:
+            return intersectMeanRaymarch(sampler, ray, state, t);
         case GPIntersectMethod::GPDiscrete:
             return intersectGP(sampler, ray, state, t);
         default:
@@ -249,12 +254,12 @@ namespace Tungsten {
     }
 
     bool GaussianProcessMedium::intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
-        t = ray.nearT() + 0.01f;
-        for(int i = 0; i < 256; i++) {
+        t = ray.nearT() + 0.001f;
+        for(int i = 0; i < 2048; i++) {
             auto p = ray.pos() + t * ray.dir();
             float m = (*_gp->_mean)(Derivative::None, p, Vec3f(0.f));
 
-            if(m < 0.001f) {
+            if(m < 0.0001f) {
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
                 ctxt->derivs = { Derivative::None };
                 ctxt->points = { p };
@@ -270,6 +275,43 @@ namespace Tungsten {
                 return false;
             }
         }
+        return false;
+    }
+
+    bool GaussianProcessMedium::intersectMeanRaymarch(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
+        std::vector<Vec3f> points(_samplePoints);
+        std::vector<Derivative> derivs(_samplePoints);
+        std::vector<float> ts(_samplePoints);
+        std::vector<float> vs(_samplePoints);
+        float tOffset = sampler.next1D();
+        for (int i = 0; i < _samplePoints; i++) {
+            float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i - tOffset) / _samplePoints, 0.f, 1.f));
+            ts[i] = t;
+            points[i] = ray.pos() + t * ray.dir();
+            vs[i] =  (*_gp->_mean)(Derivative::None, points[i], Vec3f(0.f));
+        }
+
+        float prevV = vs[0];
+        float prevT = ts[0];
+        for (int p = 1; p < _samplePoints; p++) {
+            float currV = vs[p];
+            float currT = ts[p];
+            if (currV < 0) {
+                float offsetT = prevV / (prevV - currV);
+                t = lerp(prevT, currT, offsetT);
+
+                auto ctxt = std::make_shared<GPContextFunctionSpace>();
+                ctxt->derivs = { Derivative::None };
+                ctxt->points = { ray.pos() + t * ray.dir() };
+                ctxt->values = Eigen::MatrixXd(1, 1);
+                ctxt->values(0, 0) = 0;
+                state.gpContext = ctxt;
+                return true;
+            }
+            prevV = currV;
+            prevT = currT;
+        }
+
         return false;
     }
 
@@ -335,9 +377,16 @@ namespace Tungsten {
                 gpSamples(p, 0) = 0;
 
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
-                ctxt->derivs = std::move(derivs);
-                ctxt->points = std::move(points);
-                ctxt->values = std::move(gpSamples);
+                if(_ctxt == GPCorrelationContext::Dori) {
+                    ctxt->derivs = { Derivative::None };
+                    ctxt->points = { ray.pos() + t * ray.dir() };
+                    ctxt->values = Eigen::MatrixXd(1, 1);
+                    ctxt->values(0, 0) = 0;
+                } else {
+                    ctxt->derivs = std::move(derivs);
+                    ctxt->points = std::move(points);
+                    ctxt->values = std::move(gpSamples);
+                }
                 state.gpContext = ctxt;
                 return true;
             }
@@ -376,7 +425,6 @@ namespace Tungsten {
                 if (!sampleGradient(sampler, ray, ip, state, grad)) {
                     return false;
                 }
-
 
                 if (grad.dot(ray.dir()) > 0) {
                     //std::cout << "Gradient wrong direction: " << grad.dot(ray.dir()) << "\n";
