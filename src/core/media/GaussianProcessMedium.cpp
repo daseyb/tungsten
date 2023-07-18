@@ -282,29 +282,43 @@ namespace Tungsten {
         std::vector<Vec3f> points(_samplePoints);
         std::vector<Derivative> derivs(_samplePoints);
         std::vector<float> ts(_samplePoints);
-        std::vector<float> vs(_samplePoints);
+        Eigen::MatrixXd gpSamples(_samplePoints,1);
         float tOffset = sampler.next1D();
         for (int i = 0; i < _samplePoints; i++) {
             float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i + tOffset) / _samplePoints, 0.f, 1.f));
             ts[i] = t;
             points[i] = ray.pos() + t * ray.dir();
-            vs[i] =  (*_gp->_mean)(Derivative::None, points[i], Vec3f(0.f));
+            gpSamples(i,0) = (*_gp->_mean)(Derivative::None, ray.pos() + t * ray.dir(), Vec3f(0.f));
         }
 
-        float prevV = vs[0];
+        float prevV = gpSamples(0, 0);
         float prevT = ts[0];
         for (int p = 1; p < _samplePoints; p++) {
-            float currV = vs[p];
+            float currV = gpSamples(p, 0);
             float currT = ts[p];
             if (currV < 0) {
-                float offsetT = 1.0f - prevV / (prevV - currV);
+                float offsetT = prevV / (prevV - currV);
                 t = lerp(prevT, currT, offsetT);
 
+                derivs.resize(p + 1);
+                points.resize(p + 1);
+
+                points[p] = ray.pos() + t * ray.dir();
+                gpSamples(p, 0) = (*_gp->_mean)(Derivative::None, ray.pos() + t * ray.dir(), Vec3f(0.f));
+               
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
-                ctxt->derivs = { Derivative::None };
-                ctxt->points = { ray.pos() + t * ray.dir() };
-                ctxt->values = Eigen::MatrixXd(1, 1);
-                ctxt->values(0, 0) = 0;
+                if (_ctxt == GPCorrelationContext::Dori) {
+                    ctxt->derivs = { Derivative::None };
+                    ctxt->points = { points[p] };
+                    ctxt->values = Eigen::MatrixXd(1, 1);
+                    ctxt->values(0, 0) = gpSamples(p, 0);
+                }
+                else {
+                    ctxt->derivs = std::move(derivs);
+                    ctxt->points = std::move(points);
+                    ctxt->values = std::move(gpSamples);
+                }
+
                 state.gpContext = ctxt;
                 return true;
             }
@@ -367,14 +381,14 @@ namespace Tungsten {
             float currV = gpSamples(p, 0);
             float currT = ts[p];
             if (currV < 0) {
-                float offsetT = 1.0f + prevV / (prevV - currV);
+                float offsetT = prevV / (prevV - currV);
                 t = lerp(prevT, currT, offsetT);
 
                 points.resize(p + 1);
                 derivs.resize(p + 1);
 
                 points[p] = ray.pos() + t * ray.dir();
-                gpSamples(p, 0) = 0;
+                gpSamples(p, 0) = lerp(prevV, currV, offsetT);
 
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
                 if(_ctxt == GPCorrelationContext::Dori) {
