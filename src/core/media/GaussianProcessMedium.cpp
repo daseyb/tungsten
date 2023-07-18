@@ -285,7 +285,7 @@ namespace Tungsten {
         std::vector<float> vs(_samplePoints);
         float tOffset = sampler.next1D();
         for (int i = 0; i < _samplePoints; i++) {
-            float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i - tOffset) / _samplePoints, 0.f, 1.f));
+            float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i + tOffset) / _samplePoints, 0.f, 1.f));
             ts[i] = t;
             points[i] = ray.pos() + t * ray.dir();
             vs[i] =  (*_gp->_mean)(Derivative::None, points[i], Vec3f(0.f));
@@ -297,7 +297,7 @@ namespace Tungsten {
             float currV = vs[p];
             float currT = ts[p];
             if (currV < 0) {
-                float offsetT = prevV / (prevV - currV);
+                float offsetT = 1.0f - prevV / (prevV - currV);
                 t = lerp(prevT, currT, offsetT);
 
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
@@ -367,7 +367,7 @@ namespace Tungsten {
             float currV = gpSamples(p, 0);
             float currT = ts[p];
             if (currV < 0) {
-                float offsetT = prevV / (prevV - currV);
+                float offsetT = 1.0f + prevV / (prevV - currV);
                 t = lerp(prevT, currT, offsetT);
 
                 points.resize(p + 1);
