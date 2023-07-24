@@ -37,7 +37,8 @@ enum class GPIntersectMethod {
 enum class GPNormalSamplingMethod {
     FiniteDifferences,
     ConditionedGaussian,
-    Beckmann
+    Beckmann,
+    GGX
 };
 
 class GaussianProcessMedium : public Medium
@@ -69,8 +70,11 @@ public:
     std::shared_ptr<GaussianProcess> _gp;
     GaussianProcessMedium();
     GaussianProcessMedium(std::shared_ptr<GaussianProcess> gp, 
-        float materialSigmaA, float materialSigmaS, float density, int samplePoints) : 
-        _gp(gp), _materialSigmaA(materialSigmaA), _materialSigmaS(materialSigmaS), _density(density), _samplePoints(samplePoints) {}
+        float materialSigmaA, float materialSigmaS, float density, int samplePoints,
+        GPCorrelationContext ctxt = GPCorrelationContext::Goldfish, GPIntersectMethod intersectMethod = GPIntersectMethod::GPDiscrete, GPNormalSamplingMethod normalSamplingMethod = GPNormalSamplingMethod::ConditionedGaussian) :
+        _gp(gp), _materialSigmaA(materialSigmaA), _materialSigmaS(materialSigmaS), _density(density), _samplePoints(samplePoints),
+        _ctxt(ctxt), _intersectMethod(intersectMethod), _normalSamplingMethod(normalSamplingMethod)
+    {}
 
     virtual void fromJson(JsonPtr value, const Scene &scene) override;
     virtual rapidjson::Value toJson(Allocator &allocator) const override;

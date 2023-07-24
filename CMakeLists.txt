@@ -106,6 +106,7 @@ include_directories(
 	src/thirdparty/autodiff
 	src/thirdparty/spectra/include
 	src/thirdparty/libigl/include
+	src/thirdparty/facet-forge/include
 	${FCPW_EIGEN_INCLUDES})
 
 find_package(Imath CONFIG REQUIRED)

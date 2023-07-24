@@ -174,7 +174,7 @@ void side_view(const GaussianProcess& gp, std::string output) {
 }
 
 
-constexpr size_t NUM_RAY_SAMPLE_POINTS = 128;
+constexpr size_t NUM_RAY_SAMPLE_POINTS = 32;
 
 
 void sample_beckmann(float alpha) {
@@ -294,6 +294,67 @@ void ndf(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
     }
 }
 
+void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
+
+    Path basePath = Path(output) / Path(gp->_cov->id());
+
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
+
+    auto gp_med = std::make_shared<GaussianProcessMedium>(gp, 0, 1, 1, NUM_RAY_SAMPLE_POINTS, GPCorrelationContext::Goldfish, GPIntersectMethod::GPDiscrete, GPNormalSamplingMethod::Beckmann);
+
+    gp_med->loadResources();
+    gp_med->prepareForRender();
+
+    UniformPathSampler sampler(0);
+    sampler.next1D();
+    sampler.next1D();
+
+    Eigen::MatrixXf normals(samples, 3);
+
+    float angle = (2 * PI) / 8;
+    Ray ray = Ray(Vec3f(0.f, 0.f, 50.f), Vec3f(sin(angle), 0.f, -cos(angle)));
+    ray.setNearT(-(ray.pos().z() - 5.0f) / ray.dir().z());
+    ray.setFarT(-(ray.pos().z() + 5.0f) / ray.dir().z());
+
+    auto ctxt = std::make_shared<GPContextFunctionSpace>();
+    ctxt->derivs = { Derivative::None, Derivative::None };
+    ctxt->points = { ray.pos(), Vec3f(0.f) };
+    ctxt->values = Eigen::MatrixXd(2, 1);
+    ctxt->values(0, 0) = 50.;
+    ctxt->values(1, 0) = 0.;
+
+    for (int s = 0; s < samples;) {
+
+        if ((s + 1) % 100 == 0) {
+            std::cout << s << "/" << samples;
+            std::cout << "\r";
+        }
+
+        Medium::MediumState state;
+        state.reset();
+        //state.gpContext = ctxt;
+
+        MediumSample sample;
+        if (gp_med->sampleDistance(sampler, ray, state, sample)) {
+            Vec3f grad = sample.aniso;
+            //gp_med->sampleGradient(sampler, ray, Vec3f(0.f), state, grad);
+            grad.normalize();
+            normals(s, 0) = grad.x();
+            normals(s, 1) = grad.y();
+            normals(s, 2) = grad.z();
+            s++;
+        }
+    }
+
+    {
+        std::ofstream xfile(incrementalFilename(basePath + Path(tinyformat::format("-%.1fdeg-%d.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
+        xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
+        xfile.close();
+    }
+}
+
 template<typename T>
 static std::shared_ptr<T> instantiate(JsonPtr value, const Scene& scene)
 {
@@ -307,7 +368,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<JsonDocument> document;
     try {
-        document = std::make_shared<JsonDocument>(argc > 1 ? argv[1] : "microfacet/covariances-paper.json");
+        document = std::make_shared<JsonDocument>(argc > 1 ? argv[1] : "microfacet/covariances-easy.json");
     }
     catch (std::exception& e) {
         std::cerr << e.what() << "\n";
@@ -352,7 +413,9 @@ int main(int argc, char** argv) {
             }
             */
 
-            ndf(gp, 10000000, "microfacet/normals/");
+            ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond");
+            
+            //ndf(gp, 10000000, "microfacet/normals/");
             //side_view(gp, "microfacet/side-view/");
         }
         catch (std::exception& e) {

@@ -10,3 +10,6 @@
 [submodule "src/thirdparty/libigl"]
 	path = src/thirdparty/libigl
 	url = https://github.com/libigl/libigl.git
+[submodule "src/thirdparty/facet-forge"]
+	path = src/thirdparty/facet-forge
+	url = https://github.com/NVlabs/facet-forge

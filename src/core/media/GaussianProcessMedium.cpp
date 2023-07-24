@@ -11,6 +11,7 @@
 #include "io/JsonObject.hpp"
 #include "io/Scene.hpp"
 #include "bsdfs/Microfacet.hpp"
+#include <bsdfs/NDFs/beckmann.h>
 
 //#define NORMALS_FD
 //#define NORMALS_NC
@@ -67,6 +68,7 @@ namespace Tungsten {
         case GPNormalSamplingMethod::FiniteDifferences:  return "finite_differences";
         case GPNormalSamplingMethod::ConditionedGaussian:   return "conditioned_gaussian";
         case GPNormalSamplingMethod::Beckmann:   return "beckmann";
+        case GPNormalSamplingMethod::GGX:   return "ggx";
         }
     }
 
@@ -78,6 +80,8 @@ namespace Tungsten {
             return GPNormalSamplingMethod::ConditionedGaussian;
         else if (name == "beckmann")
             return GPNormalSamplingMethod::Beckmann;
+        else if (name == "ggx")
+            return GPNormalSamplingMethod::GGX;
         FAIL("Invalid normal sampling method: '%s'", name);
     }
 
@@ -167,6 +171,39 @@ namespace Tungsten {
         return _sigmaT;
     }
 
+    Vec3f GgxVndf(Vec3f wo, float roughness, Vec2f u)
+    {
+        // -- Stretch the view vector so we are sampling as though
+        // -- roughness==1
+        Vec3f v = Vec3f(
+            wo.x() * roughness,
+            wo.y() * roughness,
+            wo.z()).normalized();
+
+        // -- Build an orthonormal basis with v, t1, and t2
+        TangentFrame tf(v);
+
+        // -- Choose a point on a disk with each half of the disk weighted
+        // -- proportionally to its projection onto direction v
+        float a = 1.0f / (1.0f + v.z());
+        float r = sqrt(u.x());
+        float phi = (u.y() < a) ? (u.y() / a) * PI
+            : PI + (u.y() - a) / (1.0f - a) * PI;
+        float p1 = r * cos(phi);
+        float p2 = r * sin(phi) * ((u.y() < a) ? 1.0f : v.z());
+
+        // -- Calculate the normal in this stretched tangent space
+        Vec3f n = Vec3f(p1, p2, sqrt(max<float>(0.0f, 1.0f - p1 * p1 - p2 * p2)));
+        n = tf.toGlobal(n);
+
+        // -- unstretch and normalize the normal
+        return Vec3f(
+            roughness * n.x(),
+            roughness * n.y(),
+            max<float>(0.0f, n.z())).normalized();
+    }
+
+
     bool GaussianProcessMedium::sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3f& ip,
         MediumState& state, Vec3f& grad) const {
 
@@ -228,9 +265,37 @@ namespace Tungsten {
             }
             case GPNormalSamplingMethod::Beckmann:
             {
-                static Microfacet::Distribution distribution("beckmann");
-                grad = Microfacet::sample(distribution, _gp->_cov->compute_beckmann_roughness(), sampler.next2D());
-                std::swap(grad.y(), grad.z());
+                Vec3f normal = Vec3f(
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(1.f, 0.f, 0.f)),
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(0.f, 1.f, 0.f)),
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(0.f, 0.f, 1.f)));
+
+                TangentFrame frame(normal);
+
+                Vec3f wi = frame.toLocal(-ray.dir());
+                float alpha = _gp->_cov->compute_beckmann_roughness();
+                BeckmannNDF ndf(0, alpha, alpha);
+
+                grad = vec_conv2<Vec3f>(ndf.sampleD_wi(vec_conv<Vector3>(wi)));
+
+                grad = frame.toGlobal(grad);
+
+                break;
+            }
+            case GPNormalSamplingMethod::GGX:
+            {
+                Vec3f normal = Vec3f(
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(1.f, 0.f, 0.f)),
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(0.f, 1.f, 0.f)),
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(0.f, 0.f, 1.f)));
+
+                TangentFrame frame(normal);
+
+                Vec3f wi = frame.toLocal(-ray.dir());
+                float alpha = _gp->_cov->compute_beckmann_roughness();
+                grad = GgxVndf(wi, alpha, sampler.next2D());
+                grad = frame.toGlobal(grad);
+
                 break;
             }
         }
@@ -393,9 +458,9 @@ namespace Tungsten {
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
                 if(_ctxt == GPCorrelationContext::Dori) {
                     ctxt->derivs = { Derivative::None };
-                    ctxt->points = { ray.pos() + t * ray.dir() };
+                    ctxt->points = { points[p] };
                     ctxt->values = Eigen::MatrixXd(1, 1);
-                    ctxt->values(0, 0) = 0;
+                    ctxt->values(0, 0) = gpSamples(p, 0);
                 } else {
                     ctxt->derivs = std::move(derivs);
                     ctxt->points = std::move(points);
