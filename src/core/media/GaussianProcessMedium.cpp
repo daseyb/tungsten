@@ -350,7 +350,7 @@ namespace Tungsten {
         Eigen::MatrixXd gpSamples(_samplePoints,1);
         float tOffset = sampler.next1D();
         for (int i = 0; i < _samplePoints; i++) {
-            float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i + tOffset) / _samplePoints, 0.f, 1.f));
+            float t = lerp(ray.nearT(), ray.nearT() + min(100.f, ray.farT() - ray.nearT()), clamp((i + tOffset) / _samplePoints, 0.f, 1.f));
             ts[i] = t;
             points[i] = ray.pos() + t * ray.dir();
             gpSamples(i,0) = (*_gp->_mean)(Derivative::None, ray.pos() + t * ray.dir(), Vec3f(0.f));
@@ -400,7 +400,7 @@ namespace Tungsten {
         std::vector<float> ts(_samplePoints);
         float tOffset = sampler.next1D();
         for (int i = 0; i < _samplePoints; i++) {
-            float t = lerp(ray.nearT(), min(100.f, ray.farT()), clamp((i - tOffset) / _samplePoints, 0.f, 1.f));
+            float t = lerp(ray.nearT(), ray.nearT() + min(100.f, ray.farT() - ray.nearT()), clamp((i - tOffset) / _samplePoints, 0.f, 1.f));
             ts[i] = t;
             points[i] = ray.pos() + t * ray.dir();
             derivs[i] = Derivative::None;

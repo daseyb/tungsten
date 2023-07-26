@@ -112,6 +112,16 @@ static inline float trigHalfAngle(float x)
     return min(std::sqrt(max(x*0.5f + 0.5f, 0.0f)), 1.0f);
 }
 
+template<typename To, typename From>
+inline To vec_conv(const From& vd) {
+    return To{ (float)vd.x(), (float)vd.y(), (float)vd.z() };
+}
+
+template<typename To, typename From>
+inline To vec_conv2(const From& vd) {
+    return To{ (float)vd.x, (float)vd.y, (float)vd.z };
+}
+
 // TODO: Review which of these are still in use
 class MathUtil
 {

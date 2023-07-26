@@ -174,7 +174,9 @@ endif()
 
 file(GLOB_RECURSE Core_SOURCES "src/core/*.cpp")
 add_library(core STATIC ${Core_SOURCES})
-message(${Core_SOURCES})
+
+add_library(facet-forge STATIC src/thirdparty/facet-forge/src/random.cpp)
+set(core_libs ${core_libs} facet-forge)
 
 add_executable(obj2json src/obj2json/obj2json.cpp)
 target_link_libraries(obj2json ${core_libs})

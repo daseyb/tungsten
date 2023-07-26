@@ -56,6 +56,9 @@ class GaussianProcessMedium : public Medium
     GPIntersectMethod _intersectMethod = GPIntersectMethod::GPDiscrete;
     GPNormalSamplingMethod _normalSamplingMethod = GPNormalSamplingMethod::ConditionedGaussian;
 
+
+
+public:
     static GPCorrelationContext stringToCorrelationContext(const std::string& name);
     static std::string correlationContextToString(GPCorrelationContext ctxt);
 
@@ -64,8 +67,6 @@ class GaussianProcessMedium : public Medium
 
     static GPNormalSamplingMethod stringToNormalSamplingMethod(const std::string& name);
     static std::string normalSamplingMethodToString(GPNormalSamplingMethod ctxt);
-
-public:
 
     std::shared_ptr<GaussianProcess> _gp;
     GaussianProcessMedium();

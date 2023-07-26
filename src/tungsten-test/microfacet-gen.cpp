@@ -294,7 +294,7 @@ void ndf(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
     }
 }
 
-void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
+void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::string output, float angle = (2 * PI) / 8, GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian) {
 
     Path basePath = Path(output) / Path(gp->_cov->id());
 
@@ -302,7 +302,7 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
         FileUtils::createDirectory(basePath);
     }
 
-    auto gp_med = std::make_shared<GaussianProcessMedium>(gp, 0, 1, 1, NUM_RAY_SAMPLE_POINTS, GPCorrelationContext::Goldfish, GPIntersectMethod::GPDiscrete, GPNormalSamplingMethod::Beckmann);
+    auto gp_med = std::make_shared<GaussianProcessMedium>(gp, 0, 1, 1, NUM_RAY_SAMPLE_POINTS, GPCorrelationContext::Goldfish, GPIntersectMethod::GPDiscrete, nsm);
 
     gp_med->loadResources();
     gp_med->prepareForRender();
@@ -313,17 +313,9 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
 
     Eigen::MatrixXf normals(samples, 3);
 
-    float angle = (2 * PI) / 8;
-    Ray ray = Ray(Vec3f(0.f, 0.f, 50.f), Vec3f(sin(angle), 0.f, -cos(angle)));
-    ray.setNearT(-(ray.pos().z() - 5.0f) / ray.dir().z());
-    ray.setFarT(-(ray.pos().z() + 5.0f) / ray.dir().z());
-
-    auto ctxt = std::make_shared<GPContextFunctionSpace>();
-    ctxt->derivs = { Derivative::None, Derivative::None };
-    ctxt->points = { ray.pos(), Vec3f(0.f) };
-    ctxt->values = Eigen::MatrixXd(2, 1);
-    ctxt->values(0, 0) = 50.;
-    ctxt->values(1, 0) = 0.;
+    Ray ray = Ray(Vec3f(0.f, 0.f, 500.f), Vec3f(sin(angle), 0.f, -cos(angle)));
+    ray.setNearT(-(ray.pos().z() - 2.0f) / ray.dir().z());
+    ray.setFarT(-(ray.pos().z() + 2.0f) / ray.dir().z());
 
     for (int s = 0; s < samples;) {
 
@@ -334,12 +326,10 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
 
         Medium::MediumState state;
         state.reset();
-        //state.gpContext = ctxt;
 
         MediumSample sample;
         if (gp_med->sampleDistance(sampler, ray, state, sample)) {
             Vec3f grad = sample.aniso;
-            //gp_med->sampleGradient(sampler, ray, Vec3f(0.f), state, grad);
             grad.normalize();
             normals(s, 0) = grad.x();
             normals(s, 1) = grad.y();
@@ -349,7 +339,12 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
     }
 
     {
-        std::ofstream xfile(incrementalFilename(basePath + Path(tinyformat::format("-%.1fdeg-%d.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
+        std::ofstream xfile(
+            incrementalFilename(
+                basePath + Path(tinyformat::format("-%.1fdeg-%d-%s.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS, GaussianProcessMedium::normalSamplingMethodToString(nsm))), 
+                "", false).asString(), 
+            std::ios::out | std::ios::binary);
+
         xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
         xfile.close();
     }
@@ -401,7 +396,7 @@ int main(int argc, char** argv) {
             float alpha = compute_beckmann_roughness(*gp->_cov);
             std::cout << "Beckmann roughness: " << alpha << "\n";
 
-            sample_beckmann(alpha);
+            //sample_beckmann(alpha);
 
             //normals_and_stuff(*gp, "microfacet/normals/");
 
@@ -413,7 +408,14 @@ int main(int argc, char** argv) {
             }
             */
 
-            ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond");
+            ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond/angle-range", PI / 8, GPNormalSamplingMethod::Beckmann);
+
+
+            /*for (int j = 0; j < 15; j++) {
+                float angle = float(j) / 14 * PI / 2;
+                ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond/angle-range", angle, GPNormalSamplingMethod::ConditionedGaussian);
+                ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond/angle-range", angle, GPNormalSamplingMethod::Beckmann);
+            }*/
             
             //ndf(gp, 10000000, "microfacet/normals/");
             //side_view(gp, "microfacet/side-view/");

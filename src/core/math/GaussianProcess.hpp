@@ -42,16 +42,6 @@ namespace Tungsten {
         return Vec3Diff{ vd.x(), vd.y(), vd.z() };
     }
 
-    template<typename To, typename From>
-    inline To vec_conv(const From& vd) {
-        return To{ (float)vd.x(), (float)vd.y(), (float)vd.z() };
-    }
-
-    template<typename To, typename From>
-    inline To vec_conv2(const From& vd) {
-        return To{ (float)vd.x, (float)vd.y, (float)vd.z };
-    }
-
     template<typename Vec>
     inline auto dist2(Vec a, Vec b, Vec3f aniso) {
         auto d = b - a;
