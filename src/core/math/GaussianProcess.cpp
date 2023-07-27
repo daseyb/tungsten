@@ -434,7 +434,7 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
     CovMatrix ps_cov(numPts, numPts);
 
 #ifdef SPARSE_COV
-    std::vector<Eigen::Triplet<float>> tripletList;
+    std::vector<Eigen::Triplet<double>> tripletList;
     tripletList.reserve(min(numPts * numPts / 10, (size_t)10000));
 #endif
 
@@ -444,11 +444,11 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
 
         for (size_t j = 0; j < numPts; j++) {
             const Vec3f& ddir_b = ddirs ? ddirs[j] : deriv_dir;
-            float cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], ddir_a, ddir_b);
+            double cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], ddir_a, ddir_b);
 
 #ifdef SPARSE_COV
             if (std::abs(cov_ij) > _covEps) {
-                tripletList.push_back(Eigen::Triplet<float>(i, j, cov_ij));
+                tripletList.push_back(Eigen::Triplet<double>(i, j, cov_ij));
             }
 #else
             ps_cov(i, j) = cov_ij;
@@ -483,7 +483,7 @@ CovMatrix GaussianProcess::cov(
     CovMatrix ps_cov(numPtsA, numPtsB);
 
 #ifdef SPARSE_COV
-    std::vector<Eigen::Triplet<float>> tripletList;
+    std::vector<Eigen::Triplet<double>> tripletList;
     tripletList.reserve(min(numPtsA * numPtsB / 10, (size_t)10000));
 #endif
 
@@ -493,11 +493,11 @@ CovMatrix GaussianProcess::cov(
         for (size_t j = 0; j < numPtsB; j++) {
             const Vec3f& ddir_b = ddirs_b ? ddirs_b[j] : deriv_dir;
 
-            float cov_ij = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j], ddir_a, ddir_b);
+            double cov_ij = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j], ddir_a, ddir_b);
 
 #ifdef SPARSE_COV
             if (std::abs(cov_ij) > _covEps) {
-                tripletList.push_back(Eigen::Triplet<float>(i, j, cov_ij));
+                tripletList.push_back(Eigen::Triplet<double>(i, j, cov_ij));
             }
 #else
             ps_cov(i, j) = cov_ij;

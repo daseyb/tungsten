@@ -314,6 +314,10 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
     Eigen::MatrixXf normals(samples, 3);
 
     Ray ray = Ray(Vec3f(0.f, 0.f, 500.f), Vec3f(sin(angle), 0.f, -cos(angle)));
+
+    Mat4f mat = Mat4f::rotAxis(Vec3f(0.f, 0.f, 1.0f), 45);
+    ray.setDir(mat.transformVector(ray.dir()));
+
     ray.setNearT(-(ray.pos().z() - 2.0f) / ray.dir().z());
     ray.setFarT(-(ray.pos().z() + 2.0f) / ray.dir().z());
 
@@ -408,7 +412,8 @@ int main(int argc, char** argv) {
             }
             */
 
-            ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond/angle-range", PI / 8, GPNormalSamplingMethod::Beckmann);
+            ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond", PI / 4, GPNormalSamplingMethod::ConditionedGaussian);
+            ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond", PI / 4, GPNormalSamplingMethod::Beckmann);
 
 
             /*for (int j = 0; j < 15; j++) {
