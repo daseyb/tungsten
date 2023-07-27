@@ -5,8 +5,6 @@ using namespace Tungsten;
 
 int main(int argc, const char *argv[])
 {
-    ThreadUtils::startThreads(_threadCount);
-
     CliParser parser("tungsten", "[options] scene1 [scene2 [scene3...]]");
 
     StandaloneRenderer renderer(parser, std::cout);
