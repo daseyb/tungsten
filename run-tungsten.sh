@@ -12,7 +12,7 @@
 # Number of CPUs per task
 #SBATCH --cpus-per-task=1
 
-#SBATCH -o ./report/output.%j.%a.out # STDOUT
+#SBATCH -o ./report/output.%A.%a.out # STDOUT
 
 #SBATCH --array=1-512
 # Request memory
