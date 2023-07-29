@@ -508,15 +508,12 @@ namespace Tungsten {
                 Vec3f ip = ray.pos() + ray.dir() * t;
 
                 Vec3f grad;
-                if (!sampleGradient(sampler, ray, ip, state, grad)) {
-                    return false;
-                }
+                do {
+                    if (!sampleGradient(sampler, ray, ip, state, grad)) {
+                        return false;
+                    }
+                } while (grad.dot(ray.dir()) > 0);
 
-                if (grad.dot(ray.dir()) > 0) {
-                    //std::cout << "Gradient wrong direction: " << grad.dot(ray.dir()) << "\n";
-                    return false;
-                    //grad *= -1;
-                }
 
                 sample.aniso = grad;
                 if (!std::isfinite(sample.aniso.avg())) {

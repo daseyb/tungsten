@@ -42,6 +42,12 @@ else()
     add_definitions(-DCONSTEXPR=constexpr)
 endif()
 
+if (MSVC)
+  add_compile_options(/bigobj)
+else ()
+  add_compile_options(-Wa,-mbig-obj)
+endif ()
+
 IF(COMMAND cmake_policy)
   if (POLICY CMP0043)
     cmake_policy(SET CMP0043 NEW)

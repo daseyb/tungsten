@@ -50,6 +50,7 @@ int main(int argc, char** argv) {
     
     int samples = 1000000;
     Eigen::MatrixXf normals(samples, 3);
+    Eigen::MatrixXf distanceSamples(samples, 1);
     Eigen::MatrixXf reflectionDirs(samples, 3);
 
     std::string scene_id = std::string(argv[1]).find("ref") != std::string::npos ? "surface" : "medium";
@@ -64,7 +65,7 @@ int main(int argc, char** argv) {
 
 
     if (scene_id == "medium") {
-        pathTracer._firstMediumBounceCb = [&sid, &normals, &reflectionDirs](const MediumSample& mediumSample, Ray r) {
+        pathTracer._firstMediumBounceCb = [&sid, &normals, &reflectionDirs, &distanceSamples](const MediumSample& mediumSample, Ray r) {
             auto normal = mediumSample.aniso.normalized();
             normals(sid, 0) = normal.x();
             normals(sid, 1) = normal.z();
@@ -73,6 +74,12 @@ int main(int argc, char** argv) {
             reflectionDirs(sid, 0) = r.dir().x();
             reflectionDirs(sid, 1) = r.dir().z();
             reflectionDirs(sid, 2) = r.dir().y();
+
+            distanceSamples(sid, 0) = mediumSample.t;
+
+            if (distanceSamples(sid, 0) < 10) {
+                std::cout << distanceSamples(sid, 0) << std::endl;
+            }
         };
     }
     else {
@@ -120,6 +127,17 @@ int main(int argc, char** argv) {
             std::ios::out | std::ios::binary);
 
         xfile.write((char*)reflectionDirs.data(), sizeof(float) * reflectionDirs.rows() * reflectionDirs.cols());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(
+            incrementalFilename(
+                basePath + Path(tinyformat::format("/%s-distances.bin", scene_id)),
+                "", false).asString(),
+            std::ios::out | std::ios::binary);
+
+        xfile.write((char*)distanceSamples.data(), sizeof(float) * distanceSamples.rows() * distanceSamples.cols());
         xfile.close();
     }
 
