@@ -58,7 +58,11 @@ if __name__ == '__main__':
                 total_tasks[job_id] = total
                 waiting_tasks[job_id] = total - running
     
-    common_pref = os.path.commonprefix(list(job_names.values()))
+    if len(job_names) == 1:
+        common_pref = ""
+    else:
+        common_pref = os.path.commonprefix(list(job_names.values()))
+
     max_len = max(map(len, job_names.values())) - len(common_pref) + 1
 
     for job in overall_progess.keys():
@@ -68,10 +72,11 @@ if __name__ == '__main__':
             running_tasks[job] = 0
         if job not in total_tasks:
             total_tasks[job] = DEFAULT_ARRAY_JOB_COUNT
-        
+
         completed_tasks = total_tasks[job] - (running_tasks[job] + waiting_tasks[job])
         overall_progess[job] += completed_tasks
         overall_progess[job] /= total_tasks[job]
-        print(f"{'...' if len(common_pref) > 0 else ''}{job_names[job][len(common_pref):]}:".ljust(max_len + 3), "[{:<{}}] {:.0f}%".format("=" * int(20 * overall_progess[job]), 20, overall_progess[job] * 100))
+
+        print(f"{'...' if len(common_pref) > 0 else ''}{job_names[job][len(common_pref):]}:".ljust(max_len + 3), "[{:<{}}] {:.2f}%".format("=" * int(20 * overall_progess[job]), 20, overall_progess[job] * 100))
 
 

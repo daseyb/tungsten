@@ -481,11 +481,18 @@ namespace Tungsten {
         MediumState & state, MediumSample & sample) const
     {
         sample.emission = Vec3f(0.0f);
-
-        if (state.bounce > _maxBounce)
-            return false;
-
         float maxT = ray.farT();
+
+        if (state.bounce >= _maxBounce) {
+            sample.t = maxT;
+            sample.weight = Vec3f(1.f);
+            sample.pdf = 1.0f;
+            sample.exited = true;
+            sample.p = ray.pos() + sample.t * ray.dir();
+            sample.phase = _phaseFunction.get();
+            return true;
+        }
+
         if (_absorptionOnly) {
             if (maxT == Ray::infinity())
                 return false;
