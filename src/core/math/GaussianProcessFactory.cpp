@@ -23,6 +23,7 @@ DEFINE_STRINGABLE_ENUM(CovarianceFunctionFactory, "covariance", ({
     {"rational_quadratic", std::make_shared<RationalQuadraticCovariance>},
     {"periodic", std::make_shared<PeriodicCovariance>},
     {"nonstationary", std::make_shared<NonstationaryCovariance>},
+    {"mg-nonstationary", std::make_shared<MeanGradNonstationaryCovariance>},
     {"thin_plate", std::make_shared<ThinPlateCovariance>},
 }))
 

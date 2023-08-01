@@ -13,10 +13,6 @@
 #include "bsdfs/Microfacet.hpp"
 #include <bsdfs/NDFs/beckmann.h>
 
-//#define NORMALS_FD
-//#define NORMALS_NC
-#define NORMALS_WC
-
 namespace Tungsten {
 
     std::string GaussianProcessMedium::correlationContextToString(GPCorrelationContext ctxt)
@@ -508,12 +504,13 @@ namespace Tungsten {
                 Vec3f ip = ray.pos() + ray.dir() * t;
 
                 Vec3f grad;
-                do {
-                    if (!sampleGradient(sampler, ray, ip, state, grad)) {
-                        return false;
-                    }
-                } while (grad.dot(ray.dir()) > 0);
+                if (!sampleGradient(sampler, ray, ip, state, grad)) {
+                    return false;
+                }
 
+                if (grad.dot(ray.dir()) > 0) {
+                    return false;
+                }
 
                 sample.aniso = grad;
                 if (!std::isfinite(sample.aniso.avg())) {

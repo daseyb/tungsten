@@ -72,8 +72,9 @@ Vec3f PathTracer::traceSample(Vec2u pixel, PathSampleGenerator &sampler)
                     _settings.enableLightSampling && (mediumBounces > 0 || _settings.includeSurfaces), ray, throughput, emission, wasSpecular, state, &transmittance);
 
             if (_firstSurfaceBounceCb) {
-                _firstSurfaceBounceCb(surfaceEvent, ray);
-                return Vec3f(0.f);
+                if (!_firstSurfaceBounceCb(surfaceEvent, ray)) {
+                    return Vec3f(0.f);
+                }
             }
 
             if (!info.bsdf->lobes().isPureDirac())
@@ -110,8 +111,9 @@ Vec3f PathTracer::traceSample(Vec2u pixel, PathSampleGenerator &sampler)
                 return emission;
 
             if (_firstMediumBounceCb) {
-                _firstMediumBounceCb(mediumSample, ray);
-                return Vec3f(0.f);
+                if (!_firstMediumBounceCb(mediumSample, ray)) {
+                    return Vec3f(0.f);
+                }
             }
         }
 

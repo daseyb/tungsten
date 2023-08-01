@@ -15,26 +15,7 @@
 
 using namespace Tungsten;
 
-int main(int argc, char** argv) {
-    ThreadUtils::startThreads(1);
-
-    EmbreeUtil::initDevice();
-
-#ifdef OPENVDB_AVAILABLE
-    openvdb::initialize();
-#endif
-
-    Scene* scene = nullptr;
-    try {
-        scene = Scene::load(Path(argv[1]));
-        scene->loadResources();
-    }
-    catch (std::exception& e) {
-        std::cout << e.what();
-        return -1;
-    }
-
-    auto tracableScene = scene->makeTraceable();
+void record_first_hit(std::string scene_file, TraceableScene* tracableScene) {
 
     PathTracerSettings settings;
     settings.enableConsistencyChecks = false;
@@ -43,17 +24,17 @@ int main(int argc, char** argv) {
     settings.enableVolumeLightSampling = false;
     settings.includeSurfaces = true;
     settings.lowOrderScattering = true;
-    settings.maxBounces = 120;
+    settings.maxBounces = 5;
     settings.minBounces = 0;
 
     PathTracer pathTracer(tracableScene, settings, 0);
-    
+
     int samples = 1000000;
     Eigen::MatrixXf normals(samples, 3);
     Eigen::MatrixXf distanceSamples(samples, 1);
     Eigen::MatrixXf reflectionDirs(samples, 3);
 
-    std::string scene_id = std::string(argv[1]).find("ref") != std::string::npos ? "surface" : "medium";
+    std::string scene_id = scene_file.find("ref") != std::string::npos ? "surface" : "medium";
 
     Path basePath = Path("testing/intersections");
 
@@ -77,9 +58,7 @@ int main(int argc, char** argv) {
 
             distanceSamples(sid, 0) = mediumSample.t;
 
-            if (distanceSamples(sid, 0) < 10) {
-                std::cout << distanceSamples(sid, 0) << std::endl;
-            }
+            return false;
         };
     }
     else {
@@ -92,9 +71,11 @@ int main(int argc, char** argv) {
             reflectionDirs(sid, 0) = r.dir().x();
             reflectionDirs(sid, 1) = r.dir().z();
             reflectionDirs(sid, 2) = r.dir().y();
+
+            return false;
         };
     }
-    
+
 
     UniformPathSampler sampler(0);
     sampler.next2D();
@@ -140,5 +121,102 @@ int main(int argc, char** argv) {
         xfile.write((char*)distanceSamples.data(), sizeof(float) * distanceSamples.rows() * distanceSamples.cols());
         xfile.close();
     }
+}
+
+
+void record_paths(std::string scene_file, TraceableScene* tracableScene) {
+
+    PathTracerSettings settings;
+    settings.enableConsistencyChecks = false;
+    settings.enableLightSampling = false;
+    settings.enableTwoSidedShading = true;
+    settings.enableVolumeLightSampling = false;
+    settings.includeSurfaces = true;
+    settings.lowOrderScattering = true;
+    settings.maxBounces = 8;
+    settings.minBounces = 0;
+
+    PathTracer pathTracer(tracableScene, settings, 0);
+
+    int samples = 1000000;
+    Eigen::MatrixXf path_points(samples * settings.maxBounces, 3);
+    path_points.setZero();
+    
+
+    std::string scene_id = scene_file.find("ref") != std::string::npos ? "surface" : "medium";
+
+    Path basePath = Path("testing/intersections");
+
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
+
+    int sid = 0;
+    int bounce = 0;
+
+    pathTracer._firstMediumBounceCb = [&sid, &path_points, &bounce](const MediumSample& mediumSample, Ray r) {
+        path_points.row(sid * 8 + bounce) =  vec_conv<Eigen::Vector3f>(r.pos());
+        bounce++;
+        return true;
+    };
+    pathTracer._firstSurfaceBounceCb = [&sid, &path_points, &bounce](const SurfaceScatterEvent& event, Ray r) {
+        if (!event.sampledLobe.isForward()) {
+            path_points.row(sid * 8 + bounce) = vec_conv<Eigen::Vector3f>(r.pos());
+            bounce++;
+        }
+        return true;
+    };
+
+
+    UniformPathSampler sampler(0);
+    sampler.next2D();
+
+    for (sid = 0; sid < samples; sid++) {
+        if ((sid + 1) % 100 == 0) {
+            std::cout << sid << "/" << samples;
+            std::cout << "\r";
+        }
+
+        path_points.row(sid * 8) = vec_conv<Eigen::Vector3f>(tracableScene->cam().pos());
+        bounce = 1;
+        pathTracer.traceSample({ 256, 256 }, sampler);
+    }
+
+    {
+        std::ofstream xfile(
+            incrementalFilename(
+                basePath + Path(tinyformat::format("/%s-paths.bin", scene_id)),
+                "", false).asString(),
+            std::ios::out | std::ios::binary);
+
+        xfile.write((char*)path_points.data(), sizeof(float) * path_points.rows() * path_points.cols());
+        xfile.close();
+    }
+}
+ 
+int main(int argc, char** argv) {
+    ThreadUtils::startThreads(1);
+
+    EmbreeUtil::initDevice();
+
+#ifdef OPENVDB_AVAILABLE
+    openvdb::initialize();
+#endif
+
+    Scene* scene = nullptr;
+    try {
+        scene = Scene::load(Path(argv[1]));
+        scene->loadResources();
+    }
+    catch (std::exception& e) {
+        std::cout << e.what();
+        return -1;
+    }
+
+    auto tracableScene = scene->makeTraceable();
+
+    //record_first_hit(argv[1], tracableScene);
+
+    record_paths(argv[1], tracableScene);
 
 }

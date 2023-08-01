@@ -17,8 +17,8 @@ public:
 
     Vec3f traceSample(Vec2u pixel, PathSampleGenerator &sampler);
 
-    std::function<void(const MediumSample& sample, Ray r)> _firstMediumBounceCb;
-    std::function<void(const SurfaceScatterEvent& ev, Ray r)> _firstSurfaceBounceCb;
+    std::function<bool(const MediumSample& sample, Ray r)> _firstMediumBounceCb;
+    std::function<bool(const SurfaceScatterEvent& ev, Ray r)> _firstSurfaceBounceCb;
 };
 
 }

@@ -49,6 +49,7 @@ namespace Tungsten {
     }
 
     class Grid;
+    class MeanFunction;
 
     enum class Derivative : uint8_t {
         None = 0,
@@ -118,6 +119,33 @@ namespace Tungsten {
         }
       
         friend class NonstationaryCovariance;
+        friend class MeanGradNonstationaryCovariance;
+    };
+
+    class MeanGradNonstationaryCovariance : public CovarianceFunction {
+    public:
+
+        MeanGradNonstationaryCovariance(
+            std::shared_ptr<StationaryCovariance> stationaryCov = nullptr,
+            std::shared_ptr<MeanFunction> mean = nullptr) : _stationaryCov(stationaryCov), _mean(mean)
+        {
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override;
+        virtual rapidjson::Value toJson(Allocator& allocator) const override;
+        virtual void loadResources() override;
+
+        virtual std::string id() const {
+            return tinyformat::format("mean-ns-%s", _stationaryCov->id());
+        }
+
+    private:
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override;
+        virtual FloatDD cov(Vec3DD a, Vec3DD b) const override;
+        virtual float cov(Vec3f a, Vec3f b) const override;
+
+        std::shared_ptr<StationaryCovariance> _stationaryCov;
+        std::shared_ptr<MeanFunction> _mean;
     };
 
     class NonstationaryCovariance : public CovarianceFunction {
@@ -346,9 +374,10 @@ namespace Tungsten {
             }
         }
 
+        virtual Vec3f dmean_da(Vec3f a) const = 0;
+
     private:
         virtual float mean(Vec3f a) const = 0;
-        virtual Vec3f dmean_da(Vec3f a) const = 0;
     };
 
     class HomogeneousMean : public MeanFunction {
