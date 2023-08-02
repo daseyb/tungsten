@@ -65,13 +65,15 @@ if __name__ == '__main__':
 
     max_len = max(map(len, job_names.values())) - len(common_pref) + 1
 
-    for job in overall_progess.keys():
+    for job in job_names.keys():
         if job not in waiting_tasks:
             waiting_tasks[job] = 0
         if job not in running_tasks:
             running_tasks[job] = 0
         if job not in total_tasks:
             total_tasks[job] = DEFAULT_ARRAY_JOB_COUNT
+        if job not in overall_progess:
+            overall_progess[job] = 0
 
         completed_tasks = total_tasks[job] - (running_tasks[job] + waiting_tasks[job])
         overall_progess[job] += completed_tasks

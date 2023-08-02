@@ -18,21 +18,28 @@
             "sigma_a": 0.0,
             "sigma_s": 1.0,
             "density": 1,
-            "sample_points": 32,
+            "sample_points": 64,
 			"gaussian_process": {
 				"type": "standard",
 				"covariance_epsilon": 0,
 				"mean": {
-					"type": "linear",
-					"reference_point": [0,-1,0],
-					"direction": [0,1,0],
-					"scale": 1
+					"type": "spherical",
+					"center": [0, 0.5, -5],
+					"radius": 1
 				},
 				"covariance": {
-					"aniso": [1,0,1],
-					"type": "squared_exponential",
-					"lengthScale": 0.141421,
-					"sigma": 0.001
+					"type": "mg-nonstationary",
+					"cov": {
+						"aniso": [1,1,1],
+						"type": "squared_exponential",
+						"lengthScale": 0.0141421,
+						"sigma": 0.001
+					},
+					"mean": {
+						"type": "spherical",
+						"center": [0, 0.5, -5],
+						"radius": 1
+					}
 				}
 			}
         }
@@ -100,26 +107,27 @@
                 ]
             },
             "type": "quad",
-            "bsdf": "floor"
+            "bsdf": "backWall"
         },
         {
-            "name": "upper",
+            "name": "outer",
             "transform": {
-				"position": [ 0, 0.7, 0],
-                "scale": [
-                    200,
-                    400,
-                    200
-                ],
-                "rotation": [
-                    0,
-                    90,
-                    0
-                ]
+				"position": [ 0, 0.5, -5],
+                "scale": 1.01
             },
-            "type": "quad",
+            "type": "sphere",
             "bsdf": "upper",
 			"int_medium": "gp"
+        },
+        {
+            "name": "inner",
+            "transform": {
+				"position": [ 0, 0.5, -5],
+                "scale": 0.99
+            },
+            "type": "sphere",
+            "bsdf": "floor",
+			"ext_medium": "gp"
         },
         {
             "bump_strength": 1,
@@ -181,16 +189,16 @@
         "enable_volume_light_sampling": false
     },
     "renderer": {
-        "output_file": "gp-medium-plane.png",
-        "hdr_output_file": "gp-medium-plane.exr",
+        "output_file": "gp-medium-sphere-softlight-rough.png",
+        "hdr_output_file": "gp-medium-sphere-softlight-rough.exr",
         "resume_render_file": "",
         "overwrite_output_files": false,
         "adaptive_sampling": false,
         "enable_resume_render": false,
         "stratified_sampler": false,
         "scene_bvh": true,
-        "spp": 2,
-        "spp_step": 1,
+        "spp": 64,
+        "spp_step": 8,
         "checkpoint_interval": "0",
         "timeout": "0"
     }
