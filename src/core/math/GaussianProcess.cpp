@@ -219,6 +219,7 @@ void MeanGradNonstationaryCovariance::fromJson(JsonPtr value, const Scene& scene
         _mean = std::dynamic_pointer_cast<MeanFunction>(scene.fetchMeanFunction(mean));
     }
 
+    value.getField("aniso", _aniso);
 }
 
 rapidjson::Value MeanGradNonstationaryCovariance::toJson(Allocator& allocator) const {
@@ -226,6 +227,7 @@ rapidjson::Value MeanGradNonstationaryCovariance::toJson(Allocator& allocator) c
         "type", "mg-nonstationary",
         "cov",* _stationaryCov,
         "mean", *_mean,
+        "aniso", _aniso,
     };
 }
 
@@ -287,19 +289,23 @@ struct TangentFrameD
 };
 
 template <typename Mat, typename Vec>
-static inline Mat compute_ansio(const Vec&grad) {
+static inline Mat compute_ansio(const Vec&grad, const Vec& aniso) {
     TangentFrameD<Mat, Vec> tf(grad);
 
     auto vmat = tf.toMatrix();
     Mat smat = Mat::Identity();
-    smat.diagonal() = Vec{ 1.f, 1.f, 20.f };
+    smat.diagonal() = aniso;
 
     return vmat * smat * vmat.transpose();
 }
 
 FloatD MeanGradNonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
-    auto anisoA = compute_ansio<Mat3Diff, Vec3Diff >(vec_conv<Vec3Diff>(_mean->dmean_da(vec_conv<Vec3f>(a))));
-    auto anisoB = compute_ansio<Mat3Diff>(vec_conv<Vec3Diff>(_mean->dmean_da(vec_conv<Vec3f>(b))));
+    auto anisoA = compute_ansio<Mat3Diff>(
+        vec_conv<Vec3Diff>(_mean->dmean_da(vec_conv<Vec3f>(a))), 
+        vec_conv<Vec3Diff>(_aniso));
+    auto anisoB = compute_ansio<Mat3Diff>(
+        vec_conv<Vec3Diff>(_mean->dmean_da(vec_conv<Vec3f>(b))),
+        vec_conv<Vec3Diff>(_aniso));
 
     auto detAnisoA = anisoA.determinant();
     auto detAnisoB = anisoB.determinant();
@@ -315,8 +321,12 @@ FloatD MeanGradNonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
 }
 
 FloatDD MeanGradNonstationaryCovariance::cov(Vec3DD a, Vec3DD b) const {
-    auto anisoA = compute_ansio<Mat3DD>(vec_conv<Vec3DD>(_mean->dmean_da(vec_conv<Vec3f>(a))));
-    auto anisoB = compute_ansio<Mat3DD>(vec_conv<Vec3DD>(_mean->dmean_da(vec_conv<Vec3f>(b))));
+    auto anisoA = compute_ansio<Mat3DD>(
+        vec_conv<Vec3DD>(_mean->dmean_da(vec_conv<Vec3f>(a))),
+        vec_conv<Vec3DD>(_aniso));
+    auto anisoB = compute_ansio<Mat3DD>(
+        vec_conv<Vec3DD>(_mean->dmean_da(vec_conv<Vec3f>(b))),
+        vec_conv<Vec3DD>(_aniso));
 
     auto detAnisoA = anisoA.determinant();
     auto detAnisoB = anisoB.determinant();
@@ -332,8 +342,12 @@ FloatDD MeanGradNonstationaryCovariance::cov(Vec3DD a, Vec3DD b) const {
 }
 
 float MeanGradNonstationaryCovariance::cov(Vec3f a, Vec3f b) const {
-    auto anisoA = compute_ansio<Eigen::Matrix3f>(vec_conv<Eigen::Vector3f>(_mean->dmean_da(a)));
-    auto anisoB = compute_ansio<Eigen::Matrix3f>(vec_conv<Eigen::Vector3f>(_mean->dmean_da(b)));
+    auto anisoA = compute_ansio<Eigen::Matrix3f>(
+        vec_conv<Eigen::Vector3f>(_mean->dmean_da(a)),
+        vec_conv<Eigen::Vector3f>(_aniso));
+    auto anisoB = compute_ansio<Eigen::Matrix3f>(
+        vec_conv<Eigen::Vector3f>(_mean->dmean_da(b)),
+        vec_conv<Eigen::Vector3f>(_aniso));
 
     auto detAnisoA = anisoA.determinant();
     auto detAnisoB = anisoB.determinant();

@@ -85,7 +85,7 @@ namespace Tungsten {
 
         virtual std::string id() const = 0;
 
-        Vec3f _aniso;
+        Vec3f _aniso = Vec3f(1.f);
 
     private:
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const = 0;
