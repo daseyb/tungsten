@@ -123,6 +123,95 @@ void record_first_hit(std::string scene_file, TraceableScene* tracableScene) {
     }
 }
 
+void first_intersect_ansio(std::string scene_file, Scene* scene) {
+
+    TraceableScene* tracableScene = scene->makeTraceable();
+
+
+    PathTracerSettings settings;
+    settings.enableConsistencyChecks = false;
+    settings.enableLightSampling = false;
+    settings.enableTwoSidedShading = true;
+    settings.enableVolumeLightSampling = false;
+    settings.includeSurfaces = true;
+    settings.lowOrderScattering = true;
+    settings.maxBounces = 8;
+    settings.minBounces = 0;
+
+    PathTracer pathTracer(tracableScene, settings, 0);
+
+    Path basePath = Path("testing/intersections") / Path(scene_file).baseName();
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
+    
+    std::vector<Vec2u> pixelpositions;
+    std::vector<Eigen::Matrix3f> anisotropies;
+    std::vector<Vec3f> intersectPositions;
+
+    auto cov = std::static_pointer_cast<MeanGradNonstationaryCovariance>(std::static_pointer_cast<GaussianProcessMedium>(scene->media()[0])->_gp->_cov);
+
+    Vec2u currentPixel;
+
+    pathTracer._firstMediumBounceCb = [&currentPixel, &anisotropies, &pixelpositions, &cov, &intersectPositions](const MediumSample& mediumSample, Ray r) {
+        pixelpositions.push_back(currentPixel);
+        anisotropies.push_back(cov->localAniso(r.pos()));
+        intersectPositions.push_back(r.pos());
+        return false;
+    };
+
+    pathTracer._firstSurfaceBounceCb = [](const SurfaceScatterEvent& event, Ray r) {
+        return event.sampledLobe.isForward();
+    };
+
+    UniformPathSampler sampler(0);
+    sampler.next2D();
+
+    for (currentPixel.x() = 0; currentPixel.x() < 512; currentPixel.x()++) {
+        if ((currentPixel.x() + 1) % 10 == 0) {
+            std::cout << currentPixel.x() << "/" << 512;
+            std::cout << "\r";
+        }
+
+        for (currentPixel.y() = 0; currentPixel.y() < 512; currentPixel.y()++) {
+            pathTracer.traceSample(currentPixel, sampler);
+        }
+    }
+
+    {
+        std::ofstream xfile(
+            incrementalFilename(
+                basePath + Path(tinyformat::format("/anisotropies.bin")),
+                "", false).asString(),
+            std::ios::out | std::ios::binary);
+
+        xfile.write((char*)anisotropies.data(), sizeof(float) * anisotropies.size() * anisotropies[0].rows() * anisotropies[0].cols());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(
+            incrementalFilename(
+                basePath + Path(tinyformat::format("/anisotropies-intersects.bin")),
+                "", false).asString(),
+            std::ios::out | std::ios::binary);
+
+        xfile.write((char*)intersectPositions.data(), sizeof(Vec3f) * intersectPositions.size());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(
+            incrementalFilename(
+                basePath + Path(tinyformat::format("/anisotropies-pixelpos.bin")),
+                "", false).asString(),
+            std::ios::out | std::ios::binary);
+
+        xfile.write((char*)pixelpositions.data(), sizeof(Vec2u) * pixelpositions.size());
+        xfile.close();
+    }
+}
+
 
 void record_paths(std::string scene_file, TraceableScene* tracableScene) {
 
@@ -138,15 +227,13 @@ void record_paths(std::string scene_file, TraceableScene* tracableScene) {
 
     PathTracer pathTracer(tracableScene, settings, 0);
 
-    int samples = 1000000;
+    int samples = 100000;
     Eigen::MatrixXf path_points(samples * settings.maxBounces, 3);
     path_points.setZero();
-    
 
     std::string scene_id = scene_file.find("ref") != std::string::npos ? "surface" : "medium";
 
-    Path basePath = Path("testing/intersections");
-
+    Path basePath = Path("testing/intersections") / Path(scene_file).baseName();
     if (!basePath.exists()) {
         FileUtils::createDirectory(basePath);
     }
@@ -179,7 +266,7 @@ void record_paths(std::string scene_file, TraceableScene* tracableScene) {
 
         path_points.row(sid * 8) = vec_conv<Eigen::Vector3f>(tracableScene->cam().pos());
         bounce = 1;
-        pathTracer.traceSample({ 256, 256 }, sampler);
+        pathTracer.traceSample({ 180, 180 }, sampler);
     }
 
     {
@@ -215,8 +302,10 @@ int main(int argc, char** argv) {
 
     auto tracableScene = scene->makeTraceable();
 
+    first_intersect_ansio(argv[1], scene);
+
     //record_first_hit(argv[1], tracableScene);
 
-    record_paths(argv[1], tracableScene);
+    //record_paths(argv[1], tracableScene);
 
 }

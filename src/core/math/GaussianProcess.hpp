@@ -139,6 +139,8 @@ namespace Tungsten {
             return tinyformat::format("mean-ns-%s", _stationaryCov->id());
         }
 
+        Eigen::Matrix3f localAniso(Vec3f p) const;
+
     private:
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override;
         virtual FloatDD cov(Vec3DD a, Vec3DD b) const override;

@@ -299,6 +299,12 @@ static inline Mat compute_ansio(const Vec&grad, const Vec& aniso) {
     return vmat * smat * vmat.transpose();
 }
 
+Eigen::Matrix3f MeanGradNonstationaryCovariance::localAniso(Vec3f p) const {
+    return compute_ansio<Eigen::Matrix3f>(
+        vec_conv<Eigen::Vector3f>(_mean->dmean_da(p).normalized()), 
+        vec_conv<Eigen::Vector3f>(_aniso));
+}
+
 FloatD MeanGradNonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
     auto anisoA = compute_ansio<Mat3Diff>(
         vec_conv<Vec3Diff>(_mean->dmean_da(vec_conv<Vec3f>(a))), 
