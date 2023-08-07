@@ -227,7 +227,7 @@ void record_paths(std::string scene_file, TraceableScene* tracableScene) {
 
     PathTracer pathTracer(tracableScene, settings, 0);
 
-    int samples = 1000;
+    int samples = 100000;
     Eigen::MatrixXf path_points(samples * settings.maxBounces, 3);
     path_points.setZero();
 
@@ -266,7 +266,8 @@ void record_paths(std::string scene_file, TraceableScene* tracableScene) {
 
         path_points.row(sid * 8) = vec_conv<Eigen::Vector3f>(tracableScene->cam().pos());
         bounce = 1;
-        pathTracer.traceSample({ 256, 187 }, sampler);
+        //pathTracer.traceSample({ 256, 187 }, sampler);
+        pathTracer.traceSample({ 180, 180 }, sampler);
     }
 
     {
@@ -290,22 +291,23 @@ int main(int argc, char** argv) {
     openvdb::initialize();
 #endif
 
-    Scene* scene = nullptr;
-    try {
-        scene = Scene::load(Path(argv[1]));
-        scene->loadResources();
+    for (int arg = 1; arg < argc; arg++) {
+        Scene* scene = nullptr;
+        try {
+            scene = Scene::load(Path(argv[arg]));
+            scene->loadResources();
+        }
+        catch (std::exception& e) {
+            std::cout << e.what();
+            return -1;
+        }
+
+        auto tracableScene = scene->makeTraceable();
+
+        //first_intersect_ansio(argv[1], scene);
+
+        //record_first_hit(argv[1], tracableScene);
+
+        record_paths(argv[arg], tracableScene);
     }
-    catch (std::exception& e) {
-        std::cout << e.what();
-        return -1;
-    }
-
-    auto tracableScene = scene->makeTraceable();
-
-    //first_intersect_ansio(argv[1], scene);
-
-    //record_first_hit(argv[1], tracableScene);
-
-    record_paths(argv[1], tracableScene);
-
 }

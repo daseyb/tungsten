@@ -12,6 +12,7 @@
 #include "io/Scene.hpp"
 #include "bsdfs/Microfacet.hpp"
 #include <bsdfs/NDFs/beckmann.h>
+#include <bsdfs/NDFs/GGX.h>
 
 namespace Tungsten {
 
@@ -167,39 +168,6 @@ namespace Tungsten {
         return _sigmaT;
     }
 
-    Vec3f GgxVndf(Vec3f wo, float roughness, Vec2f u)
-    {
-        // -- Stretch the view vector so we are sampling as though
-        // -- roughness==1
-        Vec3f v = Vec3f(
-            wo.x() * roughness,
-            wo.y() * roughness,
-            wo.z()).normalized();
-
-        // -- Build an orthonormal basis with v, t1, and t2
-        TangentFrame tf(v);
-
-        // -- Choose a point on a disk with each half of the disk weighted
-        // -- proportionally to its projection onto direction v
-        float a = 1.0f / (1.0f + v.z());
-        float r = sqrt(u.x());
-        float phi = (u.y() < a) ? (u.y() / a) * PI
-            : PI + (u.y() - a) / (1.0f - a) * PI;
-        float p1 = r * cos(phi);
-        float p2 = r * sin(phi) * ((u.y() < a) ? 1.0f : v.z());
-
-        // -- Calculate the normal in this stretched tangent space
-        Vec3f n = Vec3f(p1, p2, sqrt(max<float>(0.0f, 1.0f - p1 * p1 - p2 * p2)));
-        n = tf.toGlobal(n);
-
-        // -- unstretch and normalize the normal
-        return Vec3f(
-            roughness * n.x(),
-            roughness * n.y(),
-            max<float>(0.0f, n.z())).normalized();
-    }
-
-
     bool GaussianProcessMedium::sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3f& ip,
         MediumState& state, Vec3f& grad) const {
 
@@ -289,7 +257,10 @@ namespace Tungsten {
 
                 Vec3f wi = frame.toLocal(-ray.dir());
                 float alpha = _gp->_cov->compute_beckmann_roughness();
-                grad = GgxVndf(wi, alpha, sampler.next2D());
+                GGXNDF ndf(0, alpha, alpha);
+
+                grad = vec_conv2<Vec3f>(ndf.sampleD_wi(vec_conv<Vector3>(wi)));
+
                 grad = frame.toGlobal(grad);
 
                 break;
@@ -324,8 +295,7 @@ namespace Tungsten {
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
                 ctxt->derivs = { Derivative::None };
                 ctxt->points = { p };
-                ctxt->values = Eigen::MatrixXd(1, 1);
-                ctxt->values(0, 0) = 0;
+                ctxt->values = { 0. };
                 state.gpContext = ctxt;
                 return true;
             }
@@ -371,13 +341,12 @@ namespace Tungsten {
                 if (_ctxt == GPCorrelationContext::Dori) {
                     ctxt->derivs = { Derivative::None };
                     ctxt->points = { points[p] };
-                    ctxt->values = Eigen::MatrixXd(1, 1);
-                    ctxt->values(0, 0) = gpSamples(p, 0);
+                    ctxt->values = { gpSamples(p, 0) };
                 }
                 else {
                     ctxt->derivs = std::move(derivs);
                     ctxt->points = std::move(points);
-                    ctxt->values = std::move(gpSamples);
+                    ctxt->values = std::vector<double>(gpSamples.data(), gpSamples.data() + ctxt->points.size());
                 }
 
                 state.gpContext = ctxt;
@@ -422,17 +391,59 @@ namespace Tungsten {
                 ray.dir(), 1, sampler);
         }
         else {
-            std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
-            std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
-            float deriv = state.lastAniso.dot(ray.dir().normalized());
-            startSign = deriv < 0 ? -1 : 1;
-            std::array<double, 2> cond_vs = { 0, deriv };
+            switch (_ctxt) {
+            case GPCorrelationContext::Dori:
+            {
+                std::array<Vec3f, 1> cond_pts = { points[0] };
+                std::array<Derivative, 1> cond_deriv = { Derivative::None };
+                std::array<double, 1> cond_vs = { 0 };
 
-            gpSamples = _gp->sample_cond(
-                points.data(), derivs.data(), _samplePoints, nullptr,
-                cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
-                nullptr, 0,
-                ray.dir(), 1, sampler) * startSign;
+                startSign = state.lastAniso.dot(ray.dir().normalized()) < 0 ? -1 : 1;
+                gpSamples = _gp->sample_cond(
+                    points.data(), derivs.data(), _samplePoints, nullptr,
+                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
+                    nullptr, 0,
+                    ray.dir(), 1, sampler) * startSign;
+                break;
+            }
+            case GPCorrelationContext::Goldfish:
+            {
+                std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
+                std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
+                std::array<double, 2> cond_vs = { 0, state.lastAniso.dot(ray.dir().normalized()) };
+
+                startSign = sign(cond_vs[1]);
+                gpSamples = _gp->sample_cond(
+                    points.data(), derivs.data(), _samplePoints, nullptr,
+                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
+                    nullptr, 0,
+                    ray.dir(), 1, sampler) * startSign;
+                break;
+            }
+            case GPCorrelationContext::Elephant:
+            {
+                auto ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
+                ctxt->points.push_back(points[0]);
+                ctxt->derivs.push_back(Derivative::First);
+                ctxt->values.push_back(state.lastAniso.dot(ray.dir().normalized()));
+
+               /*std::array<Vec3f, 4> cond_pts = {points[0], points[0], points[0], points[0]};
+                std::array<Derivative, 4> cond_deriv = { Derivative::None, Derivative::First, Derivative::First, Derivative::First };
+                std::array<double, 4> cond_vs = { 0, state.lastAniso.x(), state.lastAniso.y(), state.lastAniso.z() };
+                std::array<Vec3f, 4> cond_dirs = { ray.dir().normalized(), 
+                    Vec3f(1.f, 0.f, 0.f), 
+                    Vec3f(0.f, 1.f, 0.f), 
+                    Vec3f(0.f, 0.f, 1.f) };*/ 
+
+                startSign = state.lastAniso.dot(ray.dir().normalized()) < 0 ? -1 : 1;
+                gpSamples = _gp->sample_cond(
+                    points.data(), derivs.data(), _samplePoints, nullptr,
+                    ctxt->points.data(), ctxt->values.data(), ctxt->derivs.data(), ctxt->points.size(), nullptr,
+                    nullptr, 0,
+                    ray.dir(), 1, sampler) * startSign;
+                break;
+            }
+            }
         }
 
 
@@ -460,12 +471,11 @@ namespace Tungsten {
                 if(_ctxt == GPCorrelationContext::Dori) {
                     ctxt->derivs = { Derivative::None };
                     ctxt->points = { points[p] };
-                    ctxt->values = Eigen::MatrixXd(1, 1);
-                    ctxt->values(0, 0) = gpSamples(p, 0);
+                    ctxt->values = { gpSamples(p, 0) };
                 } else {
                     ctxt->derivs = std::move(derivs);
                     ctxt->points = std::move(points);
-                    ctxt->values = std::move(gpSamples);
+                    ctxt->values = std::vector<double>(gpSamples.data(), gpSamples.data() + ctxt->points.size());
                 }
                 state.gpContext = ctxt;
                 return true;

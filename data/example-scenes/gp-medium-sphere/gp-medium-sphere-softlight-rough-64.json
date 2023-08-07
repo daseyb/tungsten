@@ -189,8 +189,8 @@
         "enable_volume_light_sampling": false
     },
     "renderer": {
-        "output_file": "gp-medium-sphere-softlight-rough.png",
-        "hdr_output_file": "gp-medium-sphere-softlight-rough.exr",
+        "output_file": "gp-medium-sphere-softlight-rough-64.png",
+        "hdr_output_file": "gp-medium-sphere-softlight-rough-64.exr",
         "resume_render_file": "",
         "overwrite_output_files": false,
         "adaptive_sampling": false,

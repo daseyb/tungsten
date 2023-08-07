@@ -19,6 +19,7 @@
             "sigma_s": 1.0,
             "density": 1,
             "sample_points": 32,
+			"correlation_context": "elephant",
 			"gaussian_process": {
 				"type": "standard",
 				"covariance_epsilon": 0,
@@ -28,10 +29,18 @@
 					"radius": 1
 				},
 				"covariance": {
-                    "aniso": [1,1,1],
-                    "type": "squared_exponential",
-                    "lengthScale": 0.0141421,
-                    "sigma": 0.001
+					"type": "mg-nonstationary",
+					"cov": {
+						"aniso": [1,1,1],
+						"type": "squared_exponential",
+						"lengthScale": 0.0141421,
+						"sigma": 0.001
+					},
+					"mean": {
+						"type": "spherical",
+						"center": [0, 0.5, -5],
+						"radius": 1
+					}
 				}
 			}
         }
@@ -181,8 +190,8 @@
         "enable_volume_light_sampling": false
     },
     "renderer": {
-        "output_file": "gp-medium-sphere-softlight-rough-isotropic.png",
-        "hdr_output_file": "gp-medium-sphere-softlight-rough-isotropic.exr",
+        "output_file": "gp-medium-sphere-softlight-rough-elephant.png",
+        "hdr_output_file": "gp-medium-sphere-softlight-rough-elephant.exr",
         "resume_render_file": "",
         "overwrite_output_files": false,
         "adaptive_sampling": false,

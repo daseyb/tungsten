@@ -18,7 +18,7 @@ struct GPContextWeightSpace : public GPContext {
 
 struct GPContextFunctionSpace : public GPContext {
     std::vector<Vec3f> points;
-    Eigen::MatrixXd values;
+    std::vector<double> values;
     std::vector<Derivative> derivs;
 };
 
