@@ -23,16 +23,24 @@
 				"type": "standard",
 				"covariance_epsilon": 0,
 				"mean": {
-					"type": "linear",
-					"reference_point": [0,-1,0],
-					"direction": [0,1,0],
-					"scale": 1
+					"type": "spherical",
+					"center": [0, 0.5, -5],
+					"radius": 1
 				},
 				"covariance": {
-					"aniso": [1,0,1],
-					"type": "squared_exponential",
-					"lengthScale": 0.141421,
-					"sigma": 0.001
+					"type": "mg-nonstationary",
+					"aniso": [1,1,1000],
+					"cov": {
+						"type": "rational_quadratic",
+						"lengthScale": 0.0141421,
+						"sigma": 0.001,
+                        "a": 0.2
+					},
+					"mean": {
+						"type": "spherical",
+						"center": [0, 0.5, -5],
+						"radius": 1
+					}
 				}
 			}
         }
@@ -87,7 +95,7 @@
 	    {
             "name": "floor",
             "transform": {
-				"position": [ 0, -1.01, 0],
+				"position": [ 0, -2, 0],
                 "scale": [
                     200,
                     400,
@@ -100,80 +108,49 @@
                 ]
             },
             "type": "quad",
-            "bsdf": "floor"
+            "bsdf": "backWall"
         },
         {
-            "name": "upper",
+            "name": "outer",
             "transform": {
-				"position": [ 0, -0.99, 0],
-                "scale": [
-                    200,
-                    400,
-                    200
-                ],
-                "rotation": [
-                    0,
-                    90,
-                    0
-                ]
+				"position": [ 0, 0.5, -5],
+                "scale": 1.01
             },
-            "type": "quad",
+            "type": "sphere",
             "bsdf": "upper",
 			"int_medium": "gp"
         },
-		{
+        {
+            "name": "inner",
             "transform": {
-                "position": [
-                    -2,
-                    1,
-                    -10
-                ],
-                "scale": [
-                    0.05,
-                    0.05,
-                    0.05
-                ]
+				"position": [ 0, 0.5, -5],
+                "scale": 0.99
             },
-			"bsdf": "light",
-            "power": 280.0,
             "type": "sphere",
-            "sample": true
+            "bsdf": "floor",
+			"ext_medium": "gp"
         },
-		{
+        {
+            "bump_strength": 1,
             "transform": {
                 "position": [
                     0,
-                    1,
-                    -15
+                    0,
+                    1.17369
                 ],
-                "scale": [
-                    0.05,
-                    0.05,
-                    0.05
+                "rotation": [
+                    0,
+                    -67.2614,
+                    0
                 ]
             },
-			"bsdf": "light",
-            "power": 280.0,
-            "type": "sphere",
-            "sample": true
-        },
-		{
-            "transform": {
-                "position": [
-                    2,
-                    1,
-                    -20
-                ],
-                "scale": [
-                    0.05,
-                    0.05,
-                    0.05
-                ]
-            },
-			"bsdf": "light",
-            "power": 280.0,
-            "type": "sphere",
-            "sample": true
+            "emission": "envmap.hdr",
+            "type": "infinite_sphere",
+            "sample": true,
+            "bsdf": {
+                "albedo": 1,
+                "type": "null"
+            }
         }
     ],
     "camera": {
@@ -209,20 +186,20 @@
         "max_bounces": 20,
         "enable_consistency_checks": false,
         "enable_two_sided_shading": true,
-        "enable_light_sampling": true,
+        "enable_light_sampling": false,
         "enable_volume_light_sampling": false
     },
     "renderer": {
-        "output_file": "gp-medium-plane.png",
-        "hdr_output_file": "gp-medium-plane.exr",
+        "output_file": "gp-medium-sphere-softlight-rough.png",
+        "hdr_output_file": "gp-medium-sphere-softlight-rough.exr",
         "resume_render_file": "",
         "overwrite_output_files": false,
         "adaptive_sampling": false,
         "enable_resume_render": false,
         "stratified_sampler": false,
         "scene_bvh": true,
-        "spp": 2,
-        "spp_step": 1,
+        "spp": 64,
+        "spp_step": 8,
         "checkpoint_interval": "0",
         "timeout": "0"
     }

@@ -13,12 +13,13 @@ class Scene;
 class NDFBsdf : public Bsdf
 {
     std::string _materialName;
+    std::string _ndfType;
     Vec3f _eta;
     Vec3f _k;
     Vec2f _roughness;
 
     ConductorBRDF micro_brdf;
-    BeckmannNDF ndf;
+    std::shared_ptr<NDF> ndf;
     Microsurface macro_brdf;
 
     bool lookupMaterial();

@@ -1,0 +1,243 @@
+{
+    "media": [
+		{
+            "name": "gp",
+            "phase_function": {
+                "type": "brdf",
+				"bsdf": "diffuse"
+            },
+            "max_bounces": 1024,
+            "type": "gaussian_process",
+            "sigma_a": 0.0,
+            "sigma_s": 1.0,
+            "density": 1,
+            "sample_points": 128,
+			"gaussian_process": {
+				"type": "standard",
+				"max_num_eigenvalues": 32,
+				"covariance_epsilon": 0.00000,
+				"mean": {
+					"type": "tabulated",
+					"scale": 1,
+					"offset": 0,
+					"grid": {
+						"type": "vdb",
+						"file": "tree-mean-eval-avg-32.vdb",
+						"density_name": "density",
+						"normalize_size": false,
+						"integration_method": "raymarching",
+						"transform": {
+							"position": [
+								2.0,
+								0.0,
+								2.0
+							],
+							"scale": 1,
+							"rotation": [
+								0.0,
+								180.0,
+								0.0
+							]
+						}
+					}
+				},
+				"covariance": {
+					"type": "nonstationary",
+					"scale": 0.0001,
+					"cov": {
+						"type": "squared_exponential",
+						"lengthScale": 0.01,
+						"sigma": 1
+					},
+					"grid": {
+						"type": "vdb",
+						"file": "tree-var-eval-avg-32.vdb",
+						"density_name": "density",
+						"normalize_size": false,
+						"integration_method": "raymarching",
+						"transform": {
+							"position": [
+								2.0,
+								0.0,
+								2.0
+							],
+							"scale": 1,
+							"rotation": [
+								0.0,
+								180.0,
+								0.0
+							]
+						}
+					}
+				}
+			}
+        }
+    ],
+    "bsdfs": [
+		{
+            "name": "processBox",
+            "albedo": 1.0,
+            "type": "forward"
+		},
+		{
+			"name": "rough_metal",
+			"albedo": 1,
+			"type": "rough_conductor",
+			"material": "Cu",
+			"distribution": "beckmann",
+			"roughness": 0.1
+		},
+		{
+			"name": "diffuse",
+			"albedo": [0.8, 0.8, 0.8],
+			"type": "lambert"
+		}
+	 ],
+    "primitives": [
+		{
+            "name": "processBox",
+            "transform": {
+                "position": [
+                    0,
+                    1.51,
+                    0
+                ],
+                "scale": [
+                    3,
+                    3,
+                    3
+                ],
+                "rotation": [
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "type": "cube",
+            "bsdf": "processBox",
+			"int_medium": "gp"
+        },
+        {
+            "name": "Floor",
+            "transform": {
+                "position": [
+                    0,
+                    0,
+                    0
+                ],
+                "scale": [
+                    2000.0,
+                    1.0,
+                    2000.0
+                ]
+            },
+            "type": "quad",
+            "bsdf": {
+                "albedo": {
+					"type": "checker",
+					"res_u": 2000,
+					"res_v": 2000
+				},
+                "type": "lambert"
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    -0.20750045776367188,
+                    0.5631198883056641,
+                    -0.5787897109985352
+                ],
+                "scale": [
+                    0.9999997019767761,
+                    1.0,
+                    1.0
+                ],
+                "rotation": [
+                    -32.512420654296878,
+                    -78.93219757080078,
+                    34.01728820800781
+                ]
+            },
+            "type": "skydome",
+            "temperature": 7777.0,
+            "gamma_scale": 1.0,
+            "turbidity": 1.0,
+            "intensity": 2.0,
+            "sample": true
+        },
+        {
+            "transform": {
+                "position": [
+                    -0.20750045776367188,
+                    0.5631198883056641,
+                    -0.5787897109985352
+                ],
+                "scale": [
+                    0.9999997615814209,
+                    0.9999998807907105,
+                    1.0
+                ],
+                "rotation": [
+                    -32.512420654296878,
+                    -78.93219757080078,
+                    34.01728439331055
+                ]
+            },
+            "power": 7.5,
+            "type": "infinite_sphere_cap",
+            "sample": true,
+            "cap_angle": 0.1
+        }
+    ],
+    "camera": {
+        "tonemap": "filmic",
+        "resolution": [
+            512,
+			512
+        ],
+        "reconstruction_filter": "tent",
+        "transform": {
+            "position": [
+                -1,
+                1.07,
+                3
+            ],
+            "look_at": [
+                0,
+                1.2,
+                0
+            ],
+            "up": [
+                0.0,
+                1.0,
+                0.0
+            ]
+        },
+        "type": "pinhole",
+        "fov": 50.0
+    },
+    "integrator": {
+        "min_bounces": 0,
+        "max_bounces": 128,
+        "enable_consistency_checks": false,
+        "enable_two_sided_shading": true,
+        "type": "path_tracer",
+        "enable_light_sampling": true,
+        "enable_volume_light_sampling": true,
+        "low_order_scattering": true,
+        "include_surfaces": true
+    },
+    "renderer": {
+        "overwrite_output_files": false,
+        "adaptive_sampling": true,
+        "enable_resume_render": false,
+        "stratified_sampler": true,
+        "scene_bvh": true,
+        "spp": 1,
+        "spp_step": 1,
+        "timeout": "0",
+        "output_file": "gp-tree-voxel-var.png",
+		"hdr_output_file": "gp-tree-voxel-var.exr"
+    }
+}

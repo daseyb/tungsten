@@ -4,6 +4,7 @@ import sys
 import glob
 import os
 from tqdm import tqdm
+import shutil
 
 imageio.plugins.freeimage.download()
 
@@ -43,3 +44,6 @@ for folder in (pbar := tqdm(folder_glob)):
     #print("Writing to ", output_file)
     imageio.imsave(output_file + ".exr", result)
     imageio.imsave(output_file + ".png", np.array(np.clip(np.power(result, 1.0/2.2)*255, 0, 255), dtype=np.uint8))
+
+    if len(sys.argv) == 3 and sys.argv[2] == "--cleanup":
+        shutil.rmtree(folder)

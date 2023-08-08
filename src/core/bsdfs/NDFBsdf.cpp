@@ -16,14 +16,17 @@
 #include <tinyformat/tinyformat.hpp>
 #include <rapidjson/document.h>
 
+#include <bsdfs/NDFs/GGX.h>
+
 
 namespace Tungsten {
 
 NDFBsdf::NDFBsdf()
-: _materialName("Cu"),
+: _materialName("Cu"), 
+  _ndfType("beckmann"),
   _eta(0.200438f, 0.924033f, 1.10221f),
   _k(3.91295f, 2.45285f, 2.14219f),
-  micro_brdf(1., 1.), ndf(&micro_brdf, 1., 1.), macro_brdf(&ndf)
+  micro_brdf(1., 1.), ndf(std::make_shared<BeckmannNDF>(&micro_brdf, 1., 1.)), macro_brdf(ndf.get())
 {
     _lobes = BsdfLobes(BsdfLobes::SpecularReflectionLobe);
 }
@@ -41,11 +44,19 @@ void NDFBsdf::fromJson(JsonPtr value, const Scene &scene)
     if (value.getField("material", _materialName) && !lookupMaterial())
         value.parseError(tfm::format("Unable to find material with name '%s'", _materialName));
 
+    value.getField("ndf", _ndfType);
     value.getField("roughness", _roughness);
 
     micro_brdf = ConductorBRDF(_eta.x(), _k.x());
-    ndf = BeckmannNDF(&micro_brdf, _roughness.x(), _roughness.y()); // and assign it to microfacets with a GGX distribution
-    macro_brdf = Microsurface(&ndf);
+    if(_ndfType == "beckmann") {
+        ndf = std::make_shared<BeckmannNDF>(&micro_brdf, _roughness.x(), _roughness.y()); // and assign it to microfacets with a GGX distribution
+    } else if(_ndfType == "ggx") {
+        ndf = std::make_shared<GGXNDF>(&micro_brdf, _roughness.x(), _roughness.y()); // and assign it to microfacets with a GGX distribution
+    } else {
+        
+    }
+
+    macro_brdf = Microsurface(ndf.get());
 }
 
 rapidjson::Value NDFBsdf::toJson(Allocator &allocator) const
@@ -53,6 +64,7 @@ rapidjson::Value NDFBsdf::toJson(Allocator &allocator) const
     JsonObject result{Bsdf::toJson(allocator), allocator,
         "type", "ndf",
         "roughness", _roughness,
+        "ndf", _ndfType,
     };
 
     if (_materialName.empty())
