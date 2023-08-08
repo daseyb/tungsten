@@ -36,7 +36,10 @@ void record_first_hit(std::string scene_file, TraceableScene* tracableScene) {
 
     std::string scene_id = scene_file.find("ref") != std::string::npos ? "surface" : "medium";
 
-    Path basePath = Path("testing/intersections");
+    Path basePath = Path("testing/intersections") / Path(scene_file).baseName();
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
 
     if (!basePath.exists()) {
         FileUtils::createDirectory(basePath);
@@ -231,6 +234,8 @@ void record_paths(std::string scene_file, TraceableScene* tracableScene) {
     Eigen::MatrixXf path_points(samples * settings.maxBounces, 3);
     path_points.setZero();
 
+    std::vector<Vec3f> normals(samples * settings.maxBounces);
+
     std::string scene_id = scene_file.find("ref") != std::string::npos ? "surface" : "medium";
 
     Path basePath = Path("testing/intersections") / Path(scene_file).baseName();
@@ -241,14 +246,16 @@ void record_paths(std::string scene_file, TraceableScene* tracableScene) {
     int sid = 0;
     int bounce = 0;
 
-    pathTracer._firstMediumBounceCb = [&sid, &path_points, &bounce](const MediumSample& mediumSample, Ray r) {
+    pathTracer._firstMediumBounceCb = [&sid, &path_points, &normals, &bounce](const MediumSample& mediumSample, Ray r) {
         path_points.row(sid * 8 + bounce) =  vec_conv<Eigen::Vector3f>(r.pos());
+        normals[sid * 8 + bounce] = mediumSample.aniso.normalized();
         bounce++;
         return true;
     };
-    pathTracer._firstSurfaceBounceCb = [&sid, &path_points, &bounce](const SurfaceScatterEvent& event, Ray r) {
+    pathTracer._firstSurfaceBounceCb = [&sid, &path_points, &normals, &bounce](const SurfaceScatterEvent& event, Ray r) {
         if (!event.sampledLobe.isForward()) {
             path_points.row(sid * 8 + bounce) = vec_conv<Eigen::Vector3f>(r.pos());
+            normals[sid * 8 + bounce] = event.info->Ns;
             bounce++;
         }
         return true;
@@ -265,9 +272,11 @@ void record_paths(std::string scene_file, TraceableScene* tracableScene) {
         }
 
         path_points.row(sid * 8) = vec_conv<Eigen::Vector3f>(tracableScene->cam().pos());
+        normals[sid * 8] = Vec3f(1.f);
         bounce = 1;
+        pathTracer.traceSample({ 256, 256 }, sampler);
         //pathTracer.traceSample({ 256, 187 }, sampler);
-        pathTracer.traceSample({ 180, 180 }, sampler);
+        //pathTracer.traceSample({ 180, 180 }, sampler);
     }
 
     {
@@ -278,6 +287,17 @@ void record_paths(std::string scene_file, TraceableScene* tracableScene) {
             std::ios::out | std::ios::binary);
 
         xfile.write((char*)path_points.data(), sizeof(float) * path_points.rows() * path_points.cols());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(
+            incrementalFilename(
+                basePath + Path(tinyformat::format("/%s-paths-normals.bin", scene_id)),
+                "", false).asString(),
+            std::ios::out | std::ios::binary);
+
+        xfile.write((char*)normals.data(), sizeof(Vec3f) * normals.size());
         xfile.close();
     }
 }
@@ -304,10 +324,10 @@ int main(int argc, char** argv) {
 
         auto tracableScene = scene->makeTraceable();
 
-        //first_intersect_ansio(argv[1], scene);
+        //first_intersect_ansio(argv[arg], scene);
 
-        //record_first_hit(argv[1], tracableScene);
+        record_first_hit(argv[arg], tracableScene);
 
-        record_paths(argv[arg], tracableScene);
+        //record_paths(argv[arg], tracableScene);
     }
 }
