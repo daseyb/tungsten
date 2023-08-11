@@ -20,8 +20,8 @@ int main() {
     float meanv = 0;
     float length_scale = 1.0f;
 
-    for (auto meanv : { -1.6f, 0.f, 1.6f, 3.2f }) {
-        for (auto length_scale : { 4.0f, 2.0f, 0.25f, 0.125f }) {
+    for (auto meanv : { -1.6f, 0.f, 1.6f }) {
+        for (auto length_scale : { 2.0f, 0.25f, 0.125f }) {
             std::cout << "=========" << meanv << "-" << length_scale << "=======\n";
             auto mean = std::make_shared<HomogeneousMean>(meanv);
             auto gp = std::make_shared<GaussianProcess>(mean, std::make_shared<SquaredExponentialCovariance>(1.0f, length_scale));
@@ -32,12 +32,12 @@ int main() {
             UniformPathSampler sampler(0);
             sampler.next2D();
 
-            Ray ray(Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), 0.0f, 10.0f);
+            Ray ray(Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), 0.0f, 32.0f);
 
             std::vector<float> ts;
 
-            float L0 = (*gp->_cov)(Derivative::None, Derivative::None, Vec3f(0.f), Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), Vec3f(1.f, 0.f, 0.f));
-            float L2 = (*gp->_cov)(Derivative::First, Derivative::First, Vec3f(0.f), Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), Vec3f(1.f, 0.f, 0.f));
+            float L0 = (*gp->_cov)(Derivative::None, Derivative::None, Vec3d(0.f), Vec3d(0.f), Vec3d(1.f, 0.f, 0.f), Vec3d(1.f, 0.f, 0.f));
+            float L2 = (*gp->_cov)(Derivative::First, Derivative::First, Vec3d(0.f), Vec3d(0.f), Vec3d(1.f, 0.f, 0.f), Vec3d(1.f, 0.f, 0.f));
 
             std::cout << "L0:" << L0 << std::endl;
             std::cout << "L2:" << L2 << std::endl;
@@ -49,10 +49,10 @@ int main() {
                 FileUtils::createDirectory(basePath);
             }
 
-            std::string filename = basePath.asString() + tinyformat::format("/sample-fp-%f.bin", mean->operator()(Derivative::None, Vec3f(0.f), Vec3f(1.f)));
+            std::string filename = basePath.asString() + tinyformat::format("/sample-fp-%f.bin", mean->operator()(Derivative::None, Vec3d(0.f), Vec3d(1.f)));
 
             if (Path(filename).exists()) {
-                continue;
+                //continue;
             }
 
             int sample_count = 1000000;

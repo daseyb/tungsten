@@ -17,7 +17,7 @@ struct GPContextWeightSpace : public GPContext {
 };
 
 struct GPContextFunctionSpace : public GPContext {
-    std::vector<Vec3f> points;
+    std::vector<Vec3d> points;
     std::vector<double> values;
     std::vector<Derivative> derivs;
 };
@@ -89,7 +89,7 @@ public:
     virtual Vec3f sigmaS(Vec3f p) const override;
     virtual Vec3f sigmaT(Vec3f p) const override;
 
-    bool sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3f& ip,
+    bool sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3d& ip,
         MediumState& state,
         Vec3f& grad) const;
 

@@ -168,22 +168,24 @@ namespace Tungsten {
         return _sigmaT;
     }
 
-    bool GaussianProcessMedium::sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3f& ip,
+    bool GaussianProcessMedium::sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3d& ip,
         MediumState& state, Vec3f& grad) const {
 
         GPContextFunctionSpace& ctxt = *(GPContextFunctionSpace*)state.gpContext.get();
 
+        auto rd = vec_conv<Vec3d>(ray.dir());
+
         switch(_normalSamplingMethod) {
             case GPNormalSamplingMethod::FiniteDifferences:
             {
-                float eps = 0.001f;
-                std::array<Vec3f, 6> gradPs{
-                    ip + Vec3f(eps, 0.f, 0.f),
-                    ip + Vec3f(0.f, eps, 0.f),
-                    ip + Vec3f(0.f, 0.f, eps),
-                    ip - Vec3f(eps, 0.f, 0.f),
-                    ip - Vec3f(0.f, eps, 0.f),
-                    ip - Vec3f(0.f, 0.f, eps),
+                float eps = 0.0001f;
+                std::array<Vec3d, 6> gradPs{
+                    ip + Vec3d(eps, 0.f, 0.f),
+                    ip + Vec3d(0.f, eps, 0.f),
+                    ip + Vec3d(0.f, 0.f, eps),
+                    ip - Vec3d(eps, 0.f, 0.f),
+                    ip - Vec3d(0.f, eps, 0.f),
+                    ip - Vec3d(0.f, 0.f, eps),
                 };
 
                 std::array<Derivative, 6> gradDerivs{
@@ -195,7 +197,7 @@ namespace Tungsten {
                     gradPs.data(), gradDerivs.data(), gradPs.size(), nullptr,
                     ctxt.points.data(), ctxt.values.data(), ctxt.derivs.data(), ctxt.points.size(), nullptr,
                     nullptr, 0,
-                    ray.dir(), 1, sampler);
+                    rd, 1, sampler);
 
                 Vec3d gradd = Vec3d{
                     gradSamples(0,0) - gradSamples(3,0),
@@ -208,19 +210,19 @@ namespace Tungsten {
             }
             case GPNormalSamplingMethod::ConditionedGaussian:
             {
-                std::array<Vec3f, 3> gradPs{ ip, ip, ip };
+                std::array<Vec3d, 3> gradPs{ ip, ip, ip };
                 std::array<Derivative, 3> gradDerivs{ Derivative::First, Derivative::First, Derivative::First };
-                std::array<Vec3f, 3> gradDirs{
-                    Vec3f(1.f, 0.f, 0.f),
-                    Vec3f(0.f, 1.f, 0.f),
-                    Vec3f(0.f, 0.f, 1.f),
+                std::array<Vec3d, 3> gradDirs{
+                    Vec3d(1.f, 0.f, 0.f),
+                    Vec3d(0.f, 1.f, 0.f),
+                    Vec3d(0.f, 0.f, 1.f),
                 };
 
                 auto gradSamples = _gp->sample_cond(
                     gradPs.data(), gradDerivs.data(), gradPs.size(), gradDirs.data(),
                     ctxt.points.data(), ctxt.values.data(), ctxt.derivs.data(), ctxt.points.size(), nullptr,
                     nullptr, 0,
-                    ray.dir(), 1, sampler);
+                    rd, 1, sampler);
 
                 grad = {
                     (float)gradSamples(0,0), (float)gradSamples(1,0), (float)gradSamples(2,0)
@@ -229,18 +231,18 @@ namespace Tungsten {
             }
             case GPNormalSamplingMethod::Beckmann:
             {
-                Vec3f normal = Vec3f(
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(1.f, 0.f, 0.f)),
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(0.f, 1.f, 0.f)),
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(0.f, 0.f, 1.f)));
+                Vec3d normal = Vec3d(
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(1.f, 0.f, 0.f)),
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 1.f, 0.f)),
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 0.f, 1.f)));
 
-                TangentFrame frame(normal);
+                TangentFrame frame(vec_conv<Vec3f>(normal));
 
                 Vec3f wi = frame.toLocal(-ray.dir());
                 float alpha = _gp->_cov->compute_beckmann_roughness();
                 BeckmannNDF ndf(0, alpha, alpha);
 
-                grad = vec_conv2<Vec3f>(ndf.sampleD_wi(vec_conv<Vector3>(wi)));
+                grad = vec_conv<Vec3f>(ndf.sampleD_wi(vec_conv<Vector3>(wi)));
 
                 grad = frame.toGlobal(grad);
 
@@ -248,18 +250,18 @@ namespace Tungsten {
             }
             case GPNormalSamplingMethod::GGX:
             {
-                Vec3f normal = Vec3f(
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(1.f, 0.f, 0.f)),
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(0.f, 1.f, 0.f)),
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3f(0.f, 0.f, 1.f)));
+                Vec3d normal = Vec3d(
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(1.f, 0.f, 0.f)),
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 1.f, 0.f)),
+                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 0.f, 1.f)));
 
-                TangentFrame frame(normal);
+                TangentFrame frame(vec_conv<Vec3f>(normal));
 
                 Vec3f wi = frame.toLocal(-ray.dir());
                 float alpha = _gp->_cov->compute_beckmann_roughness();
                 GGXNDF ndf(0, alpha, alpha);
 
-                grad = vec_conv2<Vec3f>(ndf.sampleD_wi(vec_conv<Vector3>(wi)));
+                grad = vec_conv<Vec3f>(ndf.sampleD_wi(vec_conv<Vector3>(wi)));
 
                 grad = frame.toGlobal(grad);
 
@@ -288,8 +290,8 @@ namespace Tungsten {
     bool GaussianProcessMedium::intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
         t = ray.nearT() + 0.001f;
         for(int i = 0; i < 2048; i++) {
-            auto p = ray.pos() + t * ray.dir();
-            float m = (*_gp->_mean)(Derivative::None, p, Vec3f(0.f));
+            auto p = vec_conv<Vec3d>(ray.pos() + t * ray.dir());
+            float m = (*_gp->_mean)(Derivative::None, p, Vec3d(0.f));
 
             if(m < 0.0001f) {
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
@@ -310,7 +312,7 @@ namespace Tungsten {
     }
 
     bool GaussianProcessMedium::intersectMeanRaymarch(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
-        std::vector<Vec3f> points(_samplePoints);
+        std::vector<Vec3d> points(_samplePoints);
         std::vector<Derivative> derivs(_samplePoints);
         std::vector<float> ts(_samplePoints);
         Eigen::MatrixXd gpSamples(_samplePoints,1);
@@ -318,8 +320,8 @@ namespace Tungsten {
         for (int i = 0; i < _samplePoints; i++) {
             float t = lerp(ray.nearT(), ray.nearT() + min(100.f, ray.farT() - ray.nearT()), clamp((i + tOffset) / _samplePoints, 0.f, 1.f));
             ts[i] = t;
-            points[i] = ray.pos() + t * ray.dir();
-            gpSamples(i,0) = (*_gp->_mean)(Derivative::None, ray.pos() + t * ray.dir(), Vec3f(0.f));
+            points[i] = vec_conv<Vec3d>(ray.pos() + t * ray.dir());
+            gpSamples(i,0) = (*_gp->_mean)(Derivative::None, points[i], Vec3d(0.));
         }
 
         float prevV = gpSamples(0, 0);
@@ -334,8 +336,8 @@ namespace Tungsten {
                 derivs.resize(p + 1);
                 points.resize(p + 1);
 
-                points[p] = ray.pos() + t * ray.dir();
-                gpSamples(p, 0) = (*_gp->_mean)(Derivative::None, ray.pos() + t * ray.dir(), Vec3f(0.f));
+                points[p] = vec_conv<Vec3d>(ray.pos() + t * ray.dir());
+                gpSamples(p, 0) = (*_gp->_mean)(Derivative::None, points[p], Vec3d(0.f));
                
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
                 if (_ctxt == GPCorrelationContext::Dori) {
@@ -360,7 +362,7 @@ namespace Tungsten {
     }
 
     bool GaussianProcessMedium::intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
-        std::vector<Vec3f> points(_samplePoints);
+        std::vector<Vec3d> points(_samplePoints);
         std::vector<Derivative> derivs(_samplePoints);
         std::vector<float> ts(_samplePoints);
         float tOffset = sampler.next1D();
@@ -372,15 +374,17 @@ namespace Tungsten {
                 t = min(100.f, ray.farT());
 
             ts[i] = t;
-            points[i] = ray.pos() + t * ray.dir();
+            points[i] = vec_conv<Vec3d>(ray.pos() + t * ray.dir());
             derivs[i] = Derivative::None;
         }
 
         Eigen::MatrixXd gpSamples;
 
+        auto rd = vec_conv<Vec3d>(ray.dir());
+
         int startSign = 1;
         if (state.firstScatter) {
-            std::array<Vec3f, 1> cond_pts = { points[0] };
+            std::array<Vec3d, 1> cond_pts = { points[0] };
             std::array<Derivative, 1> cond_deriv = { Derivative::None };
             std::array<double, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
             std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
@@ -388,13 +392,13 @@ namespace Tungsten {
                 points.data(), derivs.data(), _samplePoints, nullptr,
                 cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
                 constraints.data(), constraints.size(),
-                ray.dir(), 1, sampler);
+                rd, 1, sampler);
         }
         else {
             switch (_ctxt) {
             case GPCorrelationContext::Dori:
             {
-                std::array<Vec3f, 1> cond_pts = { points[0] };
+                std::array<Vec3d, 1> cond_pts = { points[0] };
                 std::array<Derivative, 1> cond_deriv = { Derivative::None };
                 std::array<double, 1> cond_vs = { 0 };
 
@@ -403,12 +407,12 @@ namespace Tungsten {
                     points.data(), derivs.data(), _samplePoints, nullptr,
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
                     nullptr, 0,
-                    ray.dir(), 1, sampler) * startSign;
+                    rd, 1, sampler) * startSign;
                 break;
             }
             case GPCorrelationContext::Goldfish:
             {
-                std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
+                std::array<Vec3d, 2> cond_pts = { points[0], points[0] };
                 std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
                 std::array<double, 2> cond_vs = { 0, state.lastAniso.dot(ray.dir().normalized()) };
 
@@ -417,7 +421,7 @@ namespace Tungsten {
                     points.data(), derivs.data(), _samplePoints, nullptr,
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
                     nullptr, 0,
-                    ray.dir(), 1, sampler) * startSign;
+                    rd, 1, sampler) * startSign;
                 break;
             }
             case GPCorrelationContext::Elephant:
@@ -440,7 +444,7 @@ namespace Tungsten {
                     points.data(), derivs.data(), _samplePoints, nullptr,
                     ctxt->points.data(), ctxt->values.data(), ctxt->derivs.data(), ctxt->points.size(), nullptr,
                     nullptr, 0,
-                    ray.dir(), 1, sampler) * startSign;
+                    rd, 1, sampler) * startSign;
                 break;
             }
             }
@@ -464,8 +468,8 @@ namespace Tungsten {
                 points.resize(p + 1);
                 derivs.resize(p + 1);
 
-                points[p] = ray.pos() + t * ray.dir();
-                gpSamples(p, 0) = lerp(prevV, currV, offsetT);
+                //points[p] = ray.pos() + t * ray.dir();
+                //gpSamples(p, 0) = lerp(prevV, currV, offsetT);
 
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
                 if(_ctxt == GPCorrelationContext::Dori) {
@@ -519,7 +523,7 @@ namespace Tungsten {
                 Vec3f ip = ray.pos() + ray.dir() * t;
 
                 Vec3f grad;
-                if (!sampleGradient(sampler, ray, ip, state, grad)) {
+                if (!sampleGradient(sampler, ray, vec_conv<Vec3d>(ip), state, grad)) {
                     return false;
                 }
 
@@ -567,15 +571,17 @@ namespace Tungsten {
         if (ray.farT() == Ray::infinity())
             return Vec3f(0.0f);
 
+        auto rd = vec_conv<Vec3d>(ray.dir());
+
         switch (_intersectMethod) {
             case GPIntersectMethod::GPDiscrete:
             {
-                std::vector<Vec3f> points(_samplePoints);
+                std::vector<Vec3d> points(_samplePoints);
                 std::vector<Derivative> derivs(_samplePoints);
 
                 for (int i = 0; i < points.size(); i++) {
                     float t = lerp(ray.nearT(), ray.farT(), (i + sampler.next1D()) / _samplePoints);
-                    points[i] = ray.pos() + t * ray.dir();
+                    points[i] = vec_conv<Vec3d>(ray.pos() + t * ray.dir());
                     derivs[i] = Derivative::None;
                 }
 
@@ -583,7 +589,7 @@ namespace Tungsten {
                 int startSign = 1;
 
                 if (startOnSurface) {
-                    std::array<Vec3f, 1> cond_pts = { points[0] };
+                    std::array<Vec3d, 1> cond_pts = { points[0] };
                     std::array<Derivative, 1> cond_deriv = { Derivative::None };
                     std::array<double, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
                     std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
@@ -591,7 +597,7 @@ namespace Tungsten {
                         points.data(), derivs.data(), points.size(), nullptr,
                         cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
                         constraints.data(), constraints.size(),
-                        ray.dir(), 10, sampler);
+                        rd, 10, sampler);
                 }
                 else {
                     if (!sample) {
@@ -599,7 +605,7 @@ namespace Tungsten {
                         return Vec3f(0.f);
                     }
 
-                    std::array<Vec3f, 2> cond_pts = { points[0], points[0] };
+                    std::array<Vec3d, 2> cond_pts = { points[0], points[0] };
                     std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
 
                     float deriv = sample->aniso.dot(ray.dir().normalized());
@@ -610,7 +616,7 @@ namespace Tungsten {
                         points.data(), derivs.data(), points.size(), nullptr,
                         cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
                         nullptr, 0,
-                        ray.dir(), 10, sampler) * startSign;
+                        rd, 10, sampler) * startSign;
                 }
 
                 int madeItCnt = 0;

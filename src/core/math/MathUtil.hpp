@@ -112,14 +112,35 @@ static inline float trigHalfAngle(float x)
     return min(std::sqrt(max(x*0.5f + 0.5f, 0.0f)), 1.0f);
 }
 
-template<typename To, typename From>
-inline To vec_conv(const From& vd) {
-    return To{ (float)vd.x(), (float)vd.y(), (float)vd.z() };
-}
+
+template <typename T, typename = int>
+struct HasXMem : std::false_type { };
+
+template <typename T>
+struct HasXMem <T, decltype(std::declval<T>().x(), 0)> : std::true_type { };
 
 template<typename To, typename From>
-inline To vec_conv2(const From& vd) {
-    return To{ (float)vd.x, (float)vd.y, (float)vd.z };
+inline To vec_conv(const From& vd) {
+    if constexpr (HasXMem<From>::value) {
+        if constexpr (HasXMem<To>::value) {
+            using ToElemType = std::remove_reference<decltype(std::declval<To>().x())>::type;
+            return To{ (ToElemType)vd.x(), (ToElemType)vd.y(), (ToElemType)vd.z() };
+        }
+        else {
+            using ToElemType = std::remove_reference<decltype(std::declval<To>().x)>::type;
+            return To{ (ToElemType)vd.x(), (ToElemType)vd.y(), (ToElemType)vd.z() };
+        }
+    }
+    else {
+        if constexpr (HasXMem<To>::value) {
+            using ToElemType = std::remove_reference<decltype(std::declval<To>().x())>::type;
+            return To{ (ToElemType)vd.x, (ToElemType)vd.y, (ToElemType)vd.z };
+        }
+        else {
+            using ToElemType = std::remove_reference<decltype(std::declval<To>().x)>::type;
+            return To{ (ToElemType)vd.x, (ToElemType)vd.y, (ToElemType)vd.z };
+        }
+    }
 }
 
 // TODO: Review which of these are still in use

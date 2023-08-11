@@ -50,7 +50,7 @@ Eigen::MatrixXf compute_normals(const Eigen::MatrixXf& samples) {
 }
 
 float compute_beckmann_roughness(const CovarianceFunction& cov) {
-    float L2 = cov(Derivative::First, Derivative::First, Vec3f(0.f), Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), Vec3f(1.f, 0.f, 0.f));
+    float L2 = cov(Derivative::First, Derivative::First, Vec3d(0.f), Vec3d(0.f), Vec3d(1.f, 0.f, 0.f), Vec3d(1.f, 0.f, 0.f));
     return sqrt(2 * L2);
 }
 
@@ -61,7 +61,7 @@ void normals_and_stuff(const GaussianProcess& gp, std::string output) {
     sampler.next1D();
 
 
-    std::vector<Vec3f> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+    std::vector<Vec3d> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> derivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
 
     {
@@ -69,7 +69,7 @@ void normals_and_stuff(const GaussianProcess& gp, std::string output) {
             int idx = 0;
             for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
                 for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
-                    points[idx] = 2.f * (Vec3f((float)i, (float)j, 0.f) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
+                    points[idx] = 2. * (Vec3d((float)i, (float)j, 0.f) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
                     derivs[idx] = Derivative::None;
                     idx++;
                 }
@@ -80,7 +80,7 @@ void normals_and_stuff(const GaussianProcess& gp, std::string output) {
         Eigen::MatrixXf samples = gp.sample(
             points.data(), derivs.data(), points.size(), nullptr,
             nullptr, 0,
-            Vec3f(1.0f, 0.0f, 0.0f), 1, sampler).cast<float>();
+            Vec3d(1.0f, 0.0f, 0.0f), 1, sampler).cast<float>();
 
         std::cout << samples.minCoeff() << "-" << samples.maxCoeff() << std::endl;
 
@@ -120,7 +120,7 @@ void side_view(const GaussianProcess& gp, std::string output) {
     sampler.next1D();
     sampler.next1D();
 
-    std::vector<Vec3f> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+    std::vector<Vec3d> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> derivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
 
     {
@@ -128,7 +128,7 @@ void side_view(const GaussianProcess& gp, std::string output) {
             int idx = 0;
             for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
                 for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
-                    points[idx] = 20.f * (Vec3f((float)j, 0.f, (float)i) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
+                    points[idx] = 20. * (Vec3d((float)j, 0.f, (float)i) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
                     derivs[idx] = Derivative::None;
                     idx++;
                 }
@@ -139,7 +139,7 @@ void side_view(const GaussianProcess& gp, std::string output) {
         Eigen::MatrixXf samples = gp.sample(
             points.data(), derivs.data(), points.size(), nullptr,
             nullptr, 0,
-            Vec3f(1.0f, 0.0f, 0.0f), 1, sampler).cast<float>();
+            Vec3d(1.0f, 0.0f, 0.0f), 1, sampler).cast<float>();
 
         std::cout << samples.minCoeff() << "-" << samples.maxCoeff() << std::endl;
 
@@ -174,7 +174,7 @@ void side_view(const GaussianProcess& gp, std::string output) {
 }
 
 
-constexpr size_t NUM_RAY_SAMPLE_POINTS = 32;
+constexpr size_t NUM_RAY_SAMPLE_POINTS = 64;
 
 
 void sample_beckmann(float alpha) {
@@ -277,7 +277,7 @@ void ndf(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
 
         Medium::MediumState state;
         Vec3f grad;
-        gp_med->sampleGradient(sampler, ray, Vec3f(-10.f, 20.0f, -5.f), state, grad);
+        gp_med->sampleGradient(sampler, ray, Vec3d(-10.f, 20.0f, -5.f), state, grad);
 
         grad.normalize();
         normals(s, 0) = grad.x();
@@ -294,7 +294,7 @@ void ndf(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
     }
 }
 
-void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::string output, float angle = (2 * PI) / 8, GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian) {
+void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::string output, float angle = (2 * PI) / 8, GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian, float zrange = 4.f) {
 
     Path basePath = Path(output) / Path(gp->_cov->id());
 
@@ -318,8 +318,8 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
     Mat4f mat = Mat4f::rotAxis(Vec3f(0.f, 0.f, 1.0f), 45);
     ray.setDir(mat.transformVector(ray.dir()));
 
-    ray.setNearT(-(ray.pos().z() - 2.0f) / ray.dir().z());
-    ray.setFarT(-(ray.pos().z() + 2.0f) / ray.dir().z());
+    ray.setNearT(-(ray.pos().z() - zrange * 0.5f) / ray.dir().z());
+    ray.setFarT(-(ray.pos().z() + zrange * 0.5f) / ray.dir().z());
 
     for (int s = 0; s < samples;) {
 
@@ -345,7 +345,7 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
     {
         std::ofstream xfile(
             incrementalFilename(
-                basePath + Path(tinyformat::format("-%.1fdeg-%d-%s.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS, GaussianProcessMedium::normalSamplingMethodToString(nsm))), 
+                basePath + Path(tinyformat::format("-%.1fdeg-%d-%s-%.3f.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS, GaussianProcessMedium::normalSamplingMethodToString(nsm), zrange)), 
                 "", false).asString(), 
             std::ios::out | std::ios::binary);
 
@@ -363,11 +363,11 @@ static std::shared_ptr<T> instantiate(JsonPtr value, const Scene& scene)
 }
 
 int main(int argc, char** argv) {
-    auto lmean = std::make_shared<LinearMean>(Vec3f(0.f), Vec3f(0.f, 0.f, 1.f), 1.0f);
+    auto lmean = std::make_shared<LinearMean>(Vec3d(0.f), Vec3d(0.f, 0.f, 1.f), 1.0f);
 
     std::shared_ptr<JsonDocument> document;
     try {
-        document = std::make_shared<JsonDocument>(argc > 1 ? argv[1] : "microfacet/covariances-easy.json");
+        document = std::make_shared<JsonDocument>(argc > 1 ? argv[1] : "testing/microfacet/covariances-real.json");
     }
     catch (std::exception& e) {
         std::cerr << e.what() << "\n";
@@ -412,8 +412,13 @@ int main(int argc, char** argv) {
             }
             */
 
-            ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond", PI / 4, GPNormalSamplingMethod::ConditionedGaussian);
-            ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond", PI / 4, GPNormalSamplingMethod::Beckmann);
+            ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::ConditionedGaussian, 0.01f);
+            //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::ConditionedGaussian, 0.02f);
+            //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::ConditionedGaussian, 0.05f);
+            //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::ConditionedGaussian, 0.10f);
+            //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::ConditionedGaussian, 1.00f);
+            //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::Beckmann, 0.1f);
+            //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::Beckmann, 0.1f);
 
 
             /*for (int j = 0; j < 15; j++) {

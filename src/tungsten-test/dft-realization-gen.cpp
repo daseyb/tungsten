@@ -90,7 +90,7 @@ void real_2D(const GaussianProcess& gp) {
     sampler.next2D();
 
 
-    std::vector<Vec3f> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+    std::vector<Vec3d> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> derivs(points.size());
 
     std::vector<std::complex<double>> cov(points.size());
@@ -100,11 +100,11 @@ void real_2D(const GaussianProcess& gp) {
     int idx = 0;
     for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
         for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
-            points[idx] = 4.f * (Vec3f((float)i, (float)j, 0.f) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
+            points[idx] = 4. * (Vec3d((float)i, (float)j, 0.f) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
             points[idx][2] = 0.f;
 
             derivs[idx] = Derivative::None;
-            cov[idx] = std::complex<double>((*gp._cov)(Derivative::None, Derivative::None, Vec3f(0.f), points[idx], -points[idx].normalized(), points[idx].normalized()), 0.f);
+            cov[idx] = std::complex<double>((*gp._cov)(Derivative::None, Derivative::None, Vec3d(0.f), points[idx], -points[idx].normalized(), points[idx].normalized()), 0.f);
             idx++;
         }
     }
@@ -127,7 +127,7 @@ void real_2D(const GaussianProcess& gp) {
 
         for (int i = 0; i < Fcov.size(); i++) {
             Vec2d u = gp.rand_normal_2(sampler);
-            real[i] += std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3f(0.f)));
+            real[i] += std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3d(0.f)));
         }
 
         {
@@ -139,7 +139,7 @@ void real_2D(const GaussianProcess& gp) {
 
     for (int i = 0; i < Fcov.size(); i++) {
         Vec2d u = gp.rand_normal_2(sampler);
-        real[i] = std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3f(0.f)));
+        real[i] = std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3d(0.f)));
     }
 
     {
@@ -152,12 +152,12 @@ void real_2D(const GaussianProcess& gp) {
 }
 
 void rational_quadratic_sphere_3D() {
-    GaussianProcess gp(std::make_shared<SphericalMean>(Vec3f(0.0f, 0.0f, 0.f), 1.f), std::make_shared<RationalQuadraticCovariance>(0.5f, 0.2f, 1.0f, Vec3f(1.f, 1.0f, 1.f)));
+    GaussianProcess gp(std::make_shared<SphericalMean>(Vec3d(0.0f, 0.0f, 0.f), 1.f), std::make_shared<RationalQuadraticCovariance>(0.5f, 0.2f, 1.0f, Vec3f(1.f, 1.0f, 1.f)));
     UniformPathSampler sampler(0);
     sampler.next2D();
 
 
-    std::vector<Vec3f> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+    std::vector<Vec3d> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> derivs(points.size());
 
     std::vector<std::complex<double>> cov(points.size());
@@ -169,10 +169,10 @@ void rational_quadratic_sphere_3D() {
     for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
         for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
             for (int k = 0; k < NUM_SAMPLE_POINTS; k++) {
-                points[idx] = 4.f * (Vec3f((float)i, (float)j, (float)k) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
+                points[idx] = 4. * (Vec3d((float)i, (float)j, (float)k) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
 
                 derivs[idx] = Derivative::None;
-                cov[idx] = std::complex<double>((*gp._cov)(Derivative::None, Derivative::None, Vec3f(0.f), points[idx], -points[idx].normalized(), points[idx].normalized()), 0.f);
+                cov[idx] = std::complex<double>((*gp._cov)(Derivative::None, Derivative::None, Vec3d(0.f), points[idx], -points[idx].normalized(), points[idx].normalized()), 0.f);
                 idx++;
             }
         }
@@ -202,7 +202,7 @@ void rational_quadratic_sphere_3D() {
 
             for (int i = 0; i < Fcov.size(); i++) {
                 Vec2d u = gp.rand_normal_2(sampler);
-                real[i] += std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3f(0.f)));
+                real[i] += std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3d(0.f)));
             }
 
 
@@ -243,7 +243,7 @@ void rational_quadratic_sphere_3D() {
 
     for (int i = 0; i < Fcov.size(); i++) {
         Vec2d u = gp.rand_normal_2(sampler);
-        real[i] = std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3f(0.f)));
+        real[i] = std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3d(0.f)));
     }
 
     {

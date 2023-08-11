@@ -90,7 +90,7 @@ void NonstationaryCovariance::loadResources() {
 
 FloatD NonstationaryCovariance::sampleGrid(Vec3Diff a) const {
     FloatD result;
-    Vec3f ap = from_diff(a);
+    Vec3f ap = vec_conv<Vec3f>(from_diff(a));
     result[0] = _variance->density(ap);
 
     /**/
@@ -103,7 +103,7 @@ FloatD NonstationaryCovariance::sampleGrid(Vec3Diff a) const {
         _variance->density(ap - Vec3f(0.f, eps, 0.f)),
         _variance->density(ap - Vec3f(0.f, 0.f, eps))
     };
-    auto grad = Vec3f(vals[0] - vals[3], vals[1] - vals[4], vals[2] - vals[5]) / (2 * eps);
+    auto grad = Vec3d(vals[0] - vals[3], vals[1] - vals[4], vals[2] - vals[5]) / (2 * eps);
 
     result[1] = grad.dot({ (float)a.x()[1], (float)a.y()[1] , (float)a.z()[1] });
     result[2] = 0; // linear interp
@@ -112,7 +112,7 @@ FloatD NonstationaryCovariance::sampleGrid(Vec3Diff a) const {
 
 FloatDD NonstationaryCovariance::sampleGrid(Vec3DD a) const {
     FloatDD result;
-    Vec3f ap = vec_conv<Vec3f>(a);
+    Vec3f ap = vec_conv<Vec3f>(from_diff(a));
     result.val = _variance->density(ap);
 
     /**/
@@ -125,9 +125,9 @@ FloatDD NonstationaryCovariance::sampleGrid(Vec3DD a) const {
         _variance->density(ap - Vec3f(0.f, eps, 0.f)),
         _variance->density(ap - Vec3f(0.f, 0.f, eps))
     };
-    auto grad = Vec3f(vals[0] - vals[3], vals[1] - vals[4], vals[2] - vals[5]) / (2 * eps);
+    auto grad = Vec3d(vals[0] - vals[3], vals[1] - vals[4], vals[2] - vals[5]) / (2 * eps);
 
-    result.grad.val = grad.dot({ (float)a.x().grad.val, (float)a.y().grad.val , (float)a.z().grad.val });
+    result.grad.val = grad.dot({ a.x().grad.val, a.y().grad.val , a.z().grad.val });
     result.grad.grad = 0; // linear interp
     return result;
 }
@@ -186,24 +186,24 @@ FloatDD NonstationaryCovariance::cov(Vec3DD a, Vec3DD b) const {
     return sqrt(sigmaA) * sqrt(sigmaB) * ansioFac * _stationaryCov->cov(dsq);
 }
 
-float NonstationaryCovariance::cov(Vec3f a, Vec3f b) const {
-    float sigmaA = (_variance->density(_variance->invNaturalTransform() * a) + _offset) * _scale;
-    float sigmaB = (_variance->density(_variance->invNaturalTransform() * b) + _offset) * _scale;
+double NonstationaryCovariance::cov(Vec3d a, Vec3d b) const {
+    double sigmaA = (_variance->density(_variance->invNaturalTransform() * vec_conv<Vec3f>(a)) + _offset) * _scale;
+    double sigmaB = (_variance->density(_variance->invNaturalTransform() * vec_conv<Vec3f>(b)) + _offset) * _scale;
     //return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
 
     Eigen::Matrix3f anisoA = Eigen::Matrix3f::Identity();
     Eigen::Matrix3f anisoB = Eigen::Matrix3f::Identity();
 
-    float detAnisoA = anisoA.determinant();
-    float detAnisoB = anisoB.determinant();
+    double detAnisoA = anisoA.determinant();
+    double detAnisoB = anisoB.determinant();
 
     Eigen::Matrix3f anisoABavg = 0.5 * (anisoA + anisoB);
-    float detAnisoABavg = anisoABavg.determinant();
+    double detAnisoABavg = anisoABavg.determinant();
 
-    float ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
+    double ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
 
     Eigen::Vector3f d = vec_conv<Eigen::Vector3f>(b - a);
-    float dsq = d.transpose() * anisoABavg.inverse() * d;
+    double dsq = d.transpose() * anisoABavg.inverse() * d;
     return sqrt(sigmaA) * sqrt(sigmaB) * ansioFac * _stationaryCov->cov(dsq);
 }
 
@@ -299,18 +299,18 @@ static inline Mat compute_ansio(const Vec&grad, const Vec& aniso) {
     return vmat * smat * vmat.transpose();
 }
 
-Eigen::Matrix3f MeanGradNonstationaryCovariance::localAniso(Vec3f p) const {
-    return compute_ansio<Eigen::Matrix3f>(
-        vec_conv<Eigen::Vector3f>(_mean->dmean_da(p).normalized()), 
-        vec_conv<Eigen::Vector3f>(_aniso));
+Eigen::Matrix3d MeanGradNonstationaryCovariance::localAniso(Vec3d p) const {
+    return compute_ansio<Eigen::Matrix3d>(
+        vec_conv<Eigen::Vector3d>(_mean->dmean_da(p).normalized()), 
+        vec_conv<Eigen::Vector3d>(_aniso));
 }
 
 FloatD MeanGradNonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
     auto anisoA = compute_ansio<Mat3Diff>(
-        vec_conv<Vec3Diff>(_mean->dmean_da(vec_conv<Vec3f>(a))), 
+        vec_conv<Vec3Diff>(_mean->dmean_da(vec_conv<Vec3d>(a))), 
         vec_conv<Vec3Diff>(_aniso));
     auto anisoB = compute_ansio<Mat3Diff>(
-        vec_conv<Vec3Diff>(_mean->dmean_da(vec_conv<Vec3f>(b))),
+        vec_conv<Vec3Diff>(_mean->dmean_da(vec_conv<Vec3d>(b))),
         vec_conv<Vec3Diff>(_aniso));
 
     auto detAnisoA = anisoA.determinant();
@@ -328,10 +328,10 @@ FloatD MeanGradNonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
 
 FloatDD MeanGradNonstationaryCovariance::cov(Vec3DD a, Vec3DD b) const {
     auto anisoA = compute_ansio<Mat3DD>(
-        vec_conv<Vec3DD>(_mean->dmean_da(vec_conv<Vec3f>(a))),
+        vec_conv<Vec3DD>(_mean->dmean_da(vec_conv<Vec3d>(a))),
         vec_conv<Vec3DD>(_aniso));
     auto anisoB = compute_ansio<Mat3DD>(
-        vec_conv<Vec3DD>(_mean->dmean_da(vec_conv<Vec3f>(b))),
+        vec_conv<Vec3DD>(_mean->dmean_da(vec_conv<Vec3d>(b))),
         vec_conv<Vec3DD>(_aniso));
 
     auto detAnisoA = anisoA.determinant();
@@ -347,13 +347,13 @@ FloatDD MeanGradNonstationaryCovariance::cov(Vec3DD a, Vec3DD b) const {
     return ansioFac * _stationaryCov->cov(dsq);
 }
 
-float MeanGradNonstationaryCovariance::cov(Vec3f a, Vec3f b) const {
-    auto anisoA = compute_ansio<Eigen::Matrix3f>(
-        vec_conv<Eigen::Vector3f>(_mean->dmean_da(a)),
-        vec_conv<Eigen::Vector3f>(_aniso));
-    auto anisoB = compute_ansio<Eigen::Matrix3f>(
-        vec_conv<Eigen::Vector3f>(_mean->dmean_da(b)),
-        vec_conv<Eigen::Vector3f>(_aniso));
+double MeanGradNonstationaryCovariance::cov(Vec3d a, Vec3d b) const {
+    auto anisoA = compute_ansio<Eigen::Matrix3d>(
+        vec_conv<Eigen::Vector3d>(_mean->dmean_da(a)),
+        vec_conv<Eigen::Vector3d>(_aniso));
+    auto anisoB = compute_ansio<Eigen::Matrix3d>(
+        vec_conv<Eigen::Vector3d>(_mean->dmean_da(b)),
+        vec_conv<Eigen::Vector3d>(_aniso));
 
     auto detAnisoA = anisoA.determinant();
     auto detAnisoB = anisoB.determinant();
@@ -363,8 +363,8 @@ float MeanGradNonstationaryCovariance::cov(Vec3f a, Vec3f b) const {
 
     float ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
 
-    Eigen::Vector3f d = vec_conv<Eigen::Vector3f>(b - a);
-    float dsq = d.transpose() * anisoABavg.inverse() * d;
+    Eigen::Vector3d d = vec_conv<Eigen::Vector3d>(b - a);
+    double dsq = d.transpose() * anisoABavg.inverse() * d;
     return ansioFac * _stationaryCov->cov(dsq);
 }
 
@@ -391,24 +391,24 @@ rapidjson::Value TabulatedMean::toJson(Allocator& allocator) const {
 }
 
 
-float TabulatedMean::mean(Vec3f a) const {
-    Vec3f p = _grid->invNaturalTransform() * a;
+double TabulatedMean::mean(Vec3d a) const {
+    Vec3f p = _grid->invNaturalTransform() * vec_conv<Vec3f>(a);
     return (_grid->density(p) + _offset) * _scale;
 }
 
-Vec3f TabulatedMean::dmean_da(Vec3f a) const {
-    float eps = 0.001f;
-    float vals[] = {
-        mean(a + Vec3f(eps, 0.f, 0.f)),
-        mean(a + Vec3f(0.f, eps, 0.f)),
-        mean(a + Vec3f(0.f, 0.f, eps)),
-        mean(a - Vec3f(eps, 0.f, 0.f)),
-        mean(a - Vec3f(0.f, eps, 0.f)),
-        mean(a - Vec3f(0.f, 0.f, eps))
+Vec3d TabulatedMean::dmean_da(Vec3d a) const {
+    double eps = 0.001;
+    double vals[] = {
+        mean(a + Vec3d(eps, 0.f, 0.f)),
+        mean(a + Vec3d(0.f, eps, 0.f)),
+        mean(a + Vec3d(0.f, 0.f, eps)),
+        mean(a - Vec3d(eps, 0.f, 0.f)),
+        mean(a - Vec3d(0.f, eps, 0.f)),
+        mean(a - Vec3d(0.f, 0.f, eps))
     };
 
-    return Vec3f(vals[0] - vals[3], vals[1] - vals[4], vals[2] - vals[5]) / (2*eps);
-    /*Vec3f p = _grid->invNaturalTransform() * a;
+    return Vec3d(vals[0] - vals[3], vals[1] - vals[4], vals[2] - vals[5]) / (2*eps);
+    /*Vec3d p = _grid->invNaturalTransform() * a;
     return _scale* _grid->naturalTransform().transformVector(_grid->gradient(p));*/
 }
 
@@ -436,7 +436,7 @@ rapidjson::Value MeshSdfMean::toJson(Allocator& allocator) const {
 }
 
 
-float MeshSdfMean::mean(Vec3f a) const {
+double MeshSdfMean::mean(Vec3d a) const {
     // perform a closest point query
     Eigen::MatrixXd V_vis(1, 3);
     V_vis(0, 0) = a.x();
@@ -449,16 +449,16 @@ float MeshSdfMean::mean(Vec3f a) const {
     return (float)S_vis(0);
 }
 
-Vec3f MeshSdfMean::dmean_da(Vec3f a) const {
-    float eps = 0.001f;
-    float vals[] = {
+Vec3d MeshSdfMean::dmean_da(Vec3d a) const {
+    double eps = 0.001f;
+    double vals[] = {
         mean(a),
-        mean(a + Vec3f(eps, 0.f, 0.f)),
-        mean(a + Vec3f(0.f, eps, 0.f)),
-        mean(a + Vec3f(0.f, 0.f, eps))
+        mean(a + Vec3d(eps, 0.f, 0.f)),
+        mean(a + Vec3d(0.f, eps, 0.f)),
+        mean(a + Vec3d(0.f, 0.f, eps))
     };
 
-    return Vec3f(vals[1] - vals[0], vals[2] - vals[0], vals[3] - vals[0]) / eps;
+    return Vec3d(vals[1] - vals[0], vals[2] - vals[0], vals[3] - vals[0]) / eps;
 }
 
 void MeshSdfMean::loadResources() {
@@ -467,44 +467,7 @@ void MeshSdfMean::loadResources() {
     std::vector<TriangleI> _tris;
 
     if (_path && MeshIO::load(*_path, _verts, _tris)) {
-#if 0
-        _scene = std::make_shared<fcpw::Scene<3>>();
 
-        // set the types of primitives the objects in the scene contain;
-        // in this case, we have a single object consisting of only triangles
-        _scene->setObjectTypes({ {fcpw::PrimitiveType::Triangle} });
-
-        // set the vertex and triangle count of the (0th) object
-        _scene->setObjectVertexCount(_verts.size(), 0);
-        _scene->setObjectTriangleCount(_tris.size() , 0);
-
-        _scene->getSceneData()->soups[0].vNormals.resize(_verts.size());
-
-        // specify the vertex positions
-        for (int i = 0; i < _verts.size(); i++) {
-            Vec3f tpos = _configTransform * _verts[i].pos();
-            _scene->setObjectVertex({ tpos.x(), tpos.y(), tpos.z() }, i, 0);
-            
-            Vec3f tnorm = _configTransform.transformVector(_verts[i].normal());
-            _scene->getSceneData()->soups[0].vNormals[i] = { tnorm.x(), tnorm.y(), tnorm.z() };
-        }
-
-        // specify the triangle indices
-        for (int i = 0; i < _tris.size(); i++) {
-            int tri[] = {
-                _tris[i].v0,
-                _tris[i].v1,
-                _tris[i].v2,
-            };
-
-            _scene->setObjectTriangle(tri, i, 0);
-        }
-
-        //_scene->computeObjectNormals(0);
-
-// now that the geometry has been specified, build the acceleration structure
-        _scene->build(fcpw::AggregateType::Bvh_SurfaceArea, true); // the second boolean argument enables vectorization
-#endif
         V.resize(_verts.size(), 3);
 
         for (int i = 0; i < _verts.size(); i++) {
@@ -573,14 +536,14 @@ void GaussianProcess::loadResources() {
     std::vector<TriangleI> tris;
     if (_conditioningDataPath && MeshIO::load(*_conditioningDataPath, verts, tris)) {
         for (const auto& v : verts) {
-            _globalCondPs.push_back(v.pos());
+            _globalCondPs.push_back(vec_conv<Vec3d>(v.pos()));
             _globalCondDerivs.push_back(Derivative::None);
-            _globalCondDerivDirs.push_back(v.normal());
+            _globalCondDerivDirs.push_back(vec_conv<Vec3d>(v.normal()));
             _globalCondValues.push_back(0);
 
-            _globalCondPs.push_back(v.pos());
+            _globalCondPs.push_back(vec_conv<Vec3d>(v.pos()));
             _globalCondDerivs.push_back(Derivative::First);
-            _globalCondDerivDirs.push_back(v.normal());
+            _globalCondDerivDirs.push_back(vec_conv<Vec3d>(v.normal()));
             _globalCondValues.push_back(1);
         }
     }
@@ -588,8 +551,8 @@ void GaussianProcess::loadResources() {
 }
 
 std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
-    const Vec3f* points, const Derivative* derivative_types, const Vec3f* ddirs,
-    Vec3f deriv_dir, size_t numPts) const {
+    const Vec3d* points, const Derivative* derivative_types, const Vec3d* ddirs,
+    Vec3d deriv_dir, size_t numPts) const {
 
     Eigen::VectorXd ps_mean(numPts);
     CovMatrix ps_cov(numPts, numPts);
@@ -600,11 +563,11 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
 #endif
 
     for (size_t i = 0; i < numPts; i++) {
-        const Vec3f& ddir_a = ddirs ? ddirs[i] : deriv_dir;
+        const Vec3d& ddir_a = ddirs ? ddirs[i] : deriv_dir;
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], ddir_a);
 
         for (size_t j = 0; j < numPts; j++) {
-            const Vec3f& ddir_b = ddirs ? ddirs[j] : deriv_dir;
+            const Vec3d& ddir_b = ddirs ? ddirs[j] : deriv_dir;
             double cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], ddir_a, ddir_b);
 
 #ifdef SPARSE_COV
@@ -626,21 +589,21 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
 }
 
 Eigen::VectorXd GaussianProcess::mean(
-    const Vec3f* points, const Derivative* derivative_types, const Vec3f* ddirs,
-    Vec3f deriv_dir, size_t numPts) const {
+    const Vec3d* points, const Derivative* derivative_types, const Vec3d* ddirs,
+    Vec3d deriv_dir, size_t numPts) const {
     Eigen::VectorXd ps_mean(numPts);
     for (size_t i = 0; i < numPts; i++) {
-        const Vec3f& ddir = ddirs ? ddirs[i] : deriv_dir;
+        const Vec3d& ddir = ddirs ? ddirs[i] : deriv_dir;
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], ddir);
     }
     return ps_mean;
 }
 
 CovMatrix GaussianProcess::cov(
-    const Vec3f* points_a, const Vec3f* points_b, 
+    const Vec3d* points_a, const Vec3d* points_b, 
     const Derivative* dtypes_a, const Derivative* dtypes_b,
-    const Vec3f* ddirs_a, const Vec3f* ddirs_b,
-    Vec3f deriv_dir, size_t numPtsA, size_t numPtsB) const {
+    const Vec3d* ddirs_a, const Vec3d* ddirs_b,
+    Vec3d deriv_dir, size_t numPtsA, size_t numPtsB) const {
     CovMatrix ps_cov(numPtsA, numPtsB);
 
 #ifdef SPARSE_COV
@@ -650,9 +613,9 @@ CovMatrix GaussianProcess::cov(
 
 
     for (size_t i = 0; i < numPtsA; i++) {
-        const Vec3f& ddir_a = ddirs_a ? ddirs_a[i] : deriv_dir;
+        const Vec3d& ddir_a = ddirs_a ? ddirs_a[i] : deriv_dir;
         for (size_t j = 0; j < numPtsB; j++) {
-            const Vec3f& ddir_b = ddirs_b ? ddirs_b[j] : deriv_dir;
+            const Vec3d& ddir_b = ddirs_b ? ddirs_b[j] : deriv_dir;
 
             double cov_ij = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j], ddir_a, ddir_b);
 
@@ -674,19 +637,19 @@ CovMatrix GaussianProcess::cov(
     return ps_cov;
 }
 
-float GaussianProcess::sample_start_value(Vec3f p, PathSampleGenerator& sampler) const {
-    float m = (*_mean)(Derivative::None, p, Vec3f(0.f));
-    float sigma = (*_cov)(Derivative::None, Derivative::None, p, p, Vec3f(0.f), Vec3f(0.f));
+double GaussianProcess::sample_start_value(Vec3d p, PathSampleGenerator& sampler) const {
+    double m = (*_mean)(Derivative::None, p, Vec3d(0.f));
+    double sigma = (*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.));
 
-    return max(0.f, rand_truncated_normal(m, sigma, 0, sampler));
+    return max(0., rand_truncated_normal(m, sigma, 0, sampler));
 }
 
 
 Eigen::MatrixXd GaussianProcess::sample(
-    const Vec3f* points, const Derivative* derivative_types, size_t numPts,
-    const Vec3f* deriv_dirs,
+    const Vec3d* points, const Derivative* derivative_types, size_t numPts,
+    const Vec3d* deriv_dirs,
     const Constraint* constraints, size_t numConstraints,
-    Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const {
+    Vec3d deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
     if (_globalCondPs.size() == 0) {
         auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dirs, deriv_dir, numPts);
@@ -704,20 +667,20 @@ Eigen::MatrixXd GaussianProcess::sample(
 }
 
 Eigen::MatrixXd GaussianProcess::sample_cond(
-    const Vec3f* points, const Derivative* derivative_types, size_t numPts,
-    const Vec3f* deriv_dirs,
-    const Vec3f* cond_points, const double* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
-    const Vec3f* cond_deriv_dirs,
+    const Vec3d* points, const Derivative* derivative_types, size_t numPts,
+    const Vec3d* deriv_dirs,
+    const Vec3d* cond_points, const double* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+    const Vec3d* cond_deriv_dirs,
     const Constraint* constraints, size_t numConstraints,
-    Vec3f deriv_dir, int samples, PathSampleGenerator& sampler) const {
+    Vec3d deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
     if (numCondPts == 0) {
         return sample(points, derivative_types, numPts, deriv_dirs, constraints, numConstraints, deriv_dir, samples, sampler);
     }
 
-    std::vector<Vec3f> cond_ps;
+    std::vector<Vec3d> cond_ps;
     std::vector<Derivative> cond_derivs;
-    std::vector<Vec3f> cond_dds;
+    std::vector<Vec3d> cond_dds;
     std::vector<double> cond_vs;
 
     if (_globalCondPs.size() > 0) {
@@ -849,7 +812,7 @@ Vec2d GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
 }
 
 // Box muller transform
-float GaussianProcess::rand_truncated_normal(float mean, float sigma, float a, PathSampleGenerator& sampler) const {
+double GaussianProcess::rand_truncated_normal(float mean, float sigma, float a, PathSampleGenerator& sampler) const {
     if (abs(a - mean) < 0.00001) {
         return abs(mean + sigma * rand_normal_2(sampler).x());
     }

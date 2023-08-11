@@ -78,7 +78,7 @@ rapidjson::Value NDFBsdf::toJson(Allocator &allocator) const
 bool NDFBsdf::sample(SurfaceScatterEvent &event) const
 {
     double weight = 1.;
-    event.wo = vec_conv2<Vec3f>(macro_brdf.sample(1., 1., vec_conv<Vector3>(event.wi), weight));
+    event.wo = vec_conv<Vec3f>(macro_brdf.sample(1., 1., vec_conv<Vector3>(event.wi), weight));
     event.weight = Vec3f((float)weight);
     event.pdf = 1.f;
     return true;

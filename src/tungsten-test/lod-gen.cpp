@@ -43,12 +43,12 @@ int gen3d(int argc, char** argv) {
     sampler.next1D();
     sampler.next1D();
 
-    std::vector<Vec3f> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+    std::vector<Vec3d> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> derivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> fderivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
 
-    Vec3f min(-2.0f, 0.0f, -2.0f);
-    Vec3f max(2.0f, 4.0f, 2.0f);
+    Vec3d min(-2.0f, 0.0f, -2.0f);
+    Vec3d max(2.0f, 4.0f, 2.0f);
 
     Eigen::VectorXf mean(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     Eigen::VectorXf variance(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
@@ -69,7 +69,7 @@ int gen3d(int argc, char** argv) {
             for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
                 for (int k = 0; k < NUM_SAMPLE_POINTS; k++) {
                     int idx = i * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS + j * NUM_SAMPLE_POINTS + k;
-                    points[idx] = lerp(min, max, Vec3f((float)i, (float)j, (float)k) / (NUM_SAMPLE_POINTS - 1));
+                    points[idx] = lerp(min, max, Vec3d((float)i, (float)j, (float)k) / (NUM_SAMPLE_POINTS - 1));
                     derivs[idx] = Derivative::None;
                     fderivs[idx] = Derivative::First;
 
@@ -78,9 +78,9 @@ int gen3d(int argc, char** argv) {
                     for (int s = 0; s < numEstSamples; s++) {
                         Vec2d s1 = gp->rand_normal_2(sampler);
                         Vec2d s2 = gp->rand_normal_2(sampler);
-                        Vec3f offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
-                        Vec3f p = points[idx] + offset * 4.0f / NUM_SAMPLE_POINTS;
-                        samples[s] = gp->mean(&p, &derivs[idx], nullptr, Vec3f(1.0f, 0.0f, 0.0f), 1)(0);
+                        Vec3d offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
+                        Vec3d p = points[idx] + offset * 4.0 / NUM_SAMPLE_POINTS;
+                        samples[s] = gp->mean(&p, &derivs[idx], nullptr, Vec3d(1.0f, 0.0f, 0.0f), 1)(0);
                         mean[idx] += samples[s];
                     }
 
@@ -109,15 +109,15 @@ int gen3d(int argc, char** argv) {
             for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
                 for (int k = 0; k < NUM_SAMPLE_POINTS; k++) {
                     int idx = i * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS + j * NUM_SAMPLE_POINTS + k;
-                    Vec3f cp = Vec3f((float)i, (float)j, (float)k);
+                    Vec3d cp = Vec3d((float)i, (float)j, (float)k);
 
                     std::vector<float> samples(numEstSamples);
                     int valid_samples = 0;
                     for (int s = 0; s < numEstSamples; s++) {
                         Vec2d s1 = gp->rand_normal_2(sampler);
                         Vec2d s2 = gp->rand_normal_2(sampler);
-                        Vec3f offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
-                        Vec3f p = cp + offset;
+                        Vec3d offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
+                        Vec3d p = cp + offset;
 
                         if (p.x() < 0 || p.y() < 0 || p.z() < 0 ||
                             p.x() > NUM_SAMPLE_POINTS-1 || p.y() > NUM_SAMPLE_POINTS - 1 || p.z() > NUM_SAMPLE_POINTS - 1) {
@@ -125,10 +125,10 @@ int gen3d(int argc, char** argv) {
                         }
                         else {
                             float meanSample = meanGridSampler.isSample(openvdb::Vec3R(p.x(), p.y(), p.z()));
-                            Vec3f bp = lerp(min, max, p / (NUM_SAMPLE_POINTS - 1));
+                            Vec3d bp = lerp(min, max, p / (NUM_SAMPLE_POINTS - 1));
                             float occupiedSample = meanSample < 0;
-                            float occupiedStored = gp->mean(&bp, &derivs[idx], nullptr, Vec3f(1.0f, 0.0f, 0.0f), 1)(0) < 0;
-                            samples[s] = gp->mean(&bp, &derivs[idx], nullptr, Vec3f(1.0f, 0.0f, 0.0f), 1)(0) - meanSample;
+                            float occupiedStored = gp->mean(&bp, &derivs[idx], nullptr, Vec3d(1.0f, 0.0f, 0.0f), 1)(0) < 0;
+                            samples[s] = gp->mean(&bp, &derivs[idx], nullptr, Vec3d(1.0f, 0.0f, 0.0f), 1)(0) - meanSample;
                             valid_samples++;
                         }
                     }
@@ -142,9 +142,9 @@ int gen3d(int argc, char** argv) {
                     }
 
                     {
-                        Vec3f bp = lerp(min, max, cp / (NUM_SAMPLE_POINTS - 1));
+                        Vec3d bp = lerp(min, max, cp / (NUM_SAMPLE_POINTS - 1));
 
-                        Vec3f ps[] = {
+                        Vec3d ps[] = {
                             bp,bp,bp
                         };
 
@@ -152,13 +152,13 @@ int gen3d(int argc, char** argv) {
                             Derivative::First, Derivative::First, Derivative::First
                         };
 
-                        Vec3f ddirs[] = {
-                            Vec3f(1.f, 0.f, 0.f),
-                            Vec3f(0.f, 1.f, 0.f),
-                            Vec3f(0.f, 0.f, 1.f),
+                        Vec3d ddirs[] = {
+                            Vec3d(1.f, 0.f, 0.f),
+                            Vec3d(0.f, 1.f, 0.f),
+                            Vec3d(0.f, 0.f, 1.f),
                         };
 
-                        auto gps = gp->mean(ps, derivs, ddirs, Vec3f(0.f), 3);
+                        auto gps = gp->mean(ps, derivs, ddirs, Vec3d(0.f), 3);
                         auto grad = vec_conv<Vec3f>(gps);
                         TangentFrame tf(grad);
 

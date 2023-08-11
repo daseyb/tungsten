@@ -158,7 +158,7 @@ void first_intersect_ansio(std::string scene_file, Scene* scene) {
 
     pathTracer._firstMediumBounceCb = [&currentPixel, &anisotropies, &pixelpositions, &cov, &intersectPositions](const MediumSample& mediumSample, Ray r) {
         pixelpositions.push_back(currentPixel);
-        anisotropies.push_back(cov->localAniso(r.pos()));
+        anisotropies.push_back(cov->localAniso(vec_conv<Vec3d>(r.pos())).cast<float>());
         intersectPositions.push_back(r.pos());
         return false;
     };

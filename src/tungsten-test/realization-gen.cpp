@@ -10,14 +10,14 @@ using namespace Tungsten;
 
 constexpr size_t NUM_SAMPLE_POINTS = 32;
 
-std::tuple<std::vector<Vec3f>, std::vector<Vec3f>, std::vector<double>, std::vector<Derivative>> sample_surface() {
+std::tuple<std::vector<Vec3d>, std::vector<Vec3d>, std::vector<double>, std::vector<Derivative>> sample_surface() {
 
-    std::vector<Vec3f> ps;
-    std::vector<Vec3f> ns;
+    std::vector<Vec3d> ps;
+    std::vector<Vec3d> ns;
     std::vector<double> vs;
     std::vector<Derivative> ds;
 
-    Vec3f c = Vec3f(0.75, 0, 0.f);
+    Vec3d c = Vec3d(0.75, 0, 0.f);
     float r = 0.4f;
     /*ps.push_back(c);
     ns.push_back(Vec3f(0.f));
@@ -32,7 +32,7 @@ std::tuple<std::vector<Vec3f>, std::vector<Vec3f>, std::vector<double>, std::vec
     int num_pts = 5;
     for (int i = 0; i < num_pts; i++) {
         float a = lerp(PI/2, PI * 1.5f, float(i) / (num_pts-1));
-        Vec3f p = c + Vec3f(cos(a), sin(a), 0.f) * r;
+        Vec3d p = c + Vec3d(cos(a), sin(a), 0.f) * r;
         ps.push_back(p);
         ns.push_back((p - c).normalized());
         vs.push_back(0);
@@ -127,14 +127,14 @@ int main() {
         sampler.next1D();
 
 
-        std::vector<Vec3f> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+        std::vector<Vec3d> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
         std::vector<Derivative> derivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
 
         {
             int idx = 0;
             for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
                 for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
-                    points[idx] = 2.f * (Vec3f((float)i, (float)j, 0.f) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
+                    points[idx] = 2. * (Vec3d((float)i, (float)j, 0.f) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
                     points[idx][2] = 0.f;
                     derivs[idx] = Derivative::None;
                     idx++;
@@ -144,7 +144,7 @@ int main() {
             Eigen::MatrixXf samples = gp->sample(
                 points.data(), derivs.data(), points.size(), nullptr,
                 nullptr, 0,
-                Vec3f(0.0f, 0.0f, 0.0f), num_reals, sampler).cast<float>();
+                Vec3d(0.0f, 0.0f, 0.0f), num_reals, sampler).cast<float>();
 
             {
                 std::ofstream xfile(tinyformat::format("realizations/%s-%d-grid-samples-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
