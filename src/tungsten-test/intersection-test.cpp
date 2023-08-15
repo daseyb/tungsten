@@ -47,9 +47,13 @@ void record_first_hit(std::string scene_file, TraceableScene* tracableScene) {
 
     int sid = 0;
 
+    Vec3f rdir;
+
 
     if (scene_id == "medium") {
-        pathTracer._firstMediumBounceCb = [&sid, &normals, &reflectionDirs, &distanceSamples](const MediumSample& mediumSample, Ray r) {
+        pathTracer._firstMediumBounceCb = [&sid, &normals, &reflectionDirs, &distanceSamples, &rdir](const MediumSample& mediumSample, Ray r) {
+            rdir = r.dir();
+
             auto normal = mediumSample.aniso.normalized();
             normals(sid, 0) = normal.x();
             normals(sid, 1) = normal.z();
@@ -91,6 +95,8 @@ void record_first_hit(std::string scene_file, TraceableScene* tracableScene) {
 
         pathTracer.traceSample({ 256, 256 }, sampler);
     }
+
+    std::cout << acos(rdir.normalized().y()) / PI * 180 << "\n";
 
     {
         std::ofstream xfile(
@@ -248,7 +254,7 @@ void record_paths(std::string scene_file, TraceableScene* tracableScene) {
 
     pathTracer._firstMediumBounceCb = [&sid, &path_points, &normals, &bounce](const MediumSample& mediumSample, Ray r) {
         path_points.row(sid * 8 + bounce) =  vec_conv<Eigen::Vector3f>(r.pos());
-        normals[sid * 8 + bounce] = mediumSample.aniso.normalized();
+        normals[sid * 8 + bounce] = vec_conv<Vec3f>(mediumSample.aniso.normalized());
         bounce++;
         return true;
     };

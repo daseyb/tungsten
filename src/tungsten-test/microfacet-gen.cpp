@@ -174,7 +174,7 @@ void side_view(const GaussianProcess& gp, std::string output) {
 }
 
 
-constexpr size_t NUM_RAY_SAMPLE_POINTS = 64;
+constexpr size_t NUM_RAY_SAMPLE_POINTS = 32;
 
 
 void sample_beckmann(float alpha) {
@@ -276,7 +276,7 @@ void ndf(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
         }
 
         Medium::MediumState state;
-        Vec3f grad;
+        Vec3d grad;
         gp_med->sampleGradient(sampler, ray, Vec3d(-10.f, 20.0f, -5.f), state, grad);
 
         grad.normalize();
@@ -302,7 +302,7 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
         FileUtils::createDirectory(basePath);
     }
 
-    auto gp_med = std::make_shared<GaussianProcessMedium>(gp, 0, 1, 1, NUM_RAY_SAMPLE_POINTS, GPCorrelationContext::Goldfish, GPIntersectMethod::GPDiscrete, nsm);
+    auto gp_med = std::make_shared<GaussianProcessMedium>(gp, 0, 1, 1, NUM_RAY_SAMPLE_POINTS, GPCorrelationContext::Goldfish, nsm == GPNormalSamplingMethod::Beckmann ? GPIntersectMethod::Mean : GPIntersectMethod::GPDiscrete, nsm);
 
     gp_med->loadResources();
     gp_med->prepareForRender();
@@ -323,7 +323,7 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
 
     for (int s = 0; s < samples;) {
 
-        if ((s + 1) % 100 == 0) {
+        if ((s + 1) % 1000 == 0) {
             std::cout << s << "/" << samples;
             std::cout << "\r";
         }
@@ -333,7 +333,7 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
 
         MediumSample sample;
         if (gp_med->sampleDistance(sampler, ray, state, sample)) {
-            Vec3f grad = sample.aniso;
+            Vec3d grad = sample.aniso;
             grad.normalize();
             normals(s, 0) = grad.x();
             normals(s, 1) = grad.y();
@@ -412,20 +412,27 @@ int main(int argc, char** argv) {
             }
             */
 
-            ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::ConditionedGaussian, 0.01f);
+            float angleInDeg = 80.967;
+
+            //ndf_cond_validate(gp, 10000000, "testing/microfacet/normals-validate-nocond/", 87.f / 180 * PI, GPNormalSamplingMethod::Beckmann, 0.01f);
+
+            //ndf_cond_validate(gp, 1000000, "testing/microfacet/normals-validate-nocond", angleInDeg / 180 * PI, GPNormalSamplingMethod::ConditionedGaussian, 0.02f);
+            //ndf_cond_validate(gp, 10000000, "testing/microfacet/normals-validate-nocond", angleInDeg / 180 * PI, GPNormalSamplingMethod::Beckmann, 0.02f);
             //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::ConditionedGaussian, 0.02f);
             //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::ConditionedGaussian, 0.05f);
             //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::ConditionedGaussian, 0.10f);
             //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::ConditionedGaussian, 1.00f);
-            //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::Beckmann, 0.1f);
-            //ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::Beckmann, 0.1f);
+            //ndf_cond_validate(gp, 10000000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::Beckmann, 0.2f);
+            //ndf_cond_validate(gp, 1000000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::Beckmann, 0.1f);
 
 
-            /*for (int j = 0; j < 15; j++) {
-                float angle = float(j) / 14 * PI / 2;
-                ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond/angle-range", angle, GPNormalSamplingMethod::ConditionedGaussian);
-                ndf_cond_validate(gp, 100000, "microfacet/normals-validate-nocond/angle-range", angle, GPNormalSamplingMethod::Beckmann);
-            }*/
+#pragma omp parallel for
+            for (int j = 0; j < 10; j++) {
+                float angle = 60 + float(j) / 9 * 30;
+                angle = angle / 180 * PI;
+                ndf_cond_validate(gp, 10000000, "testing/microfacet/normals-validate-nocond/angle-range", angle, GPNormalSamplingMethod::ConditionedGaussian, 0.01f);
+                //ndf_cond_validate(gp, 10000000, "testing/microfacet/normals-validate-nocond/angle-range", angle, GPNormalSamplingMethod::Beckmann, 0.01f);
+            }
             
             //ndf(gp, 10000000, "microfacet/normals/");
             //side_view(gp, "microfacet/side-view/");

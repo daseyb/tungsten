@@ -26,15 +26,16 @@ rapidjson::Value BRDFPhaseFunction::toJson(Allocator &allocator) const
 
 Vec3f BRDFPhaseFunction::eval(const Vec3f &wi, const Vec3f &wo, const MediumSample &mediumSample) const
 {
+    auto normal = vec_conv<Vec3f>(mediumSample.aniso.normalized());
     SurfaceScatterEvent se;
     se.requestedLobe = BsdfLobes::AllLobes;
-    se.frame = TangentFrame(mediumSample.aniso.normalized());
+    se.frame = TangentFrame(normal);
     se.wi = se.frame.toLocal(-wi).normalized();
     se.wo = se.frame.toLocal(wo).normalized();
     IntersectionInfo info;
     info.bsdf = _bsdf.get();
-    info.Ng = mediumSample.aniso.normalized();
-    info.Ns = mediumSample.aniso.normalized();
+    info.Ng = normal;
+    info.Ns = normal;
     info.p = Vec3f(0.0f);
     info.primitive = nullptr;
     info.uv = Vec2f(0.f);
@@ -46,15 +47,16 @@ Vec3f BRDFPhaseFunction::eval(const Vec3f &wi, const Vec3f &wo, const MediumSamp
 
 bool BRDFPhaseFunction::sample(PathSampleGenerator &sampler, const Vec3f &wi, const MediumSample& mediumSample, PhaseSample &sample) const
 {
+    auto normal = vec_conv<Vec3f>(mediumSample.aniso.normalized());
     SurfaceScatterEvent se;
     se.sampler = &sampler;
-    se.frame = TangentFrame(mediumSample.aniso.normalized());
+    se.frame = TangentFrame(normal);
     se.wi = se.frame.toLocal(-wi).normalized();
     se.requestedLobe = BsdfLobes::AllLobes;
     IntersectionInfo info;
     info.bsdf = _bsdf.get();
-    info.Ng = mediumSample.aniso.normalized();
-    info.Ns = mediumSample.aniso.normalized();
+    info.Ng = normal;
+    info.Ns = normal;
     info.p = Vec3f(0.0f);
     info.primitive = nullptr;
     info.uv = Vec2f(0.f);
@@ -75,15 +77,16 @@ bool BRDFPhaseFunction::invert(WritablePathSampleGenerator &sampler, const Vec3f
 
 float BRDFPhaseFunction::pdf(const Vec3f &wi, const Vec3f &wo, const MediumSample& mediumSample) const
 {
+    auto normal = vec_conv<Vec3f>(mediumSample.aniso.normalized());
     SurfaceScatterEvent se;
-    se.frame = TangentFrame(mediumSample.aniso.normalized());
+    se.frame = TangentFrame(normal);
     se.wi = se.frame.toLocal(-wi);
     se.wo = se.frame.toLocal(wo);
     se.requestedLobe = BsdfLobes::AllLobes;
     IntersectionInfo info;
     info.bsdf = _bsdf.get();
-    info.Ng = mediumSample.aniso.normalized();
-    info.Ns = mediumSample.aniso.normalized();
+    info.Ng = normal;
+    info.Ns = normal;
     info.p = Vec3f(0.0f);
     info.primitive = nullptr;
     info.uv = Vec2f(0.f);

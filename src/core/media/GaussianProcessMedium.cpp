@@ -169,7 +169,7 @@ namespace Tungsten {
     }
 
     bool GaussianProcessMedium::sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3d& ip,
-        MediumState& state, Vec3f& grad) const {
+        MediumState& state, Vec3d& grad) const {
 
         GPContextFunctionSpace& ctxt = *(GPContextFunctionSpace*)state.gpContext.get();
 
@@ -199,13 +199,12 @@ namespace Tungsten {
                     nullptr, 0,
                     rd, 1, sampler);
 
-                Vec3d gradd = Vec3d{
+                grad = Vec3d{
                     gradSamples(0,0) - gradSamples(3,0),
                     gradSamples(1,0) - gradSamples(4,0),
                     gradSamples(2,0) - gradSamples(5,0),
                 } / (2 * eps);
 
-                grad = Vec3f((float)gradd.x(), (float)gradd.y(), (float)gradd.z());
                 break;
             }
             case GPNormalSamplingMethod::ConditionedGaussian:
@@ -225,7 +224,7 @@ namespace Tungsten {
                     rd, 1, sampler);
 
                 grad = {
-                    (float)gradSamples(0,0), (float)gradSamples(1,0), (float)gradSamples(2,0)
+                    gradSamples(0,0), gradSamples(1,0), gradSamples(2,0)
                 };
                 break;
             }
@@ -236,15 +235,14 @@ namespace Tungsten {
                     _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 1.f, 0.f)),
                     _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 0.f, 1.f)));
 
-                TangentFrame frame(vec_conv<Vec3f>(normal));
+                TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame(vec_conv<Eigen::Vector3d>(normal));
 
-                Vec3f wi = frame.toLocal(-ray.dir());
+                Eigen::Vector3d wi = frame.toLocal(vec_conv<Eigen::Vector3d>(-ray.dir()));
                 float alpha = _gp->_cov->compute_beckmann_roughness();
                 BeckmannNDF ndf(0, alpha, alpha);
 
-                grad = vec_conv<Vec3f>(ndf.sampleD_wi(vec_conv<Vector3>(wi)));
+                grad = vec_conv<Vec3d>(frame.toGlobal(vec_conv<Eigen::Vector3d>(ndf.sampleD_wi(vec_conv<Vector3>(wi)))));
 
-                grad = frame.toGlobal(grad);
 
                 break;
             }
@@ -255,15 +253,12 @@ namespace Tungsten {
                     _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 1.f, 0.f)),
                     _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 0.f, 1.f)));
 
-                TangentFrame frame(vec_conv<Vec3f>(normal));
+                TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame(vec_conv<Eigen::Vector3d>(normal));
 
-                Vec3f wi = frame.toLocal(-ray.dir());
+                Eigen::Vector3d wi = frame.toLocal(vec_conv<Eigen::Vector3d>(-ray.dir()));
                 float alpha = _gp->_cov->compute_beckmann_roughness();
                 GGXNDF ndf(0, alpha, alpha);
-
-                grad = vec_conv<Vec3f>(ndf.sampleD_wi(vec_conv<Vector3>(wi)));
-
-                grad = frame.toGlobal(grad);
+                grad = vec_conv<Vec3d>(frame.toGlobal(vec_conv<Eigen::Vector3d>(ndf.sampleD_wi(vec_conv<Vector3>(wi)))));
 
                 break;
             }
@@ -274,7 +269,7 @@ namespace Tungsten {
         return true;
     }
 
-    bool GaussianProcessMedium::intersect(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
+    bool GaussianProcessMedium::intersect(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const {
         switch (_intersectMethod) {
         case GPIntersectMethod::Mean:
             return intersectMean(sampler, ray, state, t);
@@ -287,13 +282,13 @@ namespace Tungsten {
         }
     }
 
-    bool GaussianProcessMedium::intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
-        t = ray.nearT() + 0.001f;
-        for(int i = 0; i < 2048; i++) {
-            auto p = vec_conv<Vec3d>(ray.pos() + t * ray.dir());
+    bool GaussianProcessMedium::intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const {
+        t = ray.nearT() + 0.0001f;
+        for(int i = 0; i < 2048*4; i++) {
+            auto p = vec_conv<Vec3d>(ray.pos()) + t * vec_conv<Vec3d>(ray.dir());
             float m = (*_gp->_mean)(Derivative::None, p, Vec3d(0.f));
 
-            if(m < 0.0001f) {
+            if(m < 0.00001f) {
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
                 ctxt->derivs = { Derivative::None };
                 ctxt->points = { p };
@@ -308,35 +303,37 @@ namespace Tungsten {
                 return false;
             }
         }
+
+        std::cerr << "Ran out of iterations in mean intersect sphere trace." << std::endl;
         return false;
     }
 
-    bool GaussianProcessMedium::intersectMeanRaymarch(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
+    bool GaussianProcessMedium::intersectMeanRaymarch(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const {
         std::vector<Vec3d> points(_samplePoints);
         std::vector<Derivative> derivs(_samplePoints);
-        std::vector<float> ts(_samplePoints);
+        std::vector<double> ts(_samplePoints);
         Eigen::MatrixXd gpSamples(_samplePoints,1);
         float tOffset = sampler.next1D();
         for (int i = 0; i < _samplePoints; i++) {
-            float t = lerp(ray.nearT(), ray.nearT() + min(100.f, ray.farT() - ray.nearT()), clamp((i + tOffset) / _samplePoints, 0.f, 1.f));
+            double t = lerp(ray.nearT(), ray.nearT() + min(1000.f, ray.farT() - ray.nearT()), clamp((i + tOffset) / _samplePoints, 0.f, 1.f));
             ts[i] = t;
-            points[i] = vec_conv<Vec3d>(ray.pos() + t * ray.dir());
+            points[i] = vec_conv<Vec3d>(ray.pos()) + t * vec_conv<Vec3d>(ray.dir());
             gpSamples(i,0) = (*_gp->_mean)(Derivative::None, points[i], Vec3d(0.));
         }
 
-        float prevV = gpSamples(0, 0);
-        float prevT = ts[0];
+        double prevV = gpSamples(0, 0);
+        double prevT = ts[0];
         for (int p = 1; p < _samplePoints; p++) {
-            float currV = gpSamples(p, 0);
-            float currT = ts[p];
+            double currV = gpSamples(p, 0);
+            double currT = ts[p];
             if (currV < 0) {
-                float offsetT = prevV / (prevV - currV);
+                double offsetT = prevV / (prevV - currV);
                 t = lerp(prevT, currT, offsetT);
 
                 derivs.resize(p + 1);
                 points.resize(p + 1);
 
-                points[p] = vec_conv<Vec3d>(ray.pos() + t * ray.dir());
+                points[p] = vec_conv<Vec3d>(ray.pos()) + t * vec_conv<Vec3d>(ray.dir());
                 gpSamples(p, 0) = (*_gp->_mean)(Derivative::None, points[p], Vec3d(0.f));
                
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
@@ -361,20 +358,20 @@ namespace Tungsten {
         return false;
     }
 
-    bool GaussianProcessMedium::intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const {
+    bool GaussianProcessMedium::intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const {
         std::vector<Vec3d> points(_samplePoints);
         std::vector<Derivative> derivs(_samplePoints);
-        std::vector<float> ts(_samplePoints);
+        std::vector<double> ts(_samplePoints);
         float tOffset = sampler.next1D();
         for (int i = 0; i < _samplePoints; i++) {
-            float t = lerp(ray.nearT(), ray.nearT() + min(100.f, ray.farT() - ray.nearT()), clamp((i - tOffset) / _samplePoints, 0.f, 1.f));
+            double t = lerp(ray.nearT(), ray.nearT() + min(500.f, ray.farT() - ray.nearT()), clamp((i - tOffset) / _samplePoints, 0.f, 1.f));
             if (i == 0)
                 t = ray.nearT();
             else if (i == _samplePoints - 1)
-                t = min(100.f, ray.farT());
+                t = min(500.f, ray.farT());
 
             ts[i] = t;
-            points[i] = vec_conv<Vec3d>(ray.pos() + t * ray.dir());
+            points[i] = vec_conv<Vec3d>(ray.pos()) + t * vec_conv<Vec3d>(ray.dir());
             derivs[i] = Derivative::None;
         }
 
@@ -402,7 +399,7 @@ namespace Tungsten {
                 std::array<Derivative, 1> cond_deriv = { Derivative::None };
                 std::array<double, 1> cond_vs = { 0 };
 
-                startSign = state.lastAniso.dot(ray.dir().normalized()) < 0 ? -1 : 1;
+                startSign = state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())) < 0 ? -1 : 1;
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
@@ -414,7 +411,7 @@ namespace Tungsten {
             {
                 std::array<Vec3d, 2> cond_pts = { points[0], points[0] };
                 std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
-                std::array<double, 2> cond_vs = { 0, state.lastAniso.dot(ray.dir().normalized()) };
+                std::array<double, 2> cond_vs = { 0, state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())) };
 
                 startSign = sign(cond_vs[1]);
                 gpSamples = _gp->sample_cond(
@@ -429,7 +426,7 @@ namespace Tungsten {
                 auto ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
                 ctxt->points.push_back(points[0]);
                 ctxt->derivs.push_back(Derivative::First);
-                ctxt->values.push_back(state.lastAniso.dot(ray.dir().normalized()));
+                ctxt->values.push_back(state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())));
 
                /*std::array<Vec3f, 4> cond_pts = {points[0], points[0], points[0], points[0]};
                 std::array<Derivative, 4> cond_deriv = { Derivative::None, Derivative::First, Derivative::First, Derivative::First };
@@ -439,7 +436,7 @@ namespace Tungsten {
                     Vec3f(0.f, 1.f, 0.f), 
                     Vec3f(0.f, 0.f, 1.f) };*/ 
 
-                startSign = state.lastAniso.dot(ray.dir().normalized()) < 0 ? -1 : 1;
+                startSign = state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())) < 0 ? -1 : 1;
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
                     ctxt->points.data(), ctxt->values.data(), ctxt->derivs.data(), ctxt->points.size(), nullptr,
@@ -451,18 +448,18 @@ namespace Tungsten {
         }
 
 
-        float prevV = gpSamples(0, 0);
+        double prevV = gpSamples(0, 0);
 
         if (state.firstScatter && prevV < 0) {
             return false;
         }
 
-        float prevT = ts[0];
+        double prevT = ts[0];
         for (int p = 1; p < _samplePoints; p++) {
-            float currV = gpSamples(p, 0);
-            float currT = ts[p];
+            double currV = gpSamples(p, 0);
+            double currT = ts[p];
             if (currV < 0) {
-                float offsetT = prevV / (prevV - currV);
+                double offsetT = prevV / (prevV - currV);
                 t = lerp(prevT, currT, offsetT);
 
                 points.resize(p + 1);
@@ -517,29 +514,29 @@ namespace Tungsten {
             sample.exited = true;
         }
         else {
-            float t = maxT;
+            double t = maxT;
 
             if (intersect(sampler, ray, state, t)) {
-                Vec3f ip = ray.pos() + ray.dir() * t;
+                Vec3d ip = vec_conv<Vec3d>(ray.pos()) + vec_conv<Vec3d>(ray.dir()) * t;
 
-                Vec3f grad;
+                Vec3d grad;
                 if (!sampleGradient(sampler, ray, vec_conv<Vec3d>(ip), state, grad)) {
                     return false;
                 }
 
-                if (grad.dot(ray.dir()) > 0) {
+                if (grad.dot(vec_conv<Vec3d>(ray.dir())) > 0) {
                     return false;
                 }
 
                 sample.aniso = grad;
                 if (!std::isfinite(sample.aniso.avg())) {
-                    sample.aniso = Vec3f(1.f, 0.f, 0.f);
+                    sample.aniso = Vec3d(1.f, 0.f, 0.f);
                     std::cout << "Gradient invalid.\n";
                     return false;
                 }
 
                 if (sample.aniso.lengthSq() < 0.0000001f) {
-                    sample.aniso = Vec3f(1.f, 0.f, 0.f);
+                    sample.aniso = Vec3d(1.f, 0.f, 0.f);
                     std::cout << "Gradient zero.\n";
                     return false;
                 }
@@ -550,8 +547,8 @@ namespace Tungsten {
                 sample.exited = true;
             }
 
-            sample.t = min(t, maxT);
-            sample.continuedT = t;
+            sample.t = min(float(t), maxT);
+            sample.continuedT = float(t);
             sample.weight = sigmaS(ray.pos() + sample.t * ray.dir()) / sigmaT(ray.pos() + sample.t * ray.dir());
             sample.continuedWeight = sigmaS(ray.pos() + sample.continuedT * ray.dir()) / sigmaT(ray.pos() + sample.continuedT * ray.dir());
             sample.pdf = 1;
@@ -608,7 +605,7 @@ namespace Tungsten {
                     std::array<Vec3d, 2> cond_pts = { points[0], points[0] };
                     std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
 
-                    float deriv = sample->aniso.dot(ray.dir().normalized());
+                    double deriv = sample->aniso.dot(vec_conv<Vec3d>(ray.dir().normalized()));
                     startSign = deriv < 0 ? -1 : 1;
                     std::array<double, 2> cond_vs = { 0, deriv };
 
@@ -639,7 +636,7 @@ namespace Tungsten {
             {
                 MediumState state;
                 state.firstScatter = startOnSurface;
-                float t;
+                double t;
                 return intersectMean(sampler, ray, state, t) ? Vec3f(0.f) : Vec3f(1.f);
             }
         }

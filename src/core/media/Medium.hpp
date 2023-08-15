@@ -33,7 +33,7 @@ public:
         bool firstScatter;
         int component;
         int bounce;
-        Vec3f lastAniso;
+        Vec3d lastAniso;
         std::shared_ptr<GPContext> gpContext;
 
         void reset()

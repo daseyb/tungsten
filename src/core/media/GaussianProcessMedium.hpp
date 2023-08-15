@@ -91,12 +91,12 @@ public:
 
     bool sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3d& ip,
         MediumState& state,
-        Vec3f& grad) const;
+        Vec3d& grad) const;
 
-    bool intersect(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
-    bool intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
-    bool intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
-    bool intersectMeanRaymarch(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, float& t) const;
+    bool intersect(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const;
+    bool intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const;
+    bool intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const;
+    bool intersectMeanRaymarch(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const;
 
     virtual bool sampleDistance(PathSampleGenerator &sampler, const Ray &ray,
             MediumState &state, MediumSample &sample) const override;

@@ -19,7 +19,7 @@ struct MediumSample
     Vec3f emission;
     float pdf;
     bool exited;
-    Vec3f aniso;
+    Vec3d aniso;
 
     Eigen::MatrixXd* usedSamples;
     int usedSampleIdx;
