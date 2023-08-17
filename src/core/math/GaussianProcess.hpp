@@ -225,7 +225,7 @@ namespace Tungsten {
         float _sigma, _l;
 
         virtual FloatD cov(FloatD absq) const override {
-            return sqr(_sigma)* exp(-(absq / (2*sqr(_l))));
+            return sqr(_sigma) * exp(-(absq / (2 * sqr(_l))));
         }
 
         virtual FloatDD cov(FloatDD absq) const override {
@@ -233,7 +233,7 @@ namespace Tungsten {
         }
 
         virtual double cov(double absq) const override {
-            return sqr(_sigma) * exp(-(absq / (2*sqr(_l))));
+            return sqr(_sigma) * exp(-(absq / (2 * sqr(_l))));
         }
     };
 
@@ -606,10 +606,11 @@ namespace Tungsten {
 
         // From numpy
         double random_standard_normal(PathSampleGenerator& sampler) const;
+        double noIntersectBound(Vec3d p, double q) const;
 
         // Box muller transform
         Vec2d rand_normal_2(PathSampleGenerator& sampler) const;
-        double rand_truncated_normal(float mean, float sigma, float a, PathSampleGenerator& sampler) const;
+        double rand_truncated_normal(double mean, double sigma, double a, PathSampleGenerator& sampler) const;
 
         Eigen::MatrixXd sample_multivariate_normal(
             const Eigen::VectorXd& mean, const CovMatrix& cov,

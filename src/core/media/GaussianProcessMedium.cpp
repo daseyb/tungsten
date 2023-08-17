@@ -364,13 +364,13 @@ namespace Tungsten {
         std::vector<double> ts(_samplePoints);
         float tOffset = sampler.next1D();
         for (int i = 0; i < _samplePoints; i++) {
-            double t = lerp(ray.nearT(), ray.nearT() + min(500.f, ray.farT() - ray.nearT()), clamp((i - tOffset) / _samplePoints, 0.f, 1.f));
+            double t = lerp(ray.nearT(), ray.nearT() + min(1000.f, ray.farT() - ray.nearT()), clamp((i - tOffset) / (_samplePoints-1), 0.f, 1.f));
             if (i == 0)
                 t = ray.nearT();
             else if (i == _samplePoints - 1)
-                t = min(500.f, ray.farT());
+                t = ray.nearT() + min(1000.f, ray.farT() - ray.nearT());
 
-            ts[i] = t;
+            ts[i] =  t;
             points[i] = vec_conv<Vec3d>(ray.pos()) + t * vec_conv<Vec3d>(ray.dir());
             derivs[i] = Derivative::None;
         }
@@ -446,7 +446,6 @@ namespace Tungsten {
             }
             }
         }
-
 
         double prevV = gpSamples(0, 0);
 
@@ -561,6 +560,8 @@ namespace Tungsten {
 
         return true;
     }
+
+
 
     Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator & sampler, const Ray & ray, bool startOnSurface,
         bool endOnSurface, MediumSample * sample) const

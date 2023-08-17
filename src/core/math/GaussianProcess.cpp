@@ -14,6 +14,7 @@
 #include <igl/per_edge_normals.h>
 #include <igl/per_face_normals.h>
 #include <igl/per_vertex_normals.h>
+#include <boost/math/special_functions/erf.hpp>
 
 
 namespace Tungsten {
@@ -587,7 +588,7 @@ CovMatrix GaussianProcess::cov(
 
 double GaussianProcess::sample_start_value(Vec3d p, PathSampleGenerator& sampler) const {
     double m = (*_mean)(Derivative::None, p, Vec3d(0.f));
-    double sigma = (*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.));
+    double sigma = sqrt((*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.)));
 
     return max(0., rand_truncated_normal(m, sigma, 0, sampler));
 }
@@ -744,6 +745,12 @@ double GaussianProcess::random_standard_normal(PathSampleGenerator& sampler) con
     }
 }
 
+double GaussianProcess::noIntersectBound(Vec3d p, double q) const
+{
+    double stddev = sqrt((*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.)));
+    return stddev * sqrt(2.) * boost::math::erf_inv(2 * q - 1);
+}
+
 // Box muller transform
 Vec2d GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
     double u1 = sampler.next1D();
@@ -759,28 +766,27 @@ Vec2d GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
 
 }
 
-// Box muller transform
-double GaussianProcess::rand_truncated_normal(float mean, float sigma, float a, PathSampleGenerator& sampler) const {
-    if (abs(a - mean) < 0.00001) {
+double GaussianProcess::rand_truncated_normal(double mean, double sigma, double a, PathSampleGenerator& sampler) const {
+    if (abs(a - mean) < 0.000001) {
         return abs(mean + sigma * rand_normal_2(sampler).x());
     }
 
     if (a < mean) {
         while (true) {
-            float x = mean + sigma * rand_normal_2(sampler).x();
+            double x = mean + sigma * rand_normal_2(sampler).x();
             if (x >= a) {
                 return x;
             }
         }
     }
 
-    float a_bar = (a - mean) / sigma;
-    float x_bar;
+    double a_bar = (a - mean) / sigma;
+    double x_bar;
 
     while (true) {
-        float u = sampler.next1D();
-        x_bar = sqrtf(a_bar * a_bar - 2 * log(1 - u));
-        float v = sampler.next1D();
+        double u = sampler.next1D();
+        x_bar = sqrt(a_bar * a_bar - 2 * log(1 - u));
+        double v = sampler.next1D();
         
         if (v < x_bar / a_bar) {
             break;
