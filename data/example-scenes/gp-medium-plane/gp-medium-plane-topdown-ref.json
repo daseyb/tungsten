@@ -1,0 +1,165 @@
+{
+    "bsdfs": [
+        {
+            "name": "backWall",
+            "albedo": {
+				"type": "checker"
+			},
+            "type": "lambert"
+        },
+        {
+            "name": "light",
+            "albedo": 1,
+            "type": "null"
+        },
+        {
+            "name": "floor",
+            "albedo": 1,
+            "type": "null"
+        },
+        {
+            "name": "upper",
+            "albedo": 1,
+            "type": "forward"
+        },
+        {
+			"name": "rough_beckmann",
+			"type": "ndf",
+			"k": 0,
+			"eta": 0,
+			"roughness": 0.01
+		}
+    ],
+    "primitives": [
+	{
+       "name": "backWall",
+            "transform": {
+                "position": [
+                    0,
+                    1,
+                    -30
+                ],
+                "scale": [
+                    30,
+                    4,
+                    30
+                ],
+                "rotation": [
+                    0,
+                    90,
+                    90
+                ]
+            },
+            "type": "quad",
+            "bsdf": "backWall"
+        },
+	    {
+            "name": "floor",
+            "transform": {
+				"position": [ 0, -2, 0],
+                "scale": [
+                    200,
+                    400,
+                    200
+                ],
+                "rotation": [
+                    0,
+                    90,
+                    0
+                ]
+            },
+            "type": "quad",
+            "bsdf": "floor"
+        },
+        {
+            "name": "ref",
+            "transform": {
+				"position": [ 0, -1, 0],
+                "scale": [
+                    200,
+                    400,
+                    200
+                ],
+                "rotation": [
+                    0,
+                    90,
+                    0
+                ]
+            },
+            "type": "quad",
+            "bsdf": "rough_beckmann"
+        },
+        {
+            "bump_strength": 1,
+            "transform": {
+                "position": [
+                    0,
+                    0,
+                    1.17369
+                ],
+                "rotation": [
+                    0,
+                    -67.2614,
+                    0
+                ]
+            },
+            "emission": "envmap.hdr",
+            "type": "infinite_sphere",
+            "sample": true,
+            "bsdf": {
+                "albedo": 1,
+                "type": "null"
+            }
+        }
+    ],
+    "camera": {
+        "tonemap": "filmic",
+        "resolution": [
+            512,
+            512
+        ],
+        "reconstruction_filter": "tent",
+        "transform": {
+            "position": [
+                0,
+                2,
+                0
+            ],
+            "look_at": [
+                0,
+                0,
+                0
+            ],
+            "up": [
+                0,
+                0,
+                1
+            ]
+        },
+        "type": "pinhole",
+        "fov": 25
+    },
+    "integrator": {
+        "type": "path_tracer",
+        "min_bounces": 0,
+        "max_bounces": 64,
+        "enable_consistency_checks": false,
+        "enable_two_sided_shading": true,
+        "enable_light_sampling": false,
+        "enable_volume_light_sampling": false
+    },
+    "renderer": {
+        "output_file": "gp-medium-plane-softlight-ref-ndf-no-nee.png",
+        "hdr_output_file": "gp-medium-plane-softlight-ref-ndf-no-nee.exr",
+        "resume_render_file": "",
+        "overwrite_output_files": false,
+        "adaptive_sampling": true,
+        "enable_resume_render": false,
+        "stratified_sampler": false,
+        "scene_bvh": true,
+        "spp": 1000,
+        "spp_step": 8,
+        "checkpoint_interval": "0",
+        "timeout": "0"
+    }
+}

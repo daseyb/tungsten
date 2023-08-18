@@ -5,6 +5,9 @@
 
 #include "IntTypes.hpp"
 
+#include <type_traits>
+#include <utility>
+
 namespace Tungsten {
 
 template<typename T>
@@ -123,21 +126,21 @@ template<typename To, typename From>
 inline To vec_conv(const From& vd) {
     if constexpr (HasXMem<From>::value) {
         if constexpr (HasXMem<To>::value) {
-            using ToElemType = std::remove_reference<decltype(std::declval<To>().x())>::type;
+            using ToElemType = typename std::remove_reference<decltype(std::declval<To>().x())>::type;
             return To{ (ToElemType)vd.x(), (ToElemType)vd.y(), (ToElemType)vd.z() };
         }
         else {
-            using ToElemType = std::remove_reference<decltype(std::declval<To>().x)>::type;
+            using ToElemType = typename std::remove_reference<decltype(std::declval<To>().x)>::type;
             return To{ (ToElemType)vd.x(), (ToElemType)vd.y(), (ToElemType)vd.z() };
         }
     }
     else {
         if constexpr (HasXMem<To>::value) {
-            using ToElemType = std::remove_reference<decltype(std::declval<To>().x())>::type;
+            using ToElemType = typename std::remove_reference<decltype(std::declval<To>().x())>::type;
             return To{ (ToElemType)vd.x, (ToElemType)vd.y, (ToElemType)vd.z };
         }
         else {
-            using ToElemType = std::remove_reference<decltype(std::declval<To>().x)>::type;
+            using ToElemType = typename std::remove_reference<decltype(std::declval<To>().x)>::type;
             return To{ (ToElemType)vd.x, (ToElemType)vd.y, (ToElemType)vd.z };
         }
     }

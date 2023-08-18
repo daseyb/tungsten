@@ -1,0 +1,197 @@
+{
+    "media": [
+        {
+            "name": "gp",
+            "phase_function": {
+                "type": "brdf",
+				"bsdf": {
+					"name": "rough_beckmann",
+					"albedo": 1,
+					"type": "mirror",
+					"k": 0,
+					"eta": 0,
+					"distribution": "beckmann"
+				}
+            },
+            "max_bounces": 1024,
+            "type": "gaussian_process",
+            "sigma_a": 0.0,
+            "sigma_s": 1.0,
+            "density": 1,
+            "sample_points": 8,
+			"gaussian_process": {
+				"type": "standard",
+				"covariance_epsilon": 0,
+				"mean": {
+					"type": "linear",
+					"reference_point": [0,-1,0],
+					"direction": [0,1,0],
+					"scale": 1
+				},
+				"covariance": {
+					"aniso": [1,0,1],
+					"type": "squared_exponential",
+					"lengthScale": 1.41421356,
+					"sigma": 0.01
+				}
+			}
+        }
+    ],
+    "bsdfs": [
+        {
+            "name": "backWall",
+            "albedo": {
+				"type": "checker"
+			},
+            "type": "lambert"
+        },
+        {
+            "name": "light",
+            "albedo": 1,
+            "type": "null"
+        },
+        {
+            "name": "floor",
+            "albedo": 1,
+            "type": "null"
+        },
+        {
+            "name": "upper",
+            "albedo": 1,
+            "type": "forward"
+        }
+    ],
+    "primitives": [
+	{
+       "name": "backWall",
+            "transform": {
+                "position": [
+                    0,
+                    1,
+                    -30
+                ],
+                "scale": [
+                    30,
+                    4,
+                    30
+                ],
+                "rotation": [
+                    0,
+                    90,
+                    90
+                ]
+            },
+            "type": "quad",
+            "bsdf": "backWall"
+        },
+	    {
+            "name": "floor",
+            "transform": {
+				"position": [ 0, -1.8, 0],
+                "scale": [
+                    200,
+                    400,
+                    200
+                ],
+                "rotation": [
+                    0,
+                    90,
+                    0
+                ]
+            },
+            "type": "quad",
+            "bsdf": "floor"
+        },
+        {
+            "name": "upper",
+            "transform": {
+				"position": [ 0, -0.2, 0],
+                "scale": [
+                    200,
+                    400,
+                    200
+                ],
+                "rotation": [
+                    0,
+                    90,
+                    0
+                ]
+            },
+            "type": "quad",
+            "bsdf": "upper",
+			"int_medium": "gp"
+        },
+        {
+            "bump_strength": 1,
+            "transform": {
+                "position": [
+                    0,
+                    0,
+                    1.17369
+                ],
+                "rotation": [
+                    0,
+                    -67.2614,
+                    0
+                ]
+            },
+            "emission": "envmap.hdr",
+            "type": "infinite_sphere",
+            "sample": true,
+            "bsdf": {
+                "albedo": 1,
+                "type": "null"
+            }
+        }
+    ],
+    "camera": {
+        "tonemap": "filmic",
+        "resolution": [
+            512,
+            512
+        ],
+        "reconstruction_filter": "tent",
+        "transform": {
+            "position": [
+                -1.05697e-006,
+                2,
+                7
+            ],
+            "look_at": [
+                0,
+                1,
+                0
+            ],
+            "up": [
+                0,
+                1,
+                0
+            ]
+        },
+        "type": "pinhole",
+        "fov": 25
+    },
+    "integrator": {
+        "type": "path_tracer",
+        "min_bounces": 0,
+        "max_bounces": 20,
+        "enable_consistency_checks": false,
+        "enable_two_sided_shading": true,
+        "enable_light_sampling": false,
+        "enable_volume_light_sampling": false
+    },
+    "renderer": {
+        "output_file": "gp-medium-plane.png",
+        "hdr_output_file": "gp-medium-plane.exr",
+        "resume_render_file": "",
+        "overwrite_output_files": false,
+        "adaptive_sampling": false,
+        "enable_resume_render": false,
+        "stratified_sampler": false,
+        "scene_bvh": true,
+        "spp": 2,
+        "spp_step": 1,
+        "checkpoint_interval": "0",
+        "timeout": "0"
+    }
+}
