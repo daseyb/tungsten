@@ -133,7 +133,7 @@
     "integrator": {
         "type": "path_tracer",
         "min_bounces": 0,
-        "max_bounces": 64,
+        "max_bounces": 2048,
         "enable_consistency_checks": false,
         "enable_two_sided_shading": true,
         "enable_light_sampling": false,

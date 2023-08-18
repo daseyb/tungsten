@@ -550,6 +550,8 @@ bool TraceBase::handleSurface(SurfaceScatterEvent &event, IntersectionTemporary 
         if (!bsdf.sample(event, adjoint))
             return false;
 
+        //assert(abs(event.wo.lengthSq() - 1.0f) < 0.001f);
+
         wo = event.frame.toGlobal(event.wo);
 
         if (!isConsistent(event, wo))
@@ -566,6 +568,8 @@ bool TraceBase::handleSurface(SurfaceScatterEvent &event, IntersectionTemporary 
     state.reset();
 
     ray = ray.scatter(ray.hitpoint(), wo, info.epsilon);
+
+    //assert( abs(ray.dir().lengthSq() - 1.0f) < 0.001f);
 
     return true;
 }

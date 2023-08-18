@@ -53,7 +53,7 @@ void NDFBsdf::fromJson(JsonPtr value, const Scene &scene)
     } else if(_ndfType == "ggx") {
         ndf = std::make_shared<GGXNDF>(&micro_brdf, _roughness.x(), _roughness.y()); // and assign it to microfacets with a GGX distribution
     } else {
-        
+        ndf = std::make_shared<BeckmannNDF>(&micro_brdf, _roughness.x(), _roughness.y()); // and assign it to microfacets with a GGX distribution
     }
 
     macro_brdf = Microsurface(ndf.get());
@@ -78,7 +78,8 @@ rapidjson::Value NDFBsdf::toJson(Allocator &allocator) const
 bool NDFBsdf::sample(SurfaceScatterEvent &event) const
 {
     double weight = 1.;
-    event.wo = vec_conv<Vec3f>(macro_brdf.sample(1., 1., vec_conv<Vector3>(event.wi), weight));
+    Vector3 wo = macro_brdf.sample(1., 1., vec_conv<Vector3>(event.wi), weight);
+    event.wo = Vec3f((float)wo.x, (float)wo.y, (float)wo.z);
     event.weight = Vec3f((float)weight);
     event.pdf = 1.f;
     return true;
@@ -86,7 +87,11 @@ bool NDFBsdf::sample(SurfaceScatterEvent &event) const
 
 Vec3f NDFBsdf::eval(const SurfaceScatterEvent &event) const
 {
-    return Vec3f((float)macro_brdf.eval(1., 1., vec_conv<Vector3>(event.wi), vec_conv<Vector3>(event.wo)));
+    if (event.requestedLobe.isForward()) return Vec3f(0.f);
+
+    Vector3 wi = Vector3(event.wi.x(), event.wi.y(), event.wi.z());
+    Vector3 wo = Vector3(event.wo.x(), event.wo.y(), event.wo.z());
+    return Vec3f((float)macro_brdf.eval(1., 1., wi, wo));
 }
 
 bool NDFBsdf::invert(WritablePathSampleGenerator &/*sampler*/, const SurfaceScatterEvent &event) const
