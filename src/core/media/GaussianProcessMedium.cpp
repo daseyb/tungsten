@@ -23,6 +23,7 @@ namespace Tungsten {
         case GPCorrelationContext::Elephant:  return "elephant";
         case GPCorrelationContext::Goldfish:   return "goldfish";
         case GPCorrelationContext::Dori:   return "dori";
+        case GPCorrelationContext::None:   return "none";
         }
     }
 
@@ -34,6 +35,8 @@ namespace Tungsten {
             return GPCorrelationContext::Goldfish;
         else if (name == "dori")
             return GPCorrelationContext::Dori;
+        else if (name == "none")
+            return GPCorrelationContext::None;
         FAIL("Invalid correlation context: '%s'", name);
     }
 
@@ -392,14 +395,30 @@ namespace Tungsten {
                 rd, 1, sampler);
         }
         else {
+            auto ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
+
+            assert(ctxt->points.size() > 0);
+
+            auto lastIntersectPt = ctxt->points[ctxt->points.size() - 1];
+            auto lastIntersectVal = ctxt->values[ctxt->points.size() - 1];
+
             switch (_ctxt) {
+            case GPCorrelationContext::None:
+            {
+                startSign = 1; // state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())) < 0 ? -1 : 1;
+                gpSamples = _gp->sample(
+                    points.data(), derivs.data(), _samplePoints, nullptr,
+                    nullptr, 0,
+                    rd, 1, sampler) * startSign;
+                break;
+            }
             case GPCorrelationContext::Dori:
             {
-                std::array<Vec3d, 1> cond_pts = { points[0] };
+                std::array<Vec3d, 1> cond_pts = { lastIntersectPt };
                 std::array<Derivative, 1> cond_deriv = { Derivative::None };
-                std::array<double, 1> cond_vs = { 0 };
+                std::array<double, 1> cond_vs = { lastIntersectVal };
 
-                startSign = state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())) < 0 ? -1 : 1;
+                startSign = 1; // state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())) < 0 ? -1 : 1;
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
@@ -409,11 +428,11 @@ namespace Tungsten {
             }
             case GPCorrelationContext::Goldfish:
             {
-                std::array<Vec3d, 2> cond_pts = { points[0], points[0] };
+                std::array<Vec3d, 2> cond_pts = { lastIntersectPt, lastIntersectPt };
                 std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
-                std::array<double, 2> cond_vs = { 0, state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())) };
+                std::array<double, 2> cond_vs = { lastIntersectVal, state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())) };
 
-                startSign = sign(cond_vs[1]);
+                startSign = 1;
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
@@ -423,12 +442,14 @@ namespace Tungsten {
             }
             case GPCorrelationContext::Elephant:
             {
-                auto ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
-                ctxt->points.push_back(points[0]);
-                ctxt->derivs.push_back(Derivative::First);
-                ctxt->values.push_back(state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())));
+                //ctxt->points.erase(ctxt->points.begin(), ctxt->points.end() - 3);
+                //ctxt->derivs.erase(ctxt->derivs.begin(), ctxt->derivs.end() - 3);
+                //ctxt->values.erase(ctxt->values.begin(), ctxt->values.end() - 3);
+                //ctxt->points.push_back(lastIntersectPt);
+                //ctxt->derivs.push_back(Derivative::First);
+                //ctxt->values.push_back(state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())));
 
-               /*std::array<Vec3f, 4> cond_pts = {points[0], points[0], points[0], points[0]};
+                /*std::array<Vec3f, 4> cond_pts = {points[0], points[0], points[0], points[0]};
                 std::array<Derivative, 4> cond_deriv = { Derivative::None, Derivative::First, Derivative::First, Derivative::First };
                 std::array<double, 4> cond_vs = { 0, state.lastAniso.x(), state.lastAniso.y(), state.lastAniso.z() };
                 std::array<Vec3f, 4> cond_dirs = { ray.dir().normalized(), 
@@ -436,7 +457,7 @@ namespace Tungsten {
                     Vec3f(0.f, 1.f, 0.f), 
                     Vec3f(0.f, 0.f, 1.f) };*/ 
 
-                startSign = state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())) < 0 ? -1 : 1;
+                startSign = 1;
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
                     ctxt->points.data(), ctxt->values.data(), ctxt->derivs.data(), ctxt->points.size(), nullptr,
@@ -461,18 +482,18 @@ namespace Tungsten {
                 double offsetT = prevV / (prevV - currV);
                 t = lerp(prevT, currT, offsetT);
 
-                points.resize(p + 1);
-                derivs.resize(p + 1);
+                points.resize(p);
+                derivs.resize(p);
 
                 //points[p] = ray.pos() + t * ray.dir();
                 //gpSamples(p, 0) = lerp(prevV, currV, offsetT);
 
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
-                if(_ctxt == GPCorrelationContext::Dori) {
+                /*if (_ctxt == GPCorrelationContext::Dori) {
                     ctxt->derivs = { Derivative::None };
                     ctxt->points = { points[p] };
                     ctxt->values = { gpSamples(p, 0) };
-                } else {
+                } else*/ {
                     ctxt->derivs = std::move(derivs);
                     ctxt->points = std::move(points);
                     ctxt->values = std::vector<double>(gpSamples.data(), gpSamples.data() + ctxt->points.size());
@@ -484,6 +505,11 @@ namespace Tungsten {
             prevT = currT;
         }
 
+        auto ctxt = std::make_shared<GPContextFunctionSpace>();
+        ctxt->derivs = std::move(derivs);
+        ctxt->points = std::move(points);
+        ctxt->values = std::vector<double>(gpSamples.data(), gpSamples.data() + ctxt->points.size());
+        state.gpContext = ctxt;
         return false;
     }
 
@@ -515,7 +541,8 @@ namespace Tungsten {
         else {
             double t = maxT;
 
-            if (intersect(sampler, ray, state, t)) {
+            sample.exited = !intersect(sampler, ray, state, t);
+            {
                 Vec3d ip = vec_conv<Vec3d>(ray.pos()) + vec_conv<Vec3d>(ray.dir()) * t;
 
                 Vec3d grad;
@@ -523,7 +550,7 @@ namespace Tungsten {
                     return false;
                 }
 
-                if (grad.dot(vec_conv<Vec3d>(ray.dir())) > 0) {
+                if (!sample.exited && grad.dot(vec_conv<Vec3d>(ray.dir())) > 0) {
                     return false;
                 }
 
@@ -539,11 +566,6 @@ namespace Tungsten {
                     std::cout << "Gradient zero.\n";
                     return false;
                 }
-
-                sample.exited = false;
-            }
-            else {
-                sample.exited = true;
             }
 
             sample.t = min(float(t), maxT);

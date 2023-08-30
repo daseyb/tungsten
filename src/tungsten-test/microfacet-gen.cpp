@@ -175,7 +175,7 @@ void side_view(const GaussianProcess& gp, std::string output) {
 }
 
 
-constexpr size_t NUM_RAY_SAMPLE_POINTS = 64;
+constexpr size_t NUM_RAY_SAMPLE_POINTS = 128;
 
 
 void sample_beckmann(float alpha) {
@@ -295,22 +295,29 @@ void ndf(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
     }
 }
 
-void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::string output, float angle = (2 * PI) / 8, GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian, float zrange = 4.f, std::function<void(float)> update_progress = nullptr) {
-
+void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::string output, float angle = (2 * PI) / 8, GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian, float zrange = 4.f, float maxStepSize = 0.15f, std::function<void(float)> update_progress = nullptr) {
+    
     Path basePath = Path(output) / Path(gp->_cov->id());
 
     if (!basePath.exists()) {
         FileUtils::createDirectory(basePath);
     }
 
-    auto gp_med = std::make_shared<GaussianProcessMedium>(gp, 0, 1, 1, NUM_RAY_SAMPLE_POINTS, GPCorrelationContext::Goldfish, nsm == GPNormalSamplingMethod::Beckmann ? GPIntersectMethod::Mean : GPIntersectMethod::GPDiscrete, nsm);
+    if (nsm == GPNormalSamplingMethod::Beckmann) {
+        maxStepSize = 100000.f;
+    }
+
+    auto gp_med = std::make_shared<GaussianProcessMedium>(
+        gp, 0, 1, 1, NUM_RAY_SAMPLE_POINTS, 
+        nsm == GPNormalSamplingMethod::Beckmann ? GPCorrelationContext::Goldfish : GPCorrelationContext::Goldfish,
+        nsm == GPNormalSamplingMethod::Beckmann ? GPIntersectMethod::Mean : GPIntersectMethod::GPDiscrete, 
+        nsm);
 
     gp_med->loadResources();
     gp_med->prepareForRender();
 
     UniformPathSampler sampler(0);
-    sampler.next1D();
-    sampler.next1D();
+    sampler.next2D();
 
     Eigen::MatrixXf normals(samples, 3);
 
@@ -334,13 +341,24 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
         state.reset();
 
         MediumSample sample;
-        if (gp_med->sampleDistance(sampler, ray, state, sample) && !sample.exited) {
-            Vec3d grad = sample.aniso.normalized();
-            normals(s, 0) = grad.x();
-            normals(s, 1) = grad.y();
-            normals(s, 2) = grad.z();
-            s++;
+        Ray tRay = ray;
+        tRay.setFarT(tRay.nearT() + maxStepSize * NUM_RAY_SAMPLE_POINTS);
+        bool success = gp_med->sampleDistance(sampler, tRay, state, sample);
+        while (success && sample.exited) {
+            tRay.setNearT(tRay.farT());
+            tRay.setFarT(tRay.nearT() + maxStepSize * NUM_RAY_SAMPLE_POINTS);
+            success = gp_med->sampleDistance(sampler, tRay, state, sample);
         }
+
+        if (!success) {
+            continue;
+        }
+
+        Vec3d grad = sample.aniso.normalized();
+        normals(s, 0) = grad.x();
+        normals(s, 1) = grad.y();
+        normals(s, 2) = grad.z();
+        s++;
     }
 
     {
@@ -368,7 +386,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<JsonDocument> document;
     try {
-        document = std::make_shared<JsonDocument>(argc > 1 ? argv[1] : "testing/microfacet/covariances-real.json");
+        document = std::make_shared<JsonDocument>(argc > 1 ? argv[1] : "testing/microfacet/covariances-smith-test.json");
     }
     catch (std::exception& e) {
         std::cerr << e.what() << "\n";
@@ -401,15 +419,17 @@ int main(int argc, char** argv) {
 
             float alpha = gp->_cov->compute_beckmann_roughness();
             float bound = gp->noIntersectBound(Vec3d(0.), 0.9999);
+            float maxStepsize = gp->goodStepsize(Vec3d(0.), 0.99);
             std::cout << "Beckmann roughness: " << alpha << "\n";
             std::cout << "0.9999 percentile: " << bound << "\n";
+            std::cout << "Good stepsize: " << maxStepsize << "\n";
 
             std::cout << "Step sizes:\t";
 
-            constexpr size_t NUM_STEPS = 6;
+            constexpr size_t NUM_STEPS = 3;
 
             for (int j = 0; j < NUM_STEPS; j++) {
-                float angle = 50 + float(j) / (NUM_STEPS - 1) * 35;
+                float angle = 80 + float(j) / (NUM_STEPS-1) * 9;
                 angle = angle / 180 * PI;
                 
                 
@@ -421,15 +441,13 @@ int main(int argc, char** argv) {
             std::cout << "cov(step):\t";
 
             for (int j = 0; j < NUM_STEPS; j++) {
-                float angle = 50 + float(j) / (NUM_STEPS - 1) * 35;
+                float angle = 80 + float(j) / (NUM_STEPS - 1) * 9;
                 angle = angle / 180 * PI;
 
                 float travel_distance = 2 * bound / cos(angle);
                 std::cout << cov->operator()(Derivative::None, Derivative::None, Vec3d(0.), Vec3d(travel_distance / NUM_RAY_SAMPLE_POINTS, 0., 0.), Vec3d(0.), Vec3d(0.)) << ", ";
             }
             std::cout << "\n";
-
-            continue;
 
             //sample_beckmann(alpha);
 
@@ -460,15 +478,15 @@ int main(int argc, char** argv) {
 
 #pragma omp parallel for
             for (int j = 0; j < NUM_STEPS; j++) {
-                float angle = 50 + float(j) / (NUM_STEPS-1) * 35;
+                float angle = 80 + float(j) / (NUM_STEPS - 1) * 9;
                 angle = angle / 180 * PI;
 
                 auto update_progress = [&progress, j](float p) {
                     progress.update(j, p);
                 };
 
-                ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond/angle-range", angle, GPNormalSamplingMethod::ConditionedGaussian, bound * 2, update_progress);
-                ndf_cond_validate(gp, 100000, "testing/microfacet/normals-validate-nocond/angle-range", angle, GPNormalSamplingMethod::Beckmann, bound * 2, update_progress);
+                ndf_cond_validate(gp, 100000, "testing/microfacet/smith-test/angle-range", angle, GPNormalSamplingMethod::ConditionedGaussian, bound * 2, maxStepsize, update_progress);
+                ndf_cond_validate(gp, 1000000, "testing/microfacet/smith-test/angle-range", angle, GPNormalSamplingMethod::Beckmann, bound * 2, maxStepsize, update_progress);
             }
             
             //ndf(gp, 10000000, "microfacet/normals/");

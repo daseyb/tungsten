@@ -86,9 +86,15 @@ namespace Tungsten {
             return true;
         }
 
-        float compute_beckmann_roughness() {
-            float L2 = (*this)(Derivative::First, Derivative::First, Vec3d(0.), Vec3d(0.), Vec3d(1., 0., 0.), Vec3d(1., 0., 0.));
+        double compute_beckmann_roughness(Vec3d p = Vec3d(0.)) {
+            double L2 = (*this)(Derivative::First, Derivative::First, p, p, Vec3d(1., 0., 0.), Vec3d(1., 0., 0.));
             return sqrt(2 * L2);
+        }
+
+        double compute_rices_formula(Vec3d p = Vec3d(0.), double u = 0.) {
+            float L0 = (*this)(Derivative::None, Derivative::None, p, p, Vec3d(1., 0., 0.), Vec3d(1., 0., 0.));
+            float L2 = (*this)(Derivative::First, Derivative::First, p, p, Vec3d(1., 0., 0.), Vec3d(1., 0., 0.));
+            return exp(-u * u / (2 * L0)) * sqrt(L2 / L0) / (2 * PI);
         }
 
         virtual std::string id() const = 0;
@@ -606,7 +612,8 @@ namespace Tungsten {
 
         // From numpy
         double random_standard_normal(PathSampleGenerator& sampler) const;
-        double noIntersectBound(Vec3d p, double q) const;
+        double noIntersectBound(Vec3d p = Vec3d(0.), double q = 0.9999) const;
+        double goodStepsize(Vec3d p = Vec3d(0.), double targetCov = 0.95) const;
 
         // Box muller transform
         Vec2d rand_normal_2(PathSampleGenerator& sampler) const;
@@ -627,7 +634,7 @@ namespace Tungsten {
         std::shared_ptr<MeanFunction> _mean;
         std::shared_ptr<CovarianceFunction> _cov;
         size_t _maxEigenvaluesN = 64;
-        float _covEps = 0.0001f;
+        float _covEps = 0.f;
     };
 }
 

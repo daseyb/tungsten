@@ -25,7 +25,8 @@ struct GPContextFunctionSpace : public GPContext {
 enum class GPCorrelationContext {
     Elephant,
     Goldfish,
-    Dori
+    Dori,
+    None
 };
 
 enum class GPIntersectMethod {

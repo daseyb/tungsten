@@ -80,7 +80,7 @@ int main() {
                 Vec3f(1.0f, 0.0f, 0.0f), num_reals, sampler);
 
             {
-                std::ofstream xfile(tinyformat::format("realizations/%s-%d-grid-samples-nocond.bin", gp._cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
+                std::ofstream xfile(tinyformat::format("testing/realizations/%s-%d-grid-samples-nocond.bin", gp._cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
                 xfile.write((char*)samples.data(), sizeof(float) * samples.rows() * samples.cols());
                 xfile.close();
             }
@@ -98,26 +98,26 @@ int main() {
     );
     
     {
-        std::ofstream xfile(tinyformat::format("realizations/%s-%d-cond-ps-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
-        xfile.write((char*)gp->_globalCondPs.data(), sizeof(Vec3f) * gp->_globalCondPs.size());
+        std::ofstream xfile(tinyformat::format("testing/realizations/%s-%d-cond-ps-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
+        xfile.write((char*)gp->_globalCondPs.data(), sizeof(Vec3d) * gp->_globalCondPs.size());
         xfile.close();
     }
 
     {
-        std::ofstream xfile(tinyformat::format("realizations/%s-%d-cond-ds-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
+        std::ofstream xfile(tinyformat::format("testing/realizations/%s-%d-cond-ds-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
         xfile.write((char*)gp->_globalCondDerivs.data(), sizeof(Derivative) * gp->_globalCondDerivs.size());
         xfile.close();
     }
 
     {
-        std::ofstream xfile(tinyformat::format("realizations/%s-%d-cond-ns-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
-        xfile.write((char*)gp->_globalCondDerivDirs.data(), sizeof(Vec3f) * gp->_globalCondDerivDirs.size());
+        std::ofstream xfile(tinyformat::format("testing/realizations/%s-%d-cond-ns-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
+        xfile.write((char*)gp->_globalCondDerivDirs.data(), sizeof(Vec3d) * gp->_globalCondDerivDirs.size());
         xfile.close();
     }
 
     {
-        std::ofstream xfile(tinyformat::format("realizations/%s-%d-cond-vs-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
-        xfile.write((char*)gp->_globalCondValues.data(), sizeof(float) * gp->_globalCondValues.size());
+        std::ofstream xfile(tinyformat::format("testing/realizations/%s-%d-cond-vs-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
+        xfile.write((char*)gp->_globalCondValues.data(), sizeof(double) * gp->_globalCondValues.size());
         xfile.close();
     }
 
@@ -141,14 +141,14 @@ int main() {
                 }
             }
 
-            Eigen::MatrixXf samples = gp->sample(
+            Eigen::MatrixXd samples = gp->sample(
                 points.data(), derivs.data(), points.size(), nullptr,
                 nullptr, 0,
-                Vec3d(0.0f, 0.0f, 0.0f), num_reals, sampler).cast<float>();
+                Vec3d(0.0f, 0.0f, 0.0f), num_reals, sampler);
 
             {
-                std::ofstream xfile(tinyformat::format("realizations/%s-%d-grid-samples-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
-                xfile.write((char*)samples.data(), sizeof(float) * samples.rows() * samples.cols());
+                std::ofstream xfile(tinyformat::format("testing/realizations/%s-%d-grid-samples-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
+                xfile.write((char*)samples.data(), sizeof(double) * samples.rows() * samples.cols());
                 xfile.close();
             }
         }

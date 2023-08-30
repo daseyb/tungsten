@@ -78,8 +78,7 @@ rapidjson::Value NDFBsdf::toJson(Allocator &allocator) const
 bool NDFBsdf::sample(SurfaceScatterEvent &event) const
 {
     double weight = 1.;
-    Vector3 wo = macro_brdf.sample(1., 1., vec_conv<Vector3>(event.wi), weight);
-    event.wo = Vec3f((float)wo.x, (float)wo.y, (float)wo.z);
+    event.wo = vec_conv<Vec3f>(macro_brdf.sample(1., 1., vec_conv<Vector3>(event.wi), weight));
     event.weight = Vec3f((float)weight);
     event.pdf = 1.f;
     return true;
@@ -87,11 +86,7 @@ bool NDFBsdf::sample(SurfaceScatterEvent &event) const
 
 Vec3f NDFBsdf::eval(const SurfaceScatterEvent &event) const
 {
-    if (event.requestedLobe.isForward()) return Vec3f(0.f);
-
-    Vector3 wi = Vector3(event.wi.x(), event.wi.y(), event.wi.z());
-    Vector3 wo = Vector3(event.wo.x(), event.wo.y(), event.wo.z());
-    return Vec3f((float)macro_brdf.eval(1., 1., wi, wo));
+    return Vec3f((float)macro_brdf.eval(1., 1., vec_conv<Vector3>(event.wi), vec_conv<Vector3>(event.wo)));
 }
 
 bool NDFBsdf::invert(WritablePathSampleGenerator &/*sampler*/, const SurfaceScatterEvent &event) const

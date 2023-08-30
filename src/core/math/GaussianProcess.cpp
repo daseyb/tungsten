@@ -520,7 +520,7 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
             double cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], ddir_a, ddir_b);
 
 #ifdef SPARSE_COV
-            if (std::abs(cov_ij) > _covEps) {
+            if (i == j || std::abs(cov_ij) > _covEps) {
                 tripletList.push_back(Eigen::Triplet<double>(i, j, cov_ij));
             }
 #else
@@ -569,7 +569,7 @@ CovMatrix GaussianProcess::cov(
             double cov_ij = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j], ddir_a, ddir_b);
 
 #ifdef SPARSE_COV
-            if (std::abs(cov_ij) > _covEps) {
+            if (i == j || std::abs(cov_ij) > _covEps) {
                 tripletList.push_back(Eigen::Triplet<double>(i, j, cov_ij));
             }
 #else
@@ -623,10 +623,6 @@ Eigen::MatrixXd GaussianProcess::sample_cond(
     const Constraint* constraints, size_t numConstraints,
     Vec3d deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
-    if (numCondPts == 0) {
-        return sample(points, derivative_types, numPts, deriv_dirs, constraints, numConstraints, deriv_dir, samples, sampler);
-    }
-
     std::vector<Vec3d> cond_ps;
     std::vector<Derivative> cond_derivs;
     std::vector<Vec3d> cond_dds;
@@ -663,6 +659,10 @@ Eigen::MatrixXd GaussianProcess::sample_cond(
         numCondPts = cond_ps.size();
     }
 
+    if (numCondPts == 0) {
+        return sample(points, derivative_types, numPts, deriv_dirs, constraints, numConstraints, deriv_dir, samples, sampler);
+    }
+
     CovMatrix s11 = cov(
         cond_points, cond_points, 
         cond_derivative_types, cond_derivative_types, 
@@ -685,7 +685,6 @@ Eigen::MatrixXd GaussianProcess::sample_cond(
 #endif
 
     CovMatrix solved = solver.solve(s12).transpose();
-
 
     Eigen::Map<const Eigen::VectorXd> cond_values_view(cond_values, numCondPts);
     Eigen::VectorXd m2 = mean(points, derivative_types, deriv_dirs, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, cond_deriv_dirs, deriv_dir, numCondPts)));
@@ -749,6 +748,25 @@ double GaussianProcess::noIntersectBound(Vec3d p, double q) const
 {
     double stddev = sqrt((*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.)));
     return stddev * sqrt(2.) * boost::math::erf_inv(2 * q - 1);
+}
+
+double GaussianProcess::goodStepsize(Vec3d p, double targetCov) const
+{
+    targetCov *= (*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.));
+    double stepsize = 10.;
+    double cov = (*_cov)(Derivative::None, Derivative::None, p, p + Vec3d(stepsize, 0., 0.), Vec3d(0.), Vec3d(0.));
+
+    while (std::abs(cov - targetCov) > 0.0000001) {
+        if (cov > targetCov) {
+            stepsize *= 1.5;
+        }
+        else {
+            stepsize *= 0.5;
+        }
+        cov = (*_cov)(Derivative::None, Derivative::None, p, p + Vec3d(stepsize, 0., 0.), Vec3d(0.), Vec3d(0.));
+    } 
+
+    return stepsize;
 }
 
 // Box muller transform

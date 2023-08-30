@@ -133,7 +133,7 @@
     "integrator": {
         "type": "path_tracer",
         "min_bounces": 0,
-        "max_bounces": 2048,
+        "max_bounces": 20,
         "enable_consistency_checks": false,
         "enable_two_sided_shading": true,
         "enable_light_sampling": false,
@@ -148,7 +148,7 @@
         "enable_resume_render": false,
         "stratified_sampler": false,
         "scene_bvh": true,
-        "spp": 64,
+        "spp": 2048,
         "spp_step": 8,
         "checkpoint_interval": "0",
         "timeout": "0"
