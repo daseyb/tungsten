@@ -175,7 +175,7 @@ void side_view(const GaussianProcess& gp, std::string output) {
 }
 
 
-constexpr size_t NUM_RAY_SAMPLE_POINTS = 128;
+constexpr size_t NUM_RAY_SAMPLE_POINTS = 256;
 
 
 void sample_beckmann(float alpha) {

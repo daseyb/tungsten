@@ -15,6 +15,7 @@
 #include <igl/per_face_normals.h>
 #include <igl/per_vertex_normals.h>
 #include <boost/math/special_functions/erf.hpp>
+#include <Eigen/IterativeLinearSolvers>
 
 
 namespace Tungsten {
@@ -675,16 +676,55 @@ Eigen::MatrixXd GaussianProcess::sample_cond(
         cond_deriv_dirs, deriv_dirs,
         deriv_dir, numCondPts, numPts);
 
+    CovMatrix solved;
+
 #ifdef SPARSE_COV
-    Eigen::SparseQR<CovMatrix, Eigen::AMDOrdering<int>> solver(s11);
+    /*Eigen::SparseQR<CovMatrix, Eigen::AMDOrdering<int>> solver(s11);
     if (solver.info() != Eigen::ComputationInfo::Success) {
         std::cerr << "Conditioning failed!\n";
+    }*/
+
+    //Eigen::ConjugateGradient<CovMatrix, Eigen::Lower | Eigen::Upper> solver;
+    //Eigen::BiCGSTAB<CovMatrix> solver;
+    
+    if (s11.rows() > 16) {
+        Eigen::BDCSVD<Eigen::MatrixXd> solver(s11, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        solver.setThreshold(0.00001);
+
+        if (solver.info() != Eigen::ComputationInfo::Success) {
+            std::cerr << "Conditioning decomposition failed (BDCSVD)!\n";
+        }
+
+        Eigen::MatrixXd solvedDense = solver.solve(s12.toDense()).transpose();
+        solved = solvedDense.sparseView();
+        if (solver.info() != Eigen::ComputationInfo::Success) {
+                std::cerr << "Conditioning solving failed (BDCSVD)!\n";
+        }
+    }
+    else {
+        Eigen::SimplicialLDLT<CovMatrix> solver;
+        solver.compute(s11);
+        if (solver.info() != Eigen::ComputationInfo::Success) {
+            std::cerr << "Conditioning decomposition failed (LDLT)!\n";
+        }
+
+        solved = solver.solve(s12).transpose();
+        if (solver.info() != Eigen::ComputationInfo::Success) {
+            std::cerr << "Conditioning solving failed (LDLT)!\n";
+        }
     }
 #else
     Eigen::HouseholderQR<CovMatrix> solver(s11);
-#endif
+    solver.compute(s11);
+    if (solver.info() != Eigen::ComputationInfo::Success) {
+        std::cerr << "Conditioning decomposition failed!\n";
+    }
 
     CovMatrix solved = solver.solve(s12).transpose();
+    if (solver.info() != Eigen::ComputationInfo::Success) {
+        std::cerr << "Conditioning solving failed!\n";
+    }
+#endif
 
     Eigen::Map<const Eigen::VectorXd> cond_values_view(cond_values, numCondPts);
     Eigen::VectorXd m2 = mean(points, derivative_types, deriv_dirs, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, cond_deriv_dirs, deriv_dir, numCondPts)));

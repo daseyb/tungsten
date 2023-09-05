@@ -33,6 +33,7 @@ void sample_ray_realizations(std::shared_ptr<GaussianProcess> gp, int samples, R
 
     std::string filename = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-samples.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, r.farT());
     std::string filename_ts = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-ts.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, r.farT());
+    std::string filename_derivs = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-derivs.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, r.farT() - r.nearT());
 
     std::cout << filename << "\n";
 
@@ -44,6 +45,7 @@ void sample_ray_realizations(std::shared_ptr<GaussianProcess> gp, int samples, R
 
     std::vector<double> sampledValuesAll;
     std::vector<double> sampledTsAll;
+    std::vector<double> sampledDerivsAll;
 
     for (int s = 0; s < samples;) {
 
@@ -53,6 +55,9 @@ void sample_ray_realizations(std::shared_ptr<GaussianProcess> gp, int samples, R
 
         std::vector<double> sampledTs;
         sampledTs.resize(numMicroSamplesPts * numMacroSteps);
+
+        std::vector<double> sampledDerivs;
+        sampledDerivs.resize(numMacroSteps, 0.);
 
         Medium::MediumState state;
         state.reset();
@@ -66,6 +71,7 @@ void sample_ray_realizations(std::shared_ptr<GaussianProcess> gp, int samples, R
 
         std::copy(ctxt->values.begin(), ctxt->values.end(), sampledValues.begin() + macroStep * numMicroSamplesPts);
         std::transform(ctxt->points.begin(), ctxt->points.end(), sampledTs.begin() + macroStep * numMicroSamplesPts, [](auto pt) { return pt.x(); });
+        sampledDerivs[macroStep] = sample.aniso.dot(vec_conv<Vec3d>(r.dir()));
 
         
         while (success && sample.exited && tRay.farT() < r.farT()) {
@@ -76,6 +82,8 @@ void sample_ray_realizations(std::shared_ptr<GaussianProcess> gp, int samples, R
             ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
             std::copy(ctxt->values.begin(), ctxt->values.end(), sampledValues.begin() + macroStep * numMicroSamplesPts);
             std::transform(ctxt->points.begin(), ctxt->points.end(), sampledTs.begin() + macroStep * numMicroSamplesPts, [](auto pt) { return pt.x(); });
+
+            sampledDerivs[macroStep] = sample.aniso.dot(vec_conv<Vec3d>(r.dir()));
         }
 
         if (!success) {
@@ -84,6 +92,7 @@ void sample_ray_realizations(std::shared_ptr<GaussianProcess> gp, int samples, R
 
         std::copy(sampledValues.begin(), sampledValues.end(), std::back_inserter(sampledValuesAll));
         std::copy(sampledTs.begin(), sampledTs.end(), std::back_inserter(sampledTsAll));
+        std::copy(sampledDerivs.begin(), sampledDerivs.end(), std::back_inserter(sampledDerivsAll));
         s++;
     }
 
@@ -100,6 +109,14 @@ void sample_ray_realizations(std::shared_ptr<GaussianProcess> gp, int samples, R
             filename_ts,
             std::ios::out | std::ios::binary);
         xfile.write((char*)sampledTsAll.data(), sizeof(double) * sampledTsAll.size());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(
+            filename_derivs,
+            std::ios::out | std::ios::binary);
+        xfile.write((char*)sampledDerivsAll.data(), sizeof(double) * sampledDerivsAll.size());
         xfile.close();
     }
 }
@@ -139,7 +156,8 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
     int numMacroSteps = int(std::ceil((ray.farT() - ray.nearT()) / (numMicroSamplesPts * maxStepsize)));
 
     std::string filename = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-samples.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, ray.farT()-ray.nearT());
-    std::string filename_ts = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-ts.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, ray.farT()-ray.nearT());
+    std::string filename_ts = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-ts.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, ray.farT() - ray.nearT());
+    std::string filename_derivs = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-derivs.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, ray.farT()-ray.nearT());
 
     std::cout << filename << "\n";
     std::cout << zrange << "\n";
@@ -150,6 +168,7 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
 
     std::vector<double> sampledValuesAll;
     std::vector<double> sampledTsAll;
+    std::vector<double> sampledDerivsAll;
 
     for (int s = 0; s < samples;) {
 
@@ -159,6 +178,9 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
 
         std::vector<double> sampledTs;
         sampledTs.resize(numMicroSamplesPts * numMacroSteps, ray.farT());
+
+        std::vector<double> sampledDerivs;
+        sampledDerivs.resize(numMacroSteps, 0.);
 
         Medium::MediumState state;
         state.reset();
@@ -182,6 +204,8 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
             ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
             std::copy(ctxt->values.begin(), ctxt->values.end(), sampledValues.begin() + macroStep * numMicroSamplesPts);
             std::transform(ctxt->points.begin(), ctxt->points.end(), sampledTs.begin() + macroStep * numMicroSamplesPts, [rp = vec_conv<Vec3d>(ray.pos())](auto pt) { return (pt - rp).length(); });
+
+            sampledDerivs[macroStep] = sample.aniso.dot(vec_conv<Vec3d>(ray.dir()));
         }
 
         if (!success) {
@@ -190,6 +214,7 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
 
         std::copy(sampledValues.begin(), sampledValues.end(), std::back_inserter(sampledValuesAll));
         std::copy(sampledTs.begin(), sampledTs.end(), std::back_inserter(sampledTsAll));
+        std::copy(sampledDerivs.begin(), sampledDerivs.end(), std::back_inserter(sampledDerivsAll));
         s++;
     }
 
@@ -208,14 +233,23 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
         xfile.write((char*)sampledTsAll.data(), sizeof(double) * sampledTsAll.size());
         xfile.close();
     }
+
+    {
+        std::ofstream xfile(
+            filename_derivs,
+            std::ios::out | std::ios::binary);
+        xfile.write((char*)sampledDerivsAll.data(), sizeof(double) * sampledDerivsAll.size());
+        xfile.close();
+    }
 }
 
 int main() {
     
 
-    auto mean = std::make_shared<LinearMean>(Vec3d(0.), Vec3d(0., 0., 1.), 1.);
-    auto gp = std::make_shared<GaussianProcess>(mean, std::make_shared<RationalQuadraticCovariance>(2.0f, 1.0f, 0.1f));
-    //auto gp = std::make_shared<GaussianProcess>(mean, std::make_shared<SquaredExponentialCovariance>(2.0f, 1.0f));
+    //auto mean = std::make_shared<LinearMean>(Vec3d(0.), Vec3d(0., 0., 1.), 1.);
+    auto mean = std::make_shared<HomogeneousMean>(8.0f);
+    //auto gp = std::make_shared<GaussianProcess>(mean, std::make_shared<RationalQuadraticCovariance>(2.0f, 1.0f, 0.1f));
+    auto gp = std::make_shared<GaussianProcess>(mean, std::make_shared<SquaredExponentialCovariance>(2.0f, 1.0f));
     gp->_cov->_aniso = Vec3f(1.0f, 1.0f, 0.f);
     gp->_covEps = 0;
 
@@ -223,13 +257,13 @@ int main() {
     auto bound = gp->noIntersectBound(Vec3d(0.), 0.99999);
 
     int macroSteps = 4;
-    int microsteps = 32;
+    int microsteps = 256;
 
     auto distance = stepSize * macroSteps * microsteps;
 
     Ray r(Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), 0.f, distance);
 
-    //sample_ray_realizations(gp, 50, r, 128, 4, GPCorrelationContext::None);
+    sample_ray_realizations(gp, 50, r, 256, 4, GPCorrelationContext::Elephant);
     //sample_ray_realizations(gp, 50, r, 128, 4, GPCorrelationContext::Dori);
     //sample_ray_realizations(gp, 50, r, 128, 4, GPCorrelationContext::Goldfish);
     //sample_ray_realizations(gp, 50, r, microsteps, macroSteps, GPCorrelationContext::Goldfish);
@@ -240,10 +274,10 @@ int main() {
     auto angle = 10. / 180 * PI;
     int samples = 10000;
 
-    ndf_cond_validate(gp, samples, "microfacet", microsteps, stepSize, bound, GPCorrelationContext::Goldfish, 0. / 180 * PI);
-    ndf_cond_validate(gp, samples, "microfacet", microsteps, stepSize, bound, GPCorrelationContext::Goldfish, 10. / 180 * PI);
-    ndf_cond_validate(gp, samples, "microfacet", microsteps, stepSize, bound, GPCorrelationContext::Goldfish, 80. / 180 * PI);
-    ndf_cond_validate(gp, samples, "microfacet", microsteps, stepSize, bound, GPCorrelationContext::Goldfish, 89. / 180 * PI);
+    //ndf_cond_validate(gp, samples, "microfacet", microsteps, stepSize, bound, GPCorrelationContext::Goldfish, 0. / 180 * PI);
+    //ndf_cond_validate(gp, samples, "microfacet", microsteps, stepSize, bound, GPCorrelationContext::Goldfish, 10. / 180 * PI);
+    //ndf_cond_validate(gp, samples, "microfacet", microsteps, stepSize, bound, GPCorrelationContext::Goldfish, 80. / 180 * PI);
+    //ndf_cond_validate(gp, samples, "microfacet", microsteps, stepSize, bound, GPCorrelationContext::Goldfish, 89. / 180 * PI);
 
 
 
