@@ -17,6 +17,9 @@
 #include <boost/math/special_functions/erf.hpp>
 #include <Eigen/IterativeLinearSolvers>
 
+#include <ccomplex>
+#include <fftw3.h>
+#include <random>
 
 namespace Tungsten {
 
@@ -25,6 +28,60 @@ namespace Tungsten {
 //#define SPARSE_SOLVE
 #endif
 
+void CovarianceFunction::loadResources() {
+    if (hasAnalyticSpectralDensity()) return;
+
+    double max_t = 10;
+    std::vector<double> covValues(pow(2, 12));
+
+    size_t i;
+    covValues[0] = cov(Vec3d(0.), Vec3d(0.));
+    for (i = 1; i < covValues.size(); i++) {
+        double t = double(i) / covValues.size() * max_t;
+        covValues[i] = cov(Vec3d(0.), Vec3d(t, 0., 0.)) / covValues[0];
+    }
+
+    auto dt = max_t / covValues.size();
+    auto n = covValues.size();
+    auto nfft = 2 * n - 2;
+    auto nf = nfft / 2;
+
+    // This is based on the pywafo tospecdata function: https://github.com/wafo-project/pywafo/blob/master/src/wafo/covariance/core.py#L163
+    std::vector<double> acf;
+    acf.insert(acf.end(), covValues.begin(), covValues.end());
+    acf.insert(acf.end(), nfft - 2 * n + 2, 0.);
+    acf.insert(acf.end(), covValues.rbegin() + 2, covValues.rend());
+
+    std::vector<std::complex<double>> spectrumValues(acf.size());
+    fftw_plan plan = fftw_plan_dft_r2c_1d(acf.size(), acf.data(), (fftw_complex*)spectrumValues.data(), FFTW_ESTIMATE);
+    fftw_execute(plan);
+    fftw_destroy_plan(plan);
+
+    std::vector<double> r_per;
+    std::transform(spectrumValues.begin(), spectrumValues.end(), std::back_inserter(r_per), [](auto spec) { return std::max(spec.real(), 0.); });
+
+    discreteSpectralDensity = std::vector<double>();
+    std::transform(r_per.begin(), r_per.begin() + nf + 1, std::back_inserter(discreteSpectralDensity), [dt](auto per) { return std::abs(per) * dt / PI; });
+}
+
+double CovarianceFunction::spectral_density(double s) const {
+    double max_t = 10;
+    double dt = max_t / pow(2, 12);
+    double max_w = PI / dt;
+
+    double bin_c = s / max_w * discreteSpectralDensity.size();
+    size_t bin = clamp(size_t(bin_c), 0ULL, discreteSpectralDensity.size() - 1);
+    size_t n_bin = clamp(size_t(bin_c) + 1, 0ULL, discreteSpectralDensity.size() - 1);
+
+    double bin_frac = bin_c - bin;
+
+    return lerp(discreteSpectralDensity[bin], discreteSpectralDensity[n_bin], bin_frac);
+}
+
+
+double CovarianceFunction::sample_spectral_density(PathSampleGenerator& sampler) const {
+    return 0;
+}
 
 FloatD CovarianceFunction::dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA) const {
     Eigen::Array3d zd = Eigen::Array3d::Zero();
@@ -81,6 +138,8 @@ rapidjson::Value NonstationaryCovariance::toJson(Allocator& allocator) const {
 }
 
 void NonstationaryCovariance::loadResources() {
+    CovarianceFunction::loadResources();
+
     _variance->loadResources();
     _stationaryCov->loadResources();
 
@@ -810,7 +869,7 @@ double GaussianProcess::goodStepsize(Vec3d p, double targetCov) const
 }
 
 // Box muller transform
-Vec2d GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
+Vec2d rand_normal_2(PathSampleGenerator& sampler) {
     double u1 = sampler.next1D();
     double u2 = sampler.next1D();
 
@@ -824,7 +883,15 @@ Vec2d GaussianProcess::rand_normal_2(PathSampleGenerator& sampler) const {
 
 }
 
-double GaussianProcess::rand_truncated_normal(double mean, double sigma, double a, PathSampleGenerator& sampler) const {
+double rand_gamma(double shape, double mean, PathSampleGenerator& sampler) {
+    double scale = mean / shape;
+    // Not ideal
+    std::mt19937 rnd(sampler.nextDiscrete(1 << 16));
+    std::gamma_distribution<> gamma_dist(shape, scale);
+    return gamma_dist(rnd);
+}
+
+double rand_truncated_normal(double mean, double sigma, double a, PathSampleGenerator& sampler) {
     if (abs(a - mean) < 0.000001) {
         return abs(mean + sigma * rand_normal_2(sampler).x());
     }

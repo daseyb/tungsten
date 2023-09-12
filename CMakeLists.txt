@@ -209,7 +209,7 @@ target_link_libraries(tungsten ${core_libs})
 set(tests 
 	mvn-test derivative-test realization-gen 
 	lod-gen microfacet-gen dft-realization-gen
-	intersection-test transmittance-test ray-view-realizations)
+	intersection-test transmittance-test ray-view-realizations weight-space-test)
 
 foreach (test IN LISTS tests)
 	add_executable(tungsten-${test} src/tungsten-test/${test}.cpp)

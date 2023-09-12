@@ -56,6 +56,12 @@ namespace Tungsten {
         return d.dot(Vec{ aniso.x(), aniso.y(), aniso.z() }.cwiseProduct(d));
     }
 
+    // Box muller transform
+    Vec2d rand_normal_2(PathSampleGenerator& sampler);
+    double rand_truncated_normal(double mean, double sigma, double a, PathSampleGenerator& sampler);
+
+    double rand_gamma(double shape, double mean, PathSampleGenerator& samples);
+
     class Grid;
     class MeanFunction;
 
@@ -82,9 +88,20 @@ namespace Tungsten {
             }
         }
 
-        virtual bool isMonotonic() const {
-            return true;
+        double spectral_density(Derivative a, Derivative b, double s) {
+            if (a == Derivative::None && b == Derivative::None) {
+                return spectral_density(s);
+            }
+            return 0.;
         }
+
+        virtual bool hasAnalyticSpectralDensity() const { return false; }
+        virtual double spectral_density(double s) const;
+        virtual double sample_spectral_density(PathSampleGenerator& sampler) const;
+
+        virtual void loadResources() override;
+
+        virtual bool isMonotonic() const { return true; }
 
         double compute_beckmann_roughness(Vec3d p = Vec3d(0.)) {
             double L2 = (*this)(Derivative::First, Derivative::First, p, p, Vec3d(1., 0., 0.), Vec3d(1., 0., 0.));
@@ -100,6 +117,8 @@ namespace Tungsten {
         virtual std::string id() const = 0;
 
         Vec3f _aniso = Vec3f(1.f);
+
+        std::vector<double> discreteSpectralDensity;
 
     private:
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const = 0;
@@ -227,6 +246,16 @@ namespace Tungsten {
             return tinyformat::format("se/aniso=[%.4f,%.4f,%.4f]-s=%.3f-l=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l);
         }
 
+        virtual bool hasAnalyticSpectralDensity() const override { return true; }
+        virtual double spectral_density(double s) const {
+            double norm = 1.0 / (sqrt(PI / 2) * sqr(_sigma));
+            return norm * (exp(-0.5 * _l * _l * s * s) * _sigma * _sigma) / sqrt(1. / (_l * _l));
+        }
+
+        virtual double sample_spectral_density(PathSampleGenerator& sampler) const override {
+            return rand_normal_2(sampler).x() / _l;
+        }
+
     private:
         float _sigma, _l;
 
@@ -270,6 +299,20 @@ namespace Tungsten {
                 "lengthScale", _l,
                 "aniso", _aniso
             };
+        }
+
+        virtual bool hasAnalyticSpectralDensity() const override { return true; }
+        virtual double spectral_density(double s) const {
+            double norm = 1.0 / (sqrt(PI / 2.) * sqr(_sigma));
+            return norm * (pow(2., 5. / 4. - _a / 2) * pow(1 / (_a * _l * _l), -(1. / 4.) - _a /
+                2) * _sigma * _sigma * pow(abs(s), -0.5 + _a) *
+                std::cyl_bessel_k(0.5 - _a, (sqrt(2) * abs(s)) / sqrt(1. / (_a * _l * _l)))) / std::tgamma(_a);
+        }
+
+        virtual double sample_spectral_density(PathSampleGenerator& sampler) const override {
+            double tau = rand_gamma(_a, 1 / (_l * _l), sampler);
+            double l = 1 / sqrt(tau);
+            return rand_normal_2(sampler).x() / l;
         }
     private:
         float _sigma, _a, _l;
@@ -615,9 +658,7 @@ namespace Tungsten {
         double noIntersectBound(Vec3d p = Vec3d(0.), double q = 0.9999) const;
         double goodStepsize(Vec3d p = Vec3d(0.), double targetCov = 0.95) const;
 
-        // Box muller transform
-        Vec2d rand_normal_2(PathSampleGenerator& sampler) const;
-        double rand_truncated_normal(double mean, double sigma, double a, PathSampleGenerator& sampler) const;
+        
 
         Eigen::MatrixXd sample_multivariate_normal(
             const Eigen::VectorXd& mean, const CovMatrix& cov,
