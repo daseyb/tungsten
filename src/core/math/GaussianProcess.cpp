@@ -921,10 +921,27 @@ double rand_truncated_normal(double mean, double sigma, double a, PathSampleGene
     return sigma * x_bar + mean;
 }
 
-Eigen::MatrixXd GaussianProcess::sample_multivariate_normal(
+Eigen::VectorXd sample_standard_normal(int n, PathSampleGenerator& sampler) {
+    Eigen::VectorXd result(n);
+    // We're always getting two samples, so make use of that
+    for (int i = 0; i < result.size() / 2; i++) {
+        Vec2d norm_samp = rand_normal_2(sampler);
+        result(i * 2) = norm_samp.x();
+        result(i * 2 + 1) = norm_samp.y();
+    }
+
+    // Fill up the last one for an uneven number of samples
+    if (result.size() % 2) {
+        Vec2d norm_samp = rand_normal_2(sampler);
+        result(result.size() - 1) = norm_samp.x();
+    }
+    return result;
+}
+
+Eigen::MatrixXd sample_multivariate_normal(
     const Eigen::VectorXd& mean, const CovMatrix& cov,
-    const Constraint* constraints, int numConstraints,
-    int samples, PathSampleGenerator& sampler) const {
+    const GaussianProcess::Constraint* constraints, int numConstraints,
+    int samples, PathSampleGenerator& sampler) {
 
     Eigen::MatrixXd normTransform;
 
@@ -999,7 +1016,7 @@ Eigen::MatrixXd GaussianProcess::sample_multivariate_normal(
         // Check constraints
         bool passedConstraints = true;
         for (int cIdx = 0; cIdx < numConstraints; cIdx++) {
-            const Constraint& con = constraints[cIdx];
+            const GaussianProcess::Constraint& con = constraints[cIdx];
 
             for (int i = con.startIdx; i <= con.endIdx; i++) {
                 if (currSample(i) < con.minV || currSample(i) > con.maxV) {

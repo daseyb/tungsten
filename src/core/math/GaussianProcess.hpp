@@ -59,6 +59,8 @@ namespace Tungsten {
     // Box muller transform
     Vec2d rand_normal_2(PathSampleGenerator& sampler);
     double rand_truncated_normal(double mean, double sigma, double a, PathSampleGenerator& sampler);
+    Eigen::VectorXd sample_standard_normal(int n, PathSampleGenerator& sampler);
+
 
     double rand_gamma(double shape, double mean, PathSampleGenerator& samples);
 
@@ -435,6 +437,10 @@ namespace Tungsten {
 
         virtual Vec3d dmean_da(Vec3d a) const = 0;
 
+        virtual double lipschitz() const {
+            return 1.;
+        }
+
     private:
         virtual double mean(Vec3d a) const = 0;
     };
@@ -453,6 +459,10 @@ namespace Tungsten {
                 "type", "homogeneous",
                 "offset", _offset
             };
+        }
+
+        virtual double lipschitz() const {
+            return 0.;
         }
 
     private:
@@ -535,6 +545,10 @@ namespace Tungsten {
 
         virtual Vec3d dmean_da(Vec3d a) const override {
             return _dir * _scale;
+        }
+
+        virtual double lipschitz() const {
+            return _scale * _dir.length();
         }
     };
 
@@ -658,13 +672,6 @@ namespace Tungsten {
         double noIntersectBound(Vec3d p = Vec3d(0.), double q = 0.9999) const;
         double goodStepsize(Vec3d p = Vec3d(0.), double targetCov = 0.95) const;
 
-        
-
-        Eigen::MatrixXd sample_multivariate_normal(
-            const Eigen::VectorXd& mean, const CovMatrix& cov,
-            const Constraint* constraints, int numConstraints,
-            int samples, PathSampleGenerator& sampler) const;
-
         std::vector<Vec3d> _globalCondPs;
         std::vector<Derivative> _globalCondDerivs;
         std::vector<Vec3d> _globalCondDerivDirs;
@@ -677,6 +684,11 @@ namespace Tungsten {
         size_t _maxEigenvaluesN = 64;
         float _covEps = 0.f;
     };
+
+    Eigen::MatrixXd sample_multivariate_normal(
+        const Eigen::VectorXd& mean, const CovMatrix& cov,
+        const GaussianProcess::Constraint* constraints, int numConstraints,
+        int samples, PathSampleGenerator& sampler);
 }
 
 #endif /* GAUSSIANPROCESS_HPP_ */

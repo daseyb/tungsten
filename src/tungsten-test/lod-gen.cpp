@@ -76,8 +76,8 @@ int gen3d(int argc, char** argv) {
                     mean[idx] = 0;
                     std::vector<float> samples(numEstSamples);
                     for (int s = 0; s < numEstSamples; s++) {
-                        Vec2d s1 = gp->rand_normal_2(sampler);
-                        Vec2d s2 = gp->rand_normal_2(sampler);
+                        Vec2d s1 = rand_normal_2(sampler);
+                        Vec2d s2 = rand_normal_2(sampler);
                         Vec3d offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
                         Vec3d p = points[idx] + offset * 4.0 / NUM_SAMPLE_POINTS;
                         samples[s] = gp->mean(&p, &derivs[idx], nullptr, Vec3d(1.0f, 0.0f, 0.0f), 1)(0);
@@ -114,8 +114,8 @@ int gen3d(int argc, char** argv) {
                     std::vector<float> samples(numEstSamples);
                     int valid_samples = 0;
                     for (int s = 0; s < numEstSamples; s++) {
-                        Vec2d s1 = gp->rand_normal_2(sampler);
-                        Vec2d s2 = gp->rand_normal_2(sampler);
+                        Vec2d s1 = rand_normal_2(sampler);
+                        Vec2d s2 = rand_normal_2(sampler);
                         Vec3d offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
                         Vec3d p = cp + offset;
 

@@ -19,7 +19,7 @@ def ray_points(o, d, tmin, tmax, n):
     ps = np.array(o)[None, ...] + ts[..., None] * np.array(d)[None, ...]
     return ps, ts
 
-def plot_realization(realization, ax, xx, yy):
+def plot_realization(realization, ax, xx, yy, clw=3):
     with plt.style.context("default", True):
         realization = -realization
         max_v = np.max(realization)
@@ -30,7 +30,7 @@ def plot_realization(realization, ax, xx, yy):
 
 
         cs = ax.contour(xx, yy, realization, alpha=0.5, levels = levels, cmap="coolwarm")
-        ax.contour(xx, yy, realization, alpha=1, levels = [0], linewidths=3, colors="black")
+        ax.contour(xx, yy, realization, alpha=1, levels = [0], linewidths=clw, colors="black")
         if(len(cs.collections) > 5):
             ax.contourf(xx, yy, realization, alpha=0.5,  levels = levels, cmap="coolwarm")
             ax.set_aspect("equal")

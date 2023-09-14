@@ -119,14 +119,14 @@ void real_2D(const GaussianProcess& gp) {
 
     for (int num_reals = 0; num_reals < 1; num_reals++) {
         for (int i = 0; i < Fcov.size(); i++) {
-            Vec2d u = gp.rand_normal_2(sampler);
+            Vec2d u = rand_normal_2(sampler);
             Fcov_sample[i] = sqrt(Fcov[i] / std::complex<double>(cov.size())) * (std::complex<double>(u.x(), u.y()));
         }
 
         fftw_execute(plan);
 
         for (int i = 0; i < Fcov.size(); i++) {
-            Vec2d u = gp.rand_normal_2(sampler);
+            Vec2d u = rand_normal_2(sampler);
             real[i] += std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3d(0.f)));
         }
 
@@ -138,7 +138,7 @@ void real_2D(const GaussianProcess& gp) {
     }
 
     for (int i = 0; i < Fcov.size(); i++) {
-        Vec2d u = gp.rand_normal_2(sampler);
+        Vec2d u = rand_normal_2(sampler);
         real[i] = std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3d(0.f)));
     }
 
@@ -194,14 +194,14 @@ void rational_quadratic_sphere_3D() {
             openvdb::io::File file(tinyformat::format("3d-reals/%s-sample%d.vdb", gp._cov->id(), num_reals));
 
             for (int i = 0; i < Fcov.size(); i++) {
-                Vec2d u = gp.rand_normal_2(sampler);
+                Vec2d u = rand_normal_2(sampler);
                 Fcov_sample[i] = sqrt(Fcov[i] / std::complex<double>(4*cov.size())) * (std::complex<double>(u.x(), u.y()));
             }
 
             fftw_execute(plan);
 
             for (int i = 0; i < Fcov.size(); i++) {
-                Vec2d u = gp.rand_normal_2(sampler);
+                Vec2d u = rand_normal_2(sampler);
                 real[i] += std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3d(0.f)));
             }
 
@@ -242,7 +242,7 @@ void rational_quadratic_sphere_3D() {
     }
 
     for (int i = 0; i < Fcov.size(); i++) {
-        Vec2d u = gp.rand_normal_2(sampler);
+        Vec2d u = rand_normal_2(sampler);
         real[i] = std::complex<double>((*gp._mean)(derivs[i], points[i], Vec3d(0.f)));
     }
 

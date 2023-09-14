@@ -37,7 +37,7 @@ int main() {
         std::vector<float> normalSamples;
         // Box muller transform
         for (int i = 0; i < 10000; i++) {
-            Vec2d samples = gp.rand_normal_2(sampler);
+            Vec2d samples = rand_normal_2(sampler);
             normalSamples.push_back(samples.x());
             normalSamples.push_back(samples.y());
         }
