@@ -4,112 +4,56 @@
 
 namespace Tungsten {
 
-
-Affine::Range sinBound(Affine::Range x) {
-    double f_lower = sin(x.lower);
-    double f_upper = sin(x.upper);
-
-    // test if there is an interior peak in the range
-    x.lower /= 2. * PI;
-    x.upper /= 2. * PI;
-    bool contains_min = ceil(x.lower - .75) < (x.upper - .75);
-    bool contains_max = ceil(x.lower - .25) < (x.upper - .25);
-
-    // result is either at enpoints or maybe an interior peak
-    double out_lower = contains_min ? - 1. : min(f_lower, f_upper);
-    double out_upper = contains_max ?   1. : max(f_lower, f_upper);
-
-    return { out_lower, out_upper };
-}
-
-
-Affine::Range cosBound(Affine::Range x) {
-    return sinBound({ x.lower + PI / 2, x.upper + PI / 2 });
-}
-
-Affine sqrt(const Affine& x) {
-    return x;
-}
-
-
-// https://github.com/nmwsharp/neural-implicit-queries/blob/main/src/affine_layers.py
-Affine aff_sin(const Affine& x) {
-    if (x.isConst()) {
-        return Affine{ std::sin(x.base), {}};
-    }
-
-    auto bx = x.mayContainBounds();
-
-    auto bslope = cosBound(bx);
-
-    double alpha = 0.5 * (bslope.lower + bslope.upper);
-    alpha = clamp(alpha, -1., 1.);
-
-    double intA = acos(alpha);
-    double intB = -intA;
-
-    auto first = [lower = bx.lower](auto x) { return 2. * PI * ceil((lower + x) / (2. * PI)) - x; };
-    auto last = [lower = bx.lower](auto x) { return 2. * PI * ceil((lower + x) / (2. * PI)) - x; };
-
-    double extremes[] = {
-        bx.lower, bx.upper, first(intA), last(intA), first(intB), last(intB)
-    };
-
-    double r_lower = DBL_MAX;
-    double r_upper = -DBL_MAX;
-
-    for (auto& ex : extremes) {
-        ex = clamp(ex, bx.lower, bx.upper);
-        ex = std::sin(ex) - alpha * ex;
-
-        r_lower = std::min(r_lower, ex);
-        r_upper = std::max(r_upper, ex);
-    }
-
-    double beta = 0.5 * (r_upper + r_lower);
-    double delta = r_upper - beta;
-
-    return x.applyLinearApprox(alpha, beta, delta);
-}
-
-Affine aff_cos(const Affine& x) {
-    return aff_sin(x + PI / 2);
-}
-
-Affine dot(const Eigen::Vector3d& a, const Vec3Aff& b) {
-    return b.x() * a.x() + b.y() * a.y() +  b.z() * a.z();
-}
-
-Affine spherical_mean(const Vec3Aff& p) {
-    Vec3Aff c = { Affine{10.}, Affine{0.}, Affine{0.} };
-    Affine r(5);
+Affine<1> spherical_mean(const Affine<3>& p) {
+    Affine<3> c = { Vec3d(0.) };
+    Affine<1> r(5.);
     auto d = p - c;
-    auto l = d.lengthSq();
-    return l - r * r;
+    auto l = d.length();
+    return l - r;
+}
+
+Affine<1> linear_mean(const Affine<3>& p) {
+    Affine<3> c = { Vec3d(0.) };
+    auto d = p - c;
+    return d.x() - 2;
 }
 
 double spherical_mean(const Vec3d& p) {
-    Vec3d c = { 10., 0., 0. };
+    Vec3d c = { 0., 0., 0. };
     double r(5);
     auto d = p - c;
-    auto l = d.lengthSq();
-    return l - r * r;
+    auto l = d.length();
+    return l - r;
+}
+
+double linear_mean(const Vec3d& p) {
+    Vec3d c = { 0., 0., 0. };
+    auto d = p - c;
+    return d.x()-2;
 }
 
 double WeightSpaceRealization::evaluate(const Vec3d& p) const {
     Derivative d = Derivative::None;
+    double scale = sqrt((*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d()));
     //return sqrt((*gp->_cov)(Derivative::None, Derivative::None, p, p, Vec3d(), Vec3d())) * basis.evaluate(vec_conv<Eigen::Vector3d>(p), weights) + gp->mean(&p, &d, nullptr, Vec3d(0.), 1)(0);
-    return spherical_mean(p); // gp->mean(&p, &d, nullptr, Vec3d(0.), 1)(0);
+    return scale * basis.evaluate(vec_conv<Eigen::Vector3d>(p), weights) + spherical_mean(p);
+    //return spherical_mean(p); // gp->mean(&p, &d, nullptr, Vec3d(0.), 1)(0);
 }
 
-Affine WeightSpaceRealization::evaluate(const Vec3Aff& p) const {
+Affine<1> WeightSpaceRealization::evaluate(const Affine<3>& p) const {
     Derivative d = Derivative::None;
-
+    
     // Assume constant variance
     double scale = sqrt((*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d()));
+    auto basisRes = basis.evaluate(p, weights) * scale; 
+    auto np = p;
+    np.aff.resize(Eigen::NoChange, std::max(basisRes.aff.cols(), p.aff.cols()));
+    np.aff.setZero();
+    np.aff.block(0, 0, 3, p.aff.cols()) = p.aff; 
 
-    //return basis.evaluate(p, weights) * scale + spherical_mean(p); // +gp->mean(&p, &d, nullptr, Vec3d(0.), 1)(0);
-    return spherical_mean(p); // +gp->mean(&p, &d, nullptr, Vec3d(0.), 1)(0);
+    basisRes += spherical_mean(np); // +gp->mean(&p, &d, nullptr, Vec3d(0.), 1)(0);
+    //return spherical_mean(p); // +gp->mean(&p, &d, nullptr, Vec3d(0.), 1)(0);
+    return basisRes;
 }
 
 
@@ -126,32 +70,35 @@ double WeightSpaceRealization::lipschitz() const {
     return gp->_mean->lipschitz();
 }
 
-RangeBound WeightSpaceRealization::rangeBound(const Vec3d& c, const Vec3d& v) const {
+RangeBound WeightSpaceRealization::rangeBound(const Vec3d& c, const std::vector<Vec3d>& vs) const {
 
-    Vec3Aff test = {
-        Affine{ c.x(), {v.x()} },
-        Affine{ c.y(), {v.y()} },
-        Affine{ c.z(), {v.z()} },
-    };
+    Affine<3> test(c, vs);
 
-    Affine res = evaluate(test);
+    Affine<1> res = evaluate(test);
 
     auto r = res.mayContainBounds();
 
-    if (r.lower > 0) return RangeBound::Positive;
-    else if (r.upper < 0) return RangeBound::Negative;
+    if (r.lower(0) > 0) return RangeBound::Positive;
+    else if (r.upper(0) < 0) return RangeBound::Negative;
     else return RangeBound::Unknown;
 }
 
-Affine WeightSpaceBasis::evaluate(const Vec3Aff& p, const Eigen::VectorXd& weights) const {
-    Affine result = 0;
+Affine<1> WeightSpaceBasis::evaluate(const Affine<3>& p, const Eigen::VectorXd& weights) const {
+    if (size() == 0) return 0;
+    auto np = p;
+
+    Affine<1> result = 0;
     for (size_t row = 0; row < size(); row++) {
-        result = result + aff_cos(dot(dirs.row(row), p) * freqs[row] + offsets[row]) * weights[row];
+        result += aff_cos(dot<3,double>(dirs.row(row), np) * freqs[row] + offsets[row]) * weights[row];
+        np.aff.resize(Eigen::NoChange, result.aff.cols());
+        np.aff.setZero();
+        np.aff.block(0, 0, 3, p.aff.cols()) = p.aff;
     }
     return result * sqrt(2. / size());
 }
 
 double WeightSpaceBasis::evaluate(Eigen::Vector3d p, const Eigen::VectorXd& weights) const {
+    if (size() == 0) return 0;
     double result = 0;
     for (size_t row = 0; row < size(); row++) {
         result += weights[row] * cos(dirs.row(row).dot(p) * freqs[row] + offsets[row]);
@@ -160,7 +107,8 @@ double WeightSpaceBasis::evaluate(Eigen::Vector3d p, const Eigen::VectorXd& weig
 }
 
 Eigen::MatrixXd WeightSpaceBasis::phi(Eigen::MatrixXd ps, const Eigen::VectorXd& weights) const {
-    Eigen::MatrixXd phi = Eigen::MatrixXd(ps.rows(), size());
+    Eigen::MatrixXd phi = Eigen::MatrixXd::Zero(ps.rows(), size());
+    if (size() == 0) return phi;
     for (size_t p = 0; p < ps.rows(); p++) {
         for (size_t row = 0; row < size(); row++) {
             phi(p, row) = cos(dirs.row(row).dot(ps.row(p)) * freqs[row] + offsets[row]);
@@ -170,6 +118,7 @@ Eigen::MatrixXd WeightSpaceBasis::phi(Eigen::MatrixXd ps, const Eigen::VectorXd&
 }
 
 double WeightSpaceBasis::lipschitz(const Eigen::VectorXd& weights) const {
+    if (size() == 0) return 0;
     double lipschitz = 0;
     for (size_t row = 0; row < size(); row++) {
         lipschitz += std::abs(weights[row] * freqs[row]);
