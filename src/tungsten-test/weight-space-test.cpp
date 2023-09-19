@@ -392,13 +392,13 @@ void gen_data(std::shared_ptr<GaussianProcess> gp) {
 
 void test_affine() {
 
-    auto gp = std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f));
+    auto gp = std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(100.f, 1.f, 0.1f));
 
     Affine<3> p(Vec3d(0., 0., 0.), { Vec3d(10., 0., 0.), Vec3d(0., 10., 0.)});
 
     UniformPathSampler sampler(0);
     sampler.next2D();
-    WeightSpaceBasis basis = WeightSpaceBasis::sample(gp->_cov, 20, sampler);
+    WeightSpaceBasis basis = WeightSpaceBasis::sample(gp->_cov, 2, sampler);
 
     auto real = basis.sampleRealization(gp, sampler);
 
@@ -425,7 +425,6 @@ void test_affine() {
     {
         int idx = 0;
         for (int i = 0; i < res; i++) {
-
             for (int j = 0; j < res; j++) {
                 points[idx] = vec_conv<Vec3d>(
                     lerp((Eigen::Array3d)pbs.lower, 
@@ -473,8 +472,8 @@ void test_affine() {
 
 int main() {
 
-    //test_affine();
-    //return 0;
+    test_affine();
+    return 0;
 
     gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(1.f, 1.f, 0.1f)));
     gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
