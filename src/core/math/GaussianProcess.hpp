@@ -22,6 +22,8 @@
 #include <autodiff/forward/dual.hpp>
 #include <autodiff/forward/dual/eigen.hpp>
 
+#include <math/AffineArithmetic.hpp>
+
 #include <igl/signed_distance.h>
 
 namespace Tungsten {
@@ -100,6 +102,7 @@ namespace Tungsten {
         virtual bool hasAnalyticSpectralDensity() const { return false; }
         virtual double spectral_density(double s) const;
         virtual double sample_spectral_density(PathSampleGenerator& sampler) const;
+        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler) const;
 
         virtual void loadResources() override;
 
@@ -255,7 +258,13 @@ namespace Tungsten {
         }
 
         virtual double sample_spectral_density(PathSampleGenerator& sampler) const override {
-            return rand_normal_2(sampler).x() / _l;
+            return abs(rand_normal_2(sampler).x() / _l);
+        }
+
+        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler) const override {
+            double rad = (sqrt(2) * sqrt(-log(sampler.next1D()))) / _l;
+            double angle = sampler.next1D() * 2 * PI;
+            return Vec2d(sin(angle), cos(angle)) * rad;
         }
 
     private:
@@ -314,7 +323,13 @@ namespace Tungsten {
         virtual double sample_spectral_density(PathSampleGenerator& sampler) const override {
             double tau = rand_gamma(_a, 1 / (_l * _l), sampler);
             double l = 1 / sqrt(tau);
-            return rand_normal_2(sampler).x() / l;
+            return abs(rand_normal_2(sampler).x() / l);
+        }
+
+        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler) const override {
+            double rad = 2 * sqrt(rand_gamma(_a, 0.5 / (_l * _l), sampler)) * sqrt(-log(sampler.next1D()));
+            double angle = sampler.next1D() * 2 * PI;
+            return Vec2d(sin(angle), cos(angle)) * rad;
         }
     private:
         float _sigma, _a, _l;
@@ -437,10 +452,14 @@ namespace Tungsten {
 
         virtual Vec3d dmean_da(Vec3d a) const = 0;
 
+        virtual Affine<1> mean(const Affine<3>& a) const {
+            assert(false && "Not implemented!");
+            return Affine<1>(0.);
+        }
+
         virtual double lipschitz() const {
             return 1.;
         }
-
     private:
         virtual double mean(Vec3d a) const = 0;
     };
@@ -461,8 +480,12 @@ namespace Tungsten {
             };
         }
 
-        virtual double lipschitz() const {
+        virtual double lipschitz() const override {
             return 0.;
+        }
+
+        virtual Affine<1> mean(const Affine<3>& a) const override {
+            return Affine<1>(_offset);
         }
 
     private:
@@ -494,6 +517,10 @@ namespace Tungsten {
                 "center", _c,
                 "radius", _r,
             };
+        }
+
+        virtual Affine<1> mean(const Affine<3>& a) const override {
+            return (a - _c).length() - _r;
         }
 
     private:
@@ -532,6 +559,10 @@ namespace Tungsten {
                 "direction", _dir,
                 "scale", _scale
             };
+        }
+
+        virtual Affine<1> mean(const Affine<3>& a) const override {
+            return dot(_dir, a - _ref) * _scale;
         }
 
     private:

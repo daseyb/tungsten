@@ -10,6 +10,10 @@
 
 #include <core/math/WeightSpaceGaussianProcess.hpp>
 
+#include <bsdfs/NDFs/beckmann.h>
+#include <bsdfs/NDFs/GGX.h>
+#include "math/TangentFrame.hpp"
+
 using namespace Tungsten;
 
 
@@ -176,7 +180,58 @@ void wos(std::shared_ptr<GaussianProcess> gp, const WeightSpaceRealization& real
 
 }
 
+
 bool intersectRayAA(std::shared_ptr<GaussianProcess> gp, const WeightSpaceRealization& real, const Ray& ray, Vec3d& p) {
+    const double sig_0 = (ray.farT() - ray.nearT()) * 0.1f;
+    const double delta = 0.01;
+    const double np = 1.5;
+    const double nm = 0.5;
+
+    double t = 0;
+    double sig = sig_0;
+
+    auto rd = vec_conv<Vec3d>(ray.dir());
+
+    p = vec_conv<Vec3d>(ray.pos()) + t * rd;
+    double f0 = real.evaluate(p);
+
+    int sign0 = f0 < 0 ? -1 : 1;
+
+    for (int i = 0; i < 2048 * 4; i++) {
+        auto p_c = p + (t + ray.nearT() + delta) * rd;
+        double f_c = real.evaluate(p_c);
+        int signc = f_c < 0 ? -1 : 1;
+
+        if (signc != sign0) {
+            p = p_c;
+            return true;
+        }
+
+        auto c = p + (t + ray.nearT() + sig * 0.5) * rd;
+        auto v = sig * 0.5 * rd;
+
+        double nsig;
+        if (real.rangeBound(c, { v }) != RangeBound::Unknown) {
+            nsig = sig;
+            sig = sig * np;
+        }
+        else {
+            nsig = 0;
+            sig = sig * nm;
+        }
+
+        t += max(nsig, delta);
+
+        if (t >= ray.farT()) {
+            return false;
+        }
+    }
+
+    std::cerr << "Ran out of iterations in mean intersect IA." << std::endl;
+    return false;
+}
+
+bool intersectRayAAWriteData(std::shared_ptr<GaussianProcess> gp, const WeightSpaceRealization& real, const Ray& ray, Vec3d& p) {
     const double sig_0 = (ray.farT() - ray.nearT()) * 0.1f;
     const double delta = 0.001;
     const double np = 1.5;
@@ -376,7 +431,7 @@ void gen_data(std::shared_ptr<GaussianProcess> gp) {
     UniformPathSampler sampler(0);
     sampler.next2D();
 
-    auto basis = WeightSpaceBasis::sample(gp->_cov, 100, sampler);
+    auto basis = WeightSpaceBasis::sample(gp->_cov, 300, sampler);
     auto real = basis.sampleRealization(gp, sampler);
     
     std::cout << "L = " << real.lipschitz() << "\n";
@@ -385,16 +440,15 @@ void gen_data(std::shared_ptr<GaussianProcess> gp) {
     Ray r(Vec3f(-9.f, -9.f, 0.f), Vec3f(1.f, 1.f, 0.f).normalized(), 0.f, 100.f);
     Vec3d ip;
     intersectRaySphereTrace(gp, real, r, ip);
-    intersectRayAA(gp, real, r, ip);
+    intersectRayAAWriteData(gp, real, r, ip);
     wos(gp, real, Vec3d(1., 0., 0.), sampler);
 }
-
 
 void test_affine() {
 
     auto gp = std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(100.f, 1.f, 0.1f));
 
-    Affine<3> p(Vec3d(0., 0., 0.), { Vec3d(10., 0., 0.), Vec3d(0., 10., 0.)});
+    Affine<3> p(Vec3d(0., 0., 0.), { Vec3d(10., 0., 0.), Vec3d(0., 10., 0.) });
 
     UniformPathSampler sampler(0);
     sampler.next2D();
@@ -427,9 +481,9 @@ void test_affine() {
         for (int i = 0; i < res; i++) {
             for (int j = 0; j < res; j++) {
                 points[idx] = vec_conv<Vec3d>(
-                    lerp((Eigen::Array3d)pbs.lower, 
-                         (Eigen::Array3d)pbs.upper,
-                         Eigen::Array3d(double(i) / (res - 1), double(j) / (res - 1), 0.)));
+                    lerp((Eigen::Array3d)pbs.lower,
+                        (Eigen::Array3d)pbs.upper,
+                        Eigen::Array3d(double(i) / (res - 1), double(j) / (res - 1), 0.)));
 
                 samples[idx] = real.evaluate(points[idx]);
                 idx++;
@@ -470,14 +524,128 @@ void test_affine() {
 
 }
 
+Vec3d sample_beckmann_vndf(Ray ray, Vec3d normal, std::shared_ptr<GaussianProcess> _gp) {
+
+    TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame(vec_conv<Eigen::Vector3d>(normal));
+
+    Eigen::Vector3d wi = frame.toLocal(vec_conv<Eigen::Vector3d>(-ray.dir()));
+    float alpha = _gp->_cov->compute_beckmann_roughness();
+    BeckmannNDF ndf(0, alpha, alpha);
+
+    return vec_conv<Vec3d>(frame.toGlobal(vec_conv<Eigen::Vector3d>(ndf.sampleD_wi(vec_conv<Vector3>(wi)))));
+}
+
+
+void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, std::string output, int samples, int numBasisFs, float angle, double zrange) {
+
+    UniformPathSampler sampler(0);
+    sampler.next2D();
+
+
+    Path basePath = Path("testing/ray-realizations") / Path(output) / Path(gp->_cov->id());
+
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
+
+    Ray ray = Ray(Vec3f(0.f, 0.f, 500.f), Vec3f(sin(angle), 0.f, -cos(angle)));
+
+    Mat4f mat = Mat4f::rotAxis(Vec3f(0.f, 0.f, 1.0f), 45);
+    ray.setDir(mat.transformVector(ray.dir()).normalized());
+
+    ray.setNearT(-(ray.pos().z() - zrange) / ray.dir().z());
+    ray.setFarT(-(ray.pos().z() + zrange) / ray.dir().z());
+
+    auto rayStartPoint = vec_conv<Vec3d>(ray.pos() + ray.nearT() * ray.dir());
+
+    std::string filename = basePath.asString() + tinyformat::format("/%d-%.2f.bin", numBasisFs, angle);
+    std::string filename_ts = basePath.asString() + tinyformat::format("/%d-%.2f-ts.bin", numBasisFs, angle);
+    std::string filename_normals = basePath.asString() + tinyformat::format("/%d-%.2f-normals.bin", numBasisFs, angle);
+    std::string filename_normals_beckmann = basePath.asString() + tinyformat::format("/%d-%.2f-normals-beckmann.bin", numBasisFs, angle);
+
+    std::cout << filename_ts << "\n";
+
+    if (Path(filename_ts).exists()) {
+        //continue;
+    }
+
+    std::vector<double> sampledValues;
+    std::vector<double> sampledTsAll(samples);
+    std::vector<Vec3d> sampledNormals(samples);
+    std::vector<Vec3d> sampledNormalsBeckmann(samples);
+
+#pragma omp parallel for
+    for (int s = 0; s < samples;s++) {
+        auto basis = WeightSpaceBasis::sample(gp->_cov, numBasisFs, sampler);
+        auto real = basis.sampleRealization(gp, sampler);
+
+        //std::cout << s << "/" << samples << "\r";
+
+        Vec3d ip;
+        if (intersectRayAA(gp, real, ray, ip)) {
+            Vec3d grad = real.evaluateGradient(ip);
+            double dist = (rayStartPoint - ip).length();
+
+            sampledTsAll[s] = dist;
+            sampledNormals[s]= grad.normalized();
+        }
+        else
+        {
+            std::cout << "Error!\n";
+        }
+
+        sampledNormalsBeckmann[s] = sample_beckmann_vndf(ray, Vec3d(0., 0., 1.), gp);
+    }
+
+
+    {
+        std::ofstream xfile(
+            filename_ts,
+            std::ios::out | std::ios::binary);
+        xfile.write((char*)sampledTsAll.data(), sizeof(sampledTsAll[0]) * sampledTsAll.size());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(
+            filename_normals,
+            std::ios::out | std::ios::binary);
+        xfile.write((char*)sampledNormals.data(), sizeof(sampledNormals[0]) * sampledNormals.size());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(
+            filename_normals_beckmann,
+            std::ios::out | std::ios::binary);
+        xfile.write((char*)sampledNormalsBeckmann.data(), sizeof(sampledNormalsBeckmann[0]) * sampledNormalsBeckmann.size());
+        xfile.close();
+    }
+}
+
+
 int main() {
 
-    test_affine();
-    return 0;
+    //test_affine();
+    //return 0;
 
-    gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(1.f, 1.f, 0.1f)));
-    gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
-    gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(100.f, 1.f, 0.1f)));
+    /*microfacet_intersect_test(
+        std::make_shared<GaussianProcess>(
+            std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 1.f)),
+        "weight-space", 1000, 1000, 85.f / 180 * PI, 8);*/
+
+    microfacet_intersect_test(
+        std::make_shared<GaussianProcess>(
+            std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 2.f)),
+        "weight-space", 100000, 300, 85.f / 180 * PI, 8);
+
+    microfacet_intersect_test(
+        std::make_shared<GaussianProcess>(
+            std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<RationalQuadraticCovariance>(1.f, 2.f, 0.5f)),
+        "weight-space", 100000, 300, 85.f / 180 * PI, 8);
+    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(1.f, 1.f, 0.1f)));
+    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
+    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(100.f, 1.f, 0.1f)));
     //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(10., 0., 0.), 5.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
     //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(10., 0., 0.), 5.f), std::make_shared<RationalQuadraticCovariance>(1.f, 0.2f, 0.1f)));
 

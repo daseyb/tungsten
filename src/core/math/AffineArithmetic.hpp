@@ -1,7 +1,9 @@
 #ifndef AFFINEARITHMETIC_HPP_
 #define AFFINEARITHMETIC_HPP_
 
-#include <math/GaussianProcess.hpp>
+#include "Eigen/Dense"
+#include "math/Vec.hpp"
+#include "math/MathUtil.hpp"
 
 namespace Tungsten {
 
@@ -37,7 +39,7 @@ struct Affine {
     MatT aff;
     VecT err;
 
-    static const Mode mode = Mode::AffineAll;
+    static const Mode mode = Mode::AffineFixed;
     static const size_t n_keep = 40;
 
     Affine(Vec<Scalar,d> base, std::vector<Vec<Scalar, d>> aff = {}, Vec<Scalar, d> err = Vec<Scalar, d>(0.)) {
@@ -59,7 +61,6 @@ struct Affine {
     }
 
     Affine(VecT base, MatT aff = MatT::Zero(d,0), VecT err = VecT::Zero(d)) : base(base), aff(aff), err(err) { }
-
 
     bool isConst() const {
         return err.isZero() && aff.cols() == 0;
@@ -135,7 +136,6 @@ struct Affine {
             result = result.truncate();
             return result;
         }
-
     }
 
     Affine<1> operator[](size_t i) const {
@@ -299,8 +299,6 @@ struct Affine {
     Affine<1> length() const {
         return sqrt(lengthSq());
     }
-    //Affine operator*=(const Affine& other)
-
 
     RangeBound rangeBound() const {
         static_assert(d == 1, "Range bounds only implemented for 1D affines.");
@@ -309,7 +307,6 @@ struct Affine {
         else if (r.upper(0) < 0) return RangeBound::Negative;
         else return RangeBound::Unknown;
     }
-
 };
 
 
@@ -423,6 +420,15 @@ Affine<d, Scalar> aff_cos(const Affine<d, Scalar>& x) {
 
 template<size_t d, typename Scalar>
 Affine<1, Scalar> dot(const Eigen::Vector<Scalar,d>& a, const Affine<d, Scalar>& b) {
+    Affine<1, Scalar> result;
+    for (int i = 0; i < d; i++) {
+        result += b[i] * a[i];
+    }
+    return result;
+}
+
+template<size_t d, typename Scalar>
+Affine<1, Scalar> dot(const Vec<Scalar,d> & a, const Affine<d, Scalar>& b) {
     Affine<1, Scalar> result;
     for (int i = 0; i < d; i++) {
         result += b[i] * a[i];

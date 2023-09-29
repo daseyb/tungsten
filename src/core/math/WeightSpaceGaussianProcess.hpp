@@ -16,6 +16,7 @@ struct WeightSpaceRealization {
     double evaluate(const Vec3d& p) const;
     Affine<1> evaluate(const Affine<3>& p) const;
     Eigen::VectorXd evaluate(const Vec3d* ps, size_t num_ps) const;
+    Vec3d evaluateGradient(const Vec3d& p) const;
 
     RangeBound rangeBound(const Vec3d& c, const std::vector<Vec3d>& vs) const;
 
@@ -26,11 +27,15 @@ struct WeightSpaceBasis {
     Eigen::MatrixXd dirs;
     Eigen::VectorXd freqs;
     Eigen::VectorXd offsets;
+    Eigen::VectorXd freqWeights;
+    double weightNorm;
 
     WeightSpaceBasis(int n) {
         dirs.resize(n, 3);
         freqs.resize(n);
         offsets.resize(n);
+        freqWeights.resize(n);
+        weightNorm = 0.;
     }
 
     size_t size() const {
@@ -39,6 +44,7 @@ struct WeightSpaceBasis {
 
     double evaluate(Eigen::Vector3d p, const Eigen::VectorXd& weights) const;
     Affine<1> evaluate(const Affine<3>& p, const Eigen::VectorXd& weights) const;
+    Vec3d evaluateGradient(Eigen::Vector3d p, const Eigen::VectorXd& weights) const;
     Eigen::MatrixXd phi(Eigen::MatrixXd ps, const Eigen::VectorXd& weights) const;
 
     double lipschitz(const Eigen::VectorXd& weights) const;
