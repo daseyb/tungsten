@@ -6,16 +6,27 @@
 #include <cfloat>
 #include <tinyformat/tinyformat.hpp>
 #include <sampling/SampleWarp.hpp>
-#include <sampling/SampleWarp.hpp>
-
 #include <core/math/WeightSpaceGaussianProcess.hpp>
 
 #include <bsdfs/NDFs/beckmann.h>
 #include <bsdfs/NDFs/GGX.h>
 #include "math/TangentFrame.hpp"
 
-using namespace Tungsten;
+#include "io/CliParser.hpp"
 
+#include <core/media/GaussianProcessMedium.hpp>
+#include <cfloat>
+#include <io/ImageIO.hpp>
+#include <io/FileUtils.hpp>
+#include <bsdfs/Microfacet.hpp>
+#include <rapidjson/document.h>
+#include <io/JsonDocument.hpp>
+#include <io/JsonObject.hpp>
+#include <io/Scene.hpp>
+#include <math/GaussianProcessFactory.hpp>
+#include <thread/ThreadUtils.hpp>
+
+using namespace Tungsten;
 
 void compute_realization(std::shared_ptr<GaussianProcess> gp, size_t res, const WeightSpaceRealization& real) {
 
@@ -153,7 +164,8 @@ void wos(std::shared_ptr<GaussianProcess> gp, const WeightSpaceRealization& real
 
 
     while (++it < 10000 && abs(d) > 0.001) {
-        auto samp = SampleWarp::uniformCylinder(sampler.next2D());
+        auto xi = sampler.next2D();
+        auto samp = SampleWarp::uniformCylinder(xi);
         samp.z() = 0;
         p += vec_conv<Vec3d>(samp) * d ;
         d = largestSphereAA(gp, real, p);
@@ -536,13 +548,9 @@ Vec3d sample_beckmann_vndf(Ray ray, Vec3d normal, std::shared_ptr<GaussianProces
 }
 
 
-void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, std::string output, int samples, int numBasisFs, float angle, double zrange) {
+void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, Path outputDir, int samples, int numBasisFs, float angle, double zrange, size_t seed) {
 
-    UniformPathSampler sampler(0);
-    sampler.next2D();
-
-
-    Path basePath = Path("testing/ray-realizations") / Path(output) / Path(gp->_cov->id());
+    Path basePath = outputDir / Path("weight-space") / Path(gp->_cov->id());
 
     if (!basePath.exists()) {
         FileUtils::createDirectory(basePath);
@@ -558,10 +566,10 @@ void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, std::string 
 
     auto rayStartPoint = vec_conv<Vec3d>(ray.pos() + ray.nearT() * ray.dir());
 
-    std::string filename = basePath.asString() + tinyformat::format("/%d-%.2f.bin", numBasisFs, angle);
-    std::string filename_ts = basePath.asString() + tinyformat::format("/%d-%.2f-ts.bin", numBasisFs, angle);
-    std::string filename_normals = basePath.asString() + tinyformat::format("/%d-%.2f-normals.bin", numBasisFs, angle);
-    std::string filename_normals_beckmann = basePath.asString() + tinyformat::format("/%d-%.2f-normals-beckmann.bin", numBasisFs, angle);
+    std::string filename = basePath.asString() + tinyformat::format("/%d-%.2f-%d.bin", numBasisFs, angle, seed);
+    std::string filename_ts = basePath.asString() + tinyformat::format("/%d-%.2f-ts-%d.bin", numBasisFs, angle, seed);
+    std::string filename_normals = basePath.asString() + tinyformat::format("/%d-%.2f-normals-%d.bin", numBasisFs, angle, seed);
+    std::string filename_normals_beckmann = basePath.asString() + tinyformat::format("/%d-%.2f-normals-beckmann-%d.bin", numBasisFs, angle, seed);
 
     std::cout << filename_ts << "\n";
 
@@ -574,8 +582,11 @@ void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, std::string 
     std::vector<Vec3d> sampledNormals(samples);
     std::vector<Vec3d> sampledNormalsBeckmann(samples);
 
-#pragma omp parallel for
-    for (int s = 0; s < samples;s++) {
+    ThreadUtils::parallelFor(0, samples, 32, [&](auto s) {
+        UniformPathSampler sampler(seed);
+        sampler.next2D();
+        sampler.startPath(0, s);
+
         auto basis = WeightSpaceBasis::sample(gp->_cov, numBasisFs, sampler);
         auto real = basis.sampleRealization(gp, sampler);
 
@@ -595,7 +606,7 @@ void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, std::string 
         }
 
         sampledNormalsBeckmann[s] = sample_beckmann_vndf(ray, Vec3d(0., 0., 1.), gp);
-    }
+    });
 
 
     {
@@ -623,35 +634,152 @@ void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, std::string 
     }
 }
 
+template<typename T>
+static std::shared_ptr<T> instantiate(JsonPtr value, const Scene& scene)
+{
+    auto result = StringableEnum<std::function<std::shared_ptr<T>()>>(value.getRequiredMember("type")).toEnum()();
+    result->fromJson(value, scene);
+    return result;
+}
 
-int main() {
+int main(int argc, const char** argv) {
 
-    //test_affine();
-    //return 0;
+    if(argc == 1) {
+        //test_affine();
+        //return 0;
 
-    /*microfacet_intersect_test(
-        std::make_shared<GaussianProcess>(
-            std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 1.f)),
-        "weight-space", 1000, 1000, 85.f / 180 * PI, 8);*/
+        /*microfacet_intersect_test(
+            std::make_shared<GaussianProcess>(
+                std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 1.f)),
+            "weight-space", 1000, 1000, 85.f / 180 * PI, 8);*/
 
-    microfacet_intersect_test(
-        std::make_shared<GaussianProcess>(
-            std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 2.f)),
-        "weight-space", 100000, 300, 85.f / 180 * PI, 8);
+        microfacet_intersect_test(
+            std::make_shared<GaussianProcess>(
+                std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 2.f)),
+            Path("weight-space"), 100000, 300, 85.f / 180 * PI, 8, 0);
 
-    microfacet_intersect_test(
-        std::make_shared<GaussianProcess>(
-            std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<RationalQuadraticCovariance>(1.f, 2.f, 0.5f)),
-        "weight-space", 100000, 300, 85.f / 180 * PI, 8);
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(1.f, 1.f, 0.1f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(100.f, 1.f, 0.1f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(10., 0., 0.), 5.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(10., 0., 0.), 5.f), std::make_shared<RationalQuadraticCovariance>(1.f, 0.2f, 0.1f)));
+        microfacet_intersect_test(
+            std::make_shared<GaussianProcess>(
+                std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<RationalQuadraticCovariance>(1.f, 2.f, 0.5f)),
+            Path("weight-space"), 100000, 300, 85.f / 180 * PI, 8, 0);
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(1.f, 1.f, 0.1f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(100.f, 1.f, 0.1f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(10., 0., 0.), 5.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(10., 0., 0.), 5.f), std::make_shared<RationalQuadraticCovariance>(1.f, 0.2f, 0.1f)));
 
 
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.f, 0.5f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 1.0f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 0.5f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 5.0f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.f, 0.5f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 1.0f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 0.5f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 5.0f)));
+    } else {
+
+        static const int OPT_THREADS           = 1;
+        static const int OPT_HELP              = 3;
+        static const int OPT_INPUT_DIRECTORY   = 11;
+        static const int OPT_OUTPUT_DIRECTORY  = 5;
+        static const int OPT_SPP               = 6;
+        static const int OPT_SEED              = 7;
+
+        CliParser parser("tungsten", "[options] scene1 [scene2 [scene3...]]");
+
+        parser.addOption('h', "help", "Prints this help text", false, OPT_HELP);
+        parser.addOption('t', "threads", "Specifies number of threads to use (default: number of cores minus one)", true, OPT_THREADS);
+        parser.addOption('i', "input-directory", "Specifies the input directory", true, OPT_INPUT_DIRECTORY);
+        parser.addOption('d', "output-directory", "Specifies the output directory. Overrides the setting in the scene file", true, OPT_OUTPUT_DIRECTORY);
+        parser.addOption('\0', "spp", "Sets the number of samples per pixel to render at. Overrides the setting in the scene file", true, OPT_SPP);
+        parser.addOption('s', "seed", "Specifies the random seed to use", true, OPT_SEED);
+        
+        parser.parse(argc, argv);
+
+        if (parser.operands().empty() || parser.isPresent(OPT_HELP)) {
+            parser.printHelpText();
+            std::exit(0);
+        }
+
+        int _threadCount;
+        Path _inputDirectory; 
+        Path _outputDirectory; 
+        Path _outputFile; 
+        int _spp = 100000;
+        uint32 _seed = 0xBA5EBA11;
+
+        if (parser.isPresent(OPT_THREADS)) {
+            int newThreadCount = std::atoi(parser.param(OPT_THREADS).c_str());
+            if (newThreadCount > 0)
+                _threadCount = newThreadCount;
+        }
+
+        ThreadUtils::startThreads(_threadCount);
+
+        if (parser.isPresent(OPT_INPUT_DIRECTORY)) {
+            _inputDirectory = Path(parser.param(OPT_INPUT_DIRECTORY));
+            _inputDirectory.freezeWorkingDirectory();
+            _inputDirectory = _inputDirectory.absolute();
+        }
+
+        if (parser.isPresent(OPT_OUTPUT_DIRECTORY)) {
+            _outputDirectory = Path(parser.param(OPT_OUTPUT_DIRECTORY));
+            _outputDirectory.freezeWorkingDirectory();
+            _outputDirectory = _outputDirectory.absolute();
+            if (!_outputDirectory.exists())
+                FileUtils::createDirectory(_outputDirectory, true);
+        }
+
+        if (parser.isPresent(OPT_SPP))
+            _spp = std::atoi(parser.param(OPT_SPP).c_str());
+
+        if (parser.isPresent(OPT_SEED))
+            _seed = std::atoi(parser.param(OPT_SEED).c_str());
+
+        for (const std::string &p : parser.operands()) {
+            std::shared_ptr<JsonDocument> document;
+            try {
+                document = std::make_shared<JsonDocument>(Path(p));
+            }
+            catch (std::exception& e) {
+                std::cerr << e.what() << "\n";
+                continue;
+            }
+
+            Scene scene;
+
+            auto covs = (*document)["covariances"];
+            if (!covs || !covs.isArray()) {
+                std::cerr << "There should be a `covariances` array in the file\n";
+                return -1;
+            }
+
+            auto lmean = std::make_shared<LinearMean>(Vec3d(0.f), Vec3d(0.f, 0.f, 1.f), 1.0f);
+
+            for (int i = 0; i < covs.size(); i++) {
+                const auto& jcov = covs[i];
+                try {
+                    auto cov = instantiate<CovarianceFunction>(jcov, scene);
+                    cov->loadResources();
+
+                    std::cout << "============================================\n";
+                    std::cout << cov->id() << "\n";
+
+                    auto gp = std::make_shared<GaussianProcess>(lmean, cov);
+                    gp->_covEps = 0;
+                    gp->_maxEigenvaluesN = 1024;
+
+                    float alpha = gp->_cov->compute_beckmann_roughness();
+                    float bound = gp->noIntersectBound(Vec3d(0.), 0.9999);
+                    float maxStepsize = gp->goodStepsize(Vec3d(0.), 0.99);
+                    std::cout << "Beckmann roughness: " << alpha << "\n";
+                    std::cout << "0.9999 percentile: " << bound << "\n";
+                    std::cout << "Good stepsize: " << maxStepsize << "\n";
+
+
+                    microfacet_intersect_test(gp, _outputDirectory, _spp, 300, 85.f / 180 * PI, bound, _seed);
+
+                } catch (std::exception& e) {
+                    std::cerr << e.what() << "\n";
+                }
+            }
+        }
+    }
 }

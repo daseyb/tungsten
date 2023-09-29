@@ -70,8 +70,8 @@ double CovarianceFunction::spectral_density(double s) const {
     double max_w = PI / dt;
 
     double bin_c = s / max_w * discreteSpectralDensity.size();
-    size_t bin = clamp(size_t(bin_c), 0ULL, discreteSpectralDensity.size() - 1);
-    size_t n_bin = clamp(size_t(bin_c) + 1, 0ULL, discreteSpectralDensity.size() - 1);
+    size_t bin = clamp(size_t(bin_c), size_t(0), discreteSpectralDensity.size() - 1);
+    size_t n_bin = clamp(size_t(bin_c) + 1, size_t(0), discreteSpectralDensity.size() - 1);
 
     double bin_frac = bin_c - bin;
 
