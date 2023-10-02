@@ -6,16 +6,27 @@
 #include <cfloat>
 #include <tinyformat/tinyformat.hpp>
 #include <sampling/SampleWarp.hpp>
-#include <sampling/SampleWarp.hpp>
-
 #include <core/math/WeightSpaceGaussianProcess.hpp>
 
 #include <bsdfs/NDFs/beckmann.h>
 #include <bsdfs/NDFs/GGX.h>
 #include "math/TangentFrame.hpp"
 
-using namespace Tungsten;
+#include "io/CliParser.hpp"
 
+#include <core/media/GaussianProcessMedium.hpp>
+#include <cfloat>
+#include <io/ImageIO.hpp>
+#include <io/FileUtils.hpp>
+#include <bsdfs/Microfacet.hpp>
+#include <rapidjson/document.h>
+#include <io/JsonDocument.hpp>
+#include <io/JsonObject.hpp>
+#include <io/Scene.hpp>
+#include <math/GaussianProcessFactory.hpp>
+#include <thread/ThreadUtils.hpp>
+
+using namespace Tungsten;
 
 void compute_realization(std::shared_ptr<GaussianProcess> gp, size_t res, const WeightSpaceRealization& real) {
 
@@ -153,7 +164,8 @@ void wos(std::shared_ptr<GaussianProcess> gp, const WeightSpaceRealization& real
 
 
     while (++it < 10000 && abs(d) > 0.001) {
-        auto samp = SampleWarp::uniformCylinder(sampler.next2D());
+        auto xi = sampler.next2D();
+        auto samp = SampleWarp::uniformCylinder(xi);
         samp.z() = 0;
         p += vec_conv<Vec3d>(samp) * d ;
         d = largestSphereAA(gp, real, p);
@@ -525,7 +537,6 @@ void test_affine() {
 }
 
 Vec3d sample_beckmann_vndf(Ray ray, Vec3d normal, std::shared_ptr<GaussianProcess> _gp) {
-
     TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame(vec_conv<Eigen::Vector3d>(normal));
 
     Eigen::Vector3d wi = frame.toLocal(vec_conv<Eigen::Vector3d>(-ray.dir()));
@@ -536,75 +547,33 @@ Vec3d sample_beckmann_vndf(Ray ray, Vec3d normal, std::shared_ptr<GaussianProces
 }
 
 
-void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, std::string output, int samples, int numBasisFs, float angle, double zrange) {
+void microfacet_sample_beckmann(std::shared_ptr<GaussianProcess> gp, Path outputDir, int samples, float angle, double zrange, size_t seed) {
 
-    UniformPathSampler sampler(0);
-    sampler.next2D();
+    Path basePath = outputDir / Path("beckmann") / Path(gp->_cov->id());
 
-
-    Path basePath = Path("testing/ray-realizations") / Path(output) / Path(gp->_cov->id());
+    g_mt = decltype(g_mt)(seed);
 
     if (!basePath.exists()) {
         FileUtils::createDirectory(basePath);
     }
 
-    Ray ray = Ray(Vec3f(0.f, 0.f, 500.f), Vec3f(sin(angle), 0.f, -cos(angle)));
-
-    Mat4f mat = Mat4f::rotAxis(Vec3f(0.f, 0.f, 1.0f), 45);
-    ray.setDir(mat.transformVector(ray.dir()).normalized());
-
-    ray.setNearT(-(ray.pos().z() - zrange) / ray.dir().z());
-    ray.setFarT(-(ray.pos().z() + zrange) / ray.dir().z());
-
-    auto rayStartPoint = vec_conv<Vec3d>(ray.pos() + ray.nearT() * ray.dir());
-
-    std::string filename = basePath.asString() + tinyformat::format("/%d-%.2f.bin", numBasisFs, angle);
-    std::string filename_ts = basePath.asString() + tinyformat::format("/%d-%.2f-ts.bin", numBasisFs, angle);
-    std::string filename_normals = basePath.asString() + tinyformat::format("/%d-%.2f-normals.bin", numBasisFs, angle);
-    std::string filename_normals_beckmann = basePath.asString() + tinyformat::format("/%d-%.2f-normals-beckmann.bin", numBasisFs, angle);
-
-    std::cout << filename_ts << "\n";
-
-    if (Path(filename_ts).exists()) {
-        //continue;
-    }
-
-    std::vector<double> sampledValues;
-    std::vector<double> sampledTsAll(samples);
-    std::vector<Vec3d> sampledNormals(samples);
-    std::vector<Vec3d> sampledNormalsBeckmann(samples);
-
-#pragma omp parallel for
-    for (int s = 0; s < samples;s++) {
-        auto basis = WeightSpaceBasis::sample(gp->_cov, numBasisFs, sampler);
-        auto real = basis.sampleRealization(gp, sampler);
-
-        //std::cout << s << "/" << samples << "\r";
-
-        Vec3d ip;
-        if (intersectRayAA(gp, real, ray, ip)) {
-            Vec3d grad = real.evaluateGradient(ip);
-            double dist = (rayStartPoint - ip).length();
-
-            sampledTsAll[s] = dist;
-            sampledNormals[s]= grad.normalized();
-        }
-        else
-        {
-            std::cout << "Error!\n";
-        }
-
-        sampledNormalsBeckmann[s] = sample_beckmann_vndf(ray, Vec3d(0., 0., 1.), gp);
-    }
-
-
+    Ray ray = Ray(Vec3f(0.f, 0.f, 500.f), Vec3f(sin(angle / 180 * PI), 0.f, -cos(angle / 180 * PI)));
     {
-        std::ofstream xfile(
-            filename_ts,
-            std::ios::out | std::ios::binary);
-        xfile.write((char*)sampledTsAll.data(), sizeof(sampledTsAll[0]) * sampledTsAll.size());
-        xfile.close();
+        Mat4f mat = Mat4f::rotAxis(Vec3f(0.f, 0.f, 1.0f), 45);
+        ray.setDir(mat.transformVector(ray.dir()).normalized());
+        ray.setNearT(-(ray.pos().z() - zrange) / ray.dir().z());
+        ray.setFarT(-(ray.pos().z() + zrange) / ray.dir().z());
     }
+
+    std::string filename_normals = basePath.asString() + tinyformat::format("/%.1fdeg-normals-%d.bin", angle, seed);
+
+    std::vector<Vec3d> sampledNormals(samples);
+
+    ThreadUtils::parallelFor(0, samples, 32, [&](auto s) {
+        UniformPathSampler sampler(MathUtil::hash32(seed) + s);
+        sampler.next2D();
+        sampledNormals[s] = sample_beckmann_vndf(ray, Vec3d(0., 0., 1.), gp);
+    });
 
     {
         std::ofstream xfile(
@@ -613,45 +582,311 @@ void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, std::string 
         xfile.write((char*)sampledNormals.data(), sizeof(sampledNormals[0]) * sampledNormals.size());
         xfile.close();
     }
+}
+
+void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, Path outputDir, int samples, int numBasisFs, float angle, double zrange, size_t seed) {
+
+    Path basePath = outputDir / Path("weight-space") / Path(gp->_cov->id());
+
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
+
+    Ray ray = Ray(Vec3f(0.f, 0.f, 500.f), Vec3f(sin(angle / 180 * PI), 0.f, -cos(angle / 180 * PI)));
+
+    Mat4f mat = Mat4f::rotAxis(Vec3f(0.f, 0.f, 1.0f), 45);
+    ray.setDir(mat.transformVector(ray.dir()).normalized());
+
+    ray.setNearT(-(ray.pos().z() - zrange) / ray.dir().z());
+    ray.setFarT(-(ray.pos().z() + zrange) / ray.dir().z());
+
+    std::string filename_normals = basePath.asString() + tinyformat::format("/%.1fdeg-%d-normals-%d.bin", angle, numBasisFs, seed);
+
+    std::vector<Vec3d> sampledNormals(samples);
+
+    ThreadUtils::parallelFor(0, samples, 32, [&](auto s) {
+        UniformPathSampler sampler(MathUtil::hash32(seed) + s);
+        sampler.next2D();
+
+        auto basis = WeightSpaceBasis::sample(gp->_cov, numBasisFs, sampler);
+        auto real = basis.sampleRealization(gp, sampler);
+
+        Vec3d ip;
+        if (intersectRayAA(gp, real, ray, ip)) {
+            Vec3d grad = real.evaluateGradient(ip);
+            sampledNormals[s]= grad.normalized();
+        }
+        else
+        {
+            std::cout << "Error!\n";
+        }
+    });
+
 
     {
         std::ofstream xfile(
-            filename_normals_beckmann,
+            filename_normals,
             std::ios::out | std::ios::binary);
-        xfile.write((char*)sampledNormalsBeckmann.data(), sizeof(sampledNormalsBeckmann[0]) * sampledNormalsBeckmann.size());
+        xfile.write((char*)sampledNormals.data(), sizeof(sampledNormals[0]) * sampledNormals.size());
         xfile.close();
     }
 }
 
 
-int main() {
+void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, int seed, Path outputDir, float angle = (2 * PI) / 8, GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian, float zrange = 4.f, float maxStepSize = 0.15f, int numRaySamplePoints = 64) {
+    
+    Path basePath = outputDir / Path("function-space") / Path(gp->_cov->id());
 
-    //test_affine();
-    //return 0;
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
 
-    /*microfacet_intersect_test(
-        std::make_shared<GaussianProcess>(
-            std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 1.f)),
-        "weight-space", 1000, 1000, 85.f / 180 * PI, 8);*/
+    if (nsm == GPNormalSamplingMethod::Beckmann) {
+        maxStepSize = 100000.f;
+    }
 
-    microfacet_intersect_test(
-        std::make_shared<GaussianProcess>(
-            std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 2.f)),
-        "weight-space", 100000, 300, 85.f / 180 * PI, 8);
+    auto gp_med = std::make_shared<GaussianProcessMedium>(
+        gp, 0, 1, 1, numRaySamplePoints, 
+        nsm == GPNormalSamplingMethod::Beckmann ? GPCorrelationContext::Goldfish : GPCorrelationContext::Goldfish,
+        nsm == GPNormalSamplingMethod::Beckmann ? GPIntersectMethod::Mean : GPIntersectMethod::GPDiscrete, 
+        nsm);
 
-    microfacet_intersect_test(
-        std::make_shared<GaussianProcess>(
-            std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<RationalQuadraticCovariance>(1.f, 2.f, 0.5f)),
-        "weight-space", 100000, 300, 85.f / 180 * PI, 8);
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(1.f, 1.f, 0.1f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(100.f, 1.f, 0.1f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(10., 0., 0.), 5.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(10., 0., 0.), 5.f), std::make_shared<RationalQuadraticCovariance>(1.f, 0.2f, 0.1f)));
+    gp_med->loadResources();
+    gp_med->prepareForRender();
+
+    UniformPathSampler sampler(seed);
+    sampler.next2D();
+
+    std::vector<Vec3d> sampledNormals(samples);
+
+    Ray ray = Ray(Vec3f(0.f, 0.f, 500.f), Vec3f(sin(angle / 180 * PI), 0.f, -cos(angle / 180 * PI)));
+
+    {
+        Mat4f mat = Mat4f::rotAxis(Vec3f(0.f, 0.f, 1.0f), 45);
+        ray.setDir(mat.transformVector(ray.dir()));
+        ray.setNearT(-(ray.pos().z() - zrange) / ray.dir().z());
+        ray.setFarT(-(ray.pos().z() + zrange) / ray.dir().z());
+    }
+
+    for (int s = 0; s < samples;) {
+        Medium::MediumState state;
+        state.reset();
+
+        MediumSample sample;
+        Ray tRay = ray;
+        tRay.setFarT(tRay.nearT() + maxStepSize * numRaySamplePoints);
+        bool success = gp_med->sampleDistance(sampler, tRay, state, sample);
+        while (success && sample.exited) {
+            tRay.setNearT(tRay.farT());
+            tRay.setFarT(tRay.nearT() + maxStepSize * numRaySamplePoints);
+            success = gp_med->sampleDistance(sampler, tRay, state, sample);
+        }
+
+        if (!success) {
+            continue;
+        }
+
+        sampledNormals[s] = sample.aniso.normalized();
+        s++;
+    }
+
+    {
+        std::ofstream xfile(
+            (basePath + Path(tinyformat::format("/%.1fdeg-%d-%s-%.3f-normals-%d.bin", angle, numRaySamplePoints, GaussianProcessMedium::normalSamplingMethodToString(nsm), zrange, seed))).asString(), 
+            std::ios::out | std::ios::binary);
+
+        xfile.write((char*)sampledNormals.data(), sizeof(sampledNormals[0]) * sampledNormals.size());
+        xfile.close();
+    }
+}
+
+template<typename T>
+static std::shared_ptr<T> instantiate(JsonPtr value, const Scene& scene)
+{
+    auto result = StringableEnum<std::function<std::shared_ptr<T>()>>(value.getRequiredMember("type")).toEnum()();
+    result->fromJson(value, scene);
+    return result;
+}
+
+int main(int argc, const char** argv) {
+
+    if(argc == 1) {
+        //test_affine();
+        //return 0;
+
+        /*microfacet_intersect_test(
+            std::make_shared<GaussianProcess>(
+                std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 1.f)),
+            "weight-space", 1000, 1000, 85.f / 180 * PI, 8);*/
+
+        microfacet_intersect_test(
+            std::make_shared<GaussianProcess>(
+                std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 2.f)),
+            Path("weight-space"), 100000, 300, 85.f / 180 * PI, 8, 0);
+
+        microfacet_intersect_test(
+            std::make_shared<GaussianProcess>(
+                std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<RationalQuadraticCovariance>(1.f, 2.f, 0.5f)),
+            Path("weight-space"), 100000, 300, 85.f / 180 * PI, 8, 0);
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(1.f, 1.f, 0.1f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(100.f, 1.f, 0.1f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(10., 0., 0.), 5.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(10., 0., 0.), 5.f), std::make_shared<RationalQuadraticCovariance>(1.f, 0.2f, 0.1f)));
 
 
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.f, 0.5f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 1.0f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 0.5f)));
-    //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 5.0f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.f, 0.5f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 1.0f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 0.5f)));
+        //gen_data(std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<RationalQuadraticCovariance>(1.f, 0.5f, 5.0f)));
+    } else {
+
+        static const int OPT_THREADS           = 1;
+        static const int OPT_ANGLE             = 2;
+        static const int OPT_HELP              = 3;
+        static const int OPT_BASIS             = 4;
+        static const int OPT_OUTPUT_DIRECTORY  = 5;
+        static const int OPT_SPP               = 6;
+        static const int OPT_SEED              = 7;
+        static const int OPT_BECKMANN          = 8;
+        static const int OPT_WEIGHTSPACE       = 9;
+        static const int OPT_FUNCTIONSPACE     = 10;
+        static const int OPT_INPUT_DIRECTORY   = 11;
+        static const int OPT_RAYSAMPLES   = 12;
+
+        CliParser parser("tungsten", "[options] covariances1 [covariances2 [covariances3...]]");
+
+        parser.addOption('h', "help", "Prints this help text", false, OPT_HELP);
+        parser.addOption('t', "threads", "Specifies number of threads to use (default: number of cores minus one)", true, OPT_THREADS);
+        parser.addOption('i', "input-directory", "Specifies the input directory", true, OPT_INPUT_DIRECTORY);
+        parser.addOption('d', "output-directory", "Specifies the output directory. Overrides the setting in the scene file", true, OPT_OUTPUT_DIRECTORY);
+        parser.addOption('\0', "spp", "Sets the number of samples per pixel to render at. Overrides the setting in the scene file", true, OPT_SPP);
+        parser.addOption('s', "seed", "Specifies the random seed to use", true, OPT_SEED);
+        parser.addOption('a', "angle", "Ray angle in degrees (0 orthogonal, 90 parallel)", true, OPT_ANGLE);
+        parser.addOption('b', "basis", "Number of basis functions", true, OPT_BASIS);
+        parser.addOption('r', "ray-samples", "Number of ray sample points", true, OPT_RAYSAMPLES);
+        parser.addOption('\0', "beckmann", "Sample normals using beckmman distribution", false, OPT_BECKMANN);
+        parser.addOption('\0', "weight-space", "Sample normals using weight space approach", false, OPT_WEIGHTSPACE);
+        parser.addOption('\0', "function-space", "Sample normals using function space approach", false, OPT_FUNCTIONSPACE);
+        
+        parser.parse(argc, argv);
+
+        if (parser.operands().empty() || parser.isPresent(OPT_HELP)) {
+            parser.printHelpText();
+            std::exit(0);
+        }
+
+        int _threadCount;
+        Path _inputDirectory; 
+        Path _outputDirectory; 
+        Path _outputFile; 
+        int _spp = 100000;
+        uint32 _seed = 0xBA5EBA11;
+        double _angle = 0;
+        int _numBasis = 300;
+        int _numRaySamples = 64;
+
+        bool _doWeightspace = parser.isPresent(OPT_WEIGHTSPACE);
+        bool _doBeckmann = parser.isPresent(OPT_BECKMANN);
+        bool _doFunctionspace = parser.isPresent(OPT_FUNCTIONSPACE);
+
+        if (parser.isPresent(OPT_THREADS)) {
+            int newThreadCount = std::atoi(parser.param(OPT_THREADS).c_str());
+            if (newThreadCount > 0)
+                _threadCount = newThreadCount;
+        }
+
+        ThreadUtils::startThreads(_threadCount);
+
+        if (parser.isPresent(OPT_INPUT_DIRECTORY)) {
+            _inputDirectory = Path(parser.param(OPT_INPUT_DIRECTORY));
+            _inputDirectory.freezeWorkingDirectory();
+            _inputDirectory = _inputDirectory.absolute();
+        }
+
+        if (parser.isPresent(OPT_OUTPUT_DIRECTORY)) {
+            _outputDirectory = Path(parser.param(OPT_OUTPUT_DIRECTORY));
+            _outputDirectory.freezeWorkingDirectory();
+            _outputDirectory = _outputDirectory.absolute();
+            if (!_outputDirectory.exists())
+                FileUtils::createDirectory(_outputDirectory, true);
+        }
+
+        if (parser.isPresent(OPT_SPP))
+            _spp = std::atoi(parser.param(OPT_SPP).c_str());
+
+        if (parser.isPresent(OPT_SEED))
+            _seed = std::atoi(parser.param(OPT_SEED).c_str());
+
+        if (parser.isPresent(OPT_ANGLE))
+            _angle = std::atof(parser.param(OPT_ANGLE).c_str());
+
+        if (parser.isPresent(OPT_BASIS))
+            _numBasis = std::atoi(parser.param(OPT_BASIS).c_str());
+
+        if (parser.isPresent(OPT_RAYSAMPLES))
+            _numRaySamples = std::atoi(parser.param(OPT_RAYSAMPLES).c_str());
+
+        for (const std::string &p : parser.operands()) {
+            std::shared_ptr<JsonDocument> document;
+            try {
+                document = std::make_shared<JsonDocument>(Path(p));
+            }
+            catch (std::exception& e) {
+                std::cerr << e.what() << "\n";
+                continue;
+            }
+
+            Scene scene;
+
+            auto covs = (*document)["covariances"];
+            if (!covs || !covs.isArray()) {
+                std::cerr << "There should be a `covariances` array in the file\n";
+                return -1;
+            }
+
+            auto lmean = std::make_shared<LinearMean>(Vec3d(0.f), Vec3d(0.f, 0.f, 1.f), 1.0f);
+
+            for (int i = 0; i < covs.size(); i++) {
+                const auto& jcov = covs[i];
+                try {
+                    auto cov = instantiate<CovarianceFunction>(jcov, scene);
+                    cov->loadResources();
+
+                    std::cout << "============================================\n";
+                    std::cout << cov->id() << "\n";
+
+                    auto gp = std::make_shared<GaussianProcess>(lmean, cov);
+                    gp->_covEps = 0;
+                    gp->_maxEigenvaluesN = 1024;
+
+                    float alpha = gp->_cov->compute_beckmann_roughness();
+                    float bound = gp->noIntersectBound(Vec3d(0.), 0.9999);
+                    float maxStepsize = gp->goodStepsize(Vec3d(0.), 0.99);
+                    std::cout << "Beckmann roughness: " << alpha << "\n";
+                    std::cout << "0.9999 percentile: " << bound << "\n";
+                    std::cout << "Good stepsize: " << maxStepsize << "\n";
+
+
+                    if(_doWeightspace) {
+                        std::cout << "Weight space sampling...\n";
+                        microfacet_intersect_test(gp, _outputDirectory, _spp, _numBasis, _angle, bound, _seed);
+                    }
+
+                    if(_doBeckmann) {
+                        std::cout << "Beckmann sampling...\n";
+                        microfacet_sample_beckmann(gp, _outputDirectory, _spp, _angle, bound, _seed);
+                    }
+
+                    if(_doFunctionspace) {
+                        std::cout << "Function space sampling...\n";
+                        ndf_cond_validate(gp, _spp, _seed, _outputDirectory, _angle, GPNormalSamplingMethod::ConditionedGaussian, bound, maxStepsize, _numRaySamples);
+                    }
+
+                } catch (std::exception& e) {
+                    std::cerr << e.what() << "\n";
+                }
+            }
+        }
+    }
 }

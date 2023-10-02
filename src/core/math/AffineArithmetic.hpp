@@ -4,6 +4,7 @@
 #include "Eigen/Dense"
 #include "math/Vec.hpp"
 #include "math/MathUtil.hpp"
+#include <cfloat>
 
 namespace Tungsten {
 
@@ -341,7 +342,7 @@ template<size_t d, typename Scalar>
 typename Affine<d, Scalar>::VecT find_alpha2(const Affine<d, Scalar>& P) {
     auto bx = P.mayContainBounds();
     auto bslope = cosBound(bx);
-    Affine<d, Scalar>::VecT alpha = 0.5 * (bslope.lower + bslope.upper);
+    typename Affine<d, Scalar>::VecT alpha = 0.5 * (bslope.lower + bslope.upper);
     return alpha.cwiseMax(-1).cwiseMin(1);
 }
 
@@ -354,7 +355,7 @@ Affine<d, Scalar> aff_sin(const Affine<d, Scalar>& x) {
 
     auto bx = x.mayContainBounds();
 
-    Affine<d, Scalar>::VecT alpha = find_alpha2(x);
+    typename Affine<d, Scalar>::VecT alpha = find_alpha2(x);
 
     auto intA = acos(alpha);
     auto intB = -intA;
@@ -362,15 +363,15 @@ Affine<d, Scalar> aff_sin(const Affine<d, Scalar>& x) {
     auto first = [lower = bx.lower](auto x) { return 2. * PI * ceil((lower + x) / (2. * PI)) - x; };
     auto last = [upper = bx.upper](auto x) { return 2. * PI * floor((upper - x) / (2. * PI)) + x; };
 
-    Affine<d, Scalar>::VecT extremes[] = {
+    typename Affine<d, Scalar>::VecT extremes[] = {
         bx.lower, bx.upper, first(intA), last(intA), first(intB), last(intB)
     };
 
-    Affine<d, Scalar>::VecT r_lower;
+    typename Affine<d, Scalar>::VecT r_lower;
     r_lower.resizeLike(bx.lower);
     r_lower = DBL_MAX;
 
-    Affine<d, Scalar>::VecT r_upper;
+    typename Affine<d, Scalar>::VecT r_upper;
     r_upper.resizeLike(bx.upper);
     r_upper = -DBL_MAX;
 
@@ -428,7 +429,7 @@ Affine<1, Scalar> dot(const Eigen::Vector<Scalar,d>& a, const Affine<d, Scalar>&
 }
 
 template<size_t d, typename Scalar>
-Affine<1, Scalar> dot(const Vec<Scalar,d> & a, const Affine<d, Scalar>& b) {
+Affine<1, Scalar> dot(const Vec<Scalar,unsigned(d)> & a, const Affine<d, Scalar>& b) {
     Affine<1, Scalar> result;
     for (int i = 0; i < d; i++) {
         result += b[i] * a[i];
