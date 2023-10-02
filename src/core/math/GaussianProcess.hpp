@@ -347,6 +347,75 @@ namespace Tungsten {
         }
     };
 
+    class MaternCovariance : public StationaryCovariance {
+    public:
+
+        MaternCovariance(float sigma = 1.f, float l = 1., float v = 1.0f, Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _v(v) {
+            _aniso = aniso;
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            CovarianceFunction::fromJson(value, scene);
+            value.getField("sigma", _sigma);
+            value.getField("v", _v);
+            value.getField("lengthScale", _l);
+            value.getField("aniso", _aniso);
+        }
+
+        virtual std::string id() const {
+            return tinyformat::format("mat/aniso=[%.4f,%.4f,%.4f]-s=%.3f-l=%.3f-v=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l, _v);
+        }
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+                "type", "matern",
+                "sigma", _sigma,
+                "v", _v,
+                "lengthScale", _l,
+                "aniso", _aniso
+            };
+        }
+
+        virtual bool hasAnalyticSpectralDensity() const override { return true; }
+        virtual double spectral_density(double s) const {
+            const int D = 1;
+            return pow(2, D) * pow(PI, D / 2.) * std::lgamma(_v + D / 2.) * 
+                pow(2 * _v, _v) / (std::lgamma(_v) * pow(_l, 2 * _v)) * pow(2 * _v / sqr(_l) + 4 * sqr(PI) * sqr(s), -(_v + D / 2.));
+        }
+
+        virtual double sample_spectral_density(PathSampleGenerator& sampler) const override {
+            return sqrt(-_v + _v * pow(1 - sampler.next1D(), -1. / _v)) / (sqrt(2) * _l * PI) * sin(PI * sampler.next1D());
+        }
+
+        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler) const override {
+            double r = sqrt(-_v + _v * pow(1 - sampler.next1D(), -1. / _v)) / (sqrt(2) * _l * PI);
+            double angle = sampler.next1D() * 2 * PI;
+            return Vec2d(sin(angle), cos(angle)) * r;
+        }
+
+    private:
+        float _sigma, _v, _l;
+
+        virtual FloatD cov(FloatD absq) const override {
+            assert(false);
+            //auto r_scl = sqrt(2 * _v * absq) / _l;
+            //return pow(2, 1 - _v) / std::lgamma(_v) * pow(r_scl, _v) * std::cyl_bessel_k(_v, r_scl);
+            return 0;
+        }
+
+        virtual FloatDD cov(FloatDD absq) const override {
+            assert(false);
+            //auto r_scl = sqrt(2 * _v * absq) / _l;
+            //return pow(2, 1 - _v) / std::lgamma(_v) * pow(r_scl, _v) * std::cyl_bessel_k(_v, r_scl);
+            return 0;
+        }
+
+        virtual double cov(double absq) const override {
+            auto r_scl = sqrt(2 * _v * absq) / _l;
+            return pow(2, 1 - _v) / std::lgamma(_v) * pow(r_scl, _v) * std::cyl_bessel_k(_v, r_scl);
+        }
+    };
+
     class PeriodicCovariance : public StationaryCovariance {
     public:
 
