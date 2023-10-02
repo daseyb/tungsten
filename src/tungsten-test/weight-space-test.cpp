@@ -60,11 +60,6 @@ void compute_realization(std::shared_ptr<GaussianProcess> gp, size_t res, const 
         }
 
 
-        //auto other_samples = real.evaluate(points.data(), points.size());
-        //samples -= other_samples;
-
-        //Eigen::VectorXd samples = real.evaluate(points.data(), points.size());
-
         {
             std::ofstream xfile(
                 (basePath / Path("grid-samples.bin")).asString(),
@@ -445,7 +440,7 @@ void gen_data(std::shared_ptr<GaussianProcess> gp) {
 
     auto basis = WeightSpaceBasis::sample(gp->_cov, 300, sampler);
     auto real = basis.sampleRealization(gp, sampler);
-    
+
     std::cout << "L = " << real.lipschitz() << "\n";
     compute_realization(gp, 512, real);
 
@@ -713,21 +708,10 @@ int main(int argc, const char** argv) {
     if(argc == 1) {
         //test_affine();
         //return 0;
-
-        /*microfacet_intersect_test(
+        gen_data(
             std::make_shared<GaussianProcess>(
-                std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 1.f)),
-            "weight-space", 1000, 1000, 85.f / 180 * PI, 8);*/
+                std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<MaternCovariance>(1.f, 0.25f, 2.5f)));
 
-        microfacet_intersect_test(
-            std::make_shared<GaussianProcess>(
-                std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<SquaredExponentialCovariance>(1.f, 2.f)),
-            Path("weight-space"), 100000, 300, 85.f / 180 * PI, 8, 0);
-
-        microfacet_intersect_test(
-            std::make_shared<GaussianProcess>(
-                std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 0., 1.), 1.f), std::make_shared<RationalQuadraticCovariance>(1.f, 2.f, 0.5f)),
-            Path("weight-space"), 100000, 300, 85.f / 180 * PI, 8, 0);
         //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(1.f, 1.f, 0.1f)));
         //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(10.f, 1.f, 0.1f)));
         //gen_data(std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 3.f), std::make_shared<RationalQuadraticCovariance>(100.f, 1.f, 0.1f)));

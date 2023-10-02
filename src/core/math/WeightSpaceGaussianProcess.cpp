@@ -6,7 +6,8 @@ namespace Tungsten {
 
 double WeightSpaceRealization::evaluate(const Vec3d& p) const {
     Derivative d = Derivative::None;
-    double scale = sqrt((*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d()));
+    double c = (*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d());
+    double scale = sqrt(c);
     return scale * basis.evaluate(vec_conv<Eigen::Vector3d>(p), weights) + gp->mean(&p, &d, nullptr, Vec3d(0.), 1)(0);
 }
 
@@ -131,6 +132,10 @@ WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> co
         b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir.normalized());
         b.freqs(i) = dir.length();
         b.freqWeights(i) = 1.;
+
+        if (!std::isfinite(b.freqs(i))) {
+            std::cerr << "Sampling error!\n";
+        }
 #else
         b.freqs(i) = cov->sample_spectral_density(sampler);
         b.freqWeights(i) = 1;

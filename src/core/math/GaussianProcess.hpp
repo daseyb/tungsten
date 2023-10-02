@@ -411,8 +411,11 @@ namespace Tungsten {
         }
 
         virtual double cov(double absq) const override {
-            auto r_scl = sqrt(2 * _v * absq) / _l;
-            return pow(2, 1 - _v) / std::lgamma(_v) * pow(r_scl, _v) * std::cyl_bessel_k(_v, r_scl);
+            if (absq < 0.0000001) {
+                return sqr(_sigma);
+            }
+            auto r_scl = sqrt(2. * _v * absq) / _l;
+            return sqr(_sigma) * pow(2, 1. - _v) / std::lgamma(_v) * pow(r_scl, _v) * std::cyl_bessel_k(_v, r_scl);
         }
     };
 
