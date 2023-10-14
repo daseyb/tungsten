@@ -691,7 +691,7 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, int see
 
     {
         std::ofstream xfile(
-            (basePath + Path(tinyformat::format("/%.1fdeg-%d-%s-%.3f-normals-%d.bin", angle, numRaySamplePoints, GaussianProcessMedium::normalSamplingMethodToString(nsm), zrange, seed))).asString(), 
+            (basePath + Path(tinyformat::format("/%.1fdeg-%d-%s-%.3f-%.3f-normals-%d.bin", angle, numRaySamplePoints, GaussianProcessMedium::normalSamplingMethodToString(nsm), zrange, maxStepSize, seed))).asString(), 
             std::ios::out | std::ios::binary);
 
         xfile.write((char*)sampledNormals.data(), sizeof(sampledNormals[0]) * sampledNormals.size());
