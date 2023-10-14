@@ -396,18 +396,28 @@ namespace Tungsten {
     private:
         float _sigma, _v, _l;
 
+        FloatD bessel_k(double n, FloatD x) const {
+            FloatD result;
+            result[0] = std::cyl_bessel_k(n, x.val());
+            result[1] = x[1] * (-std::cyl_bessel_k(n - 1, x.val()) - n / x.val() * std::cyl_bessel_k(n + 1, x.val()));
+            return result;
+        }
+
+        FloatDD bessel_k(double n, FloatDD x) const {
+            FloatDD result;
+            result.val.val = std::cyl_bessel_k(n, x.val.val);
+            result.val.grad = x.val.val * (-std::cyl_bessel_k(n - 1, x.val.val) - n / x.val.val * std::cyl_bessel_k(n + 1, x.val.val));
+            return result;
+        }
+
         virtual FloatD cov(FloatD absq) const override {
-            assert(false);
-            //auto r_scl = sqrt(2 * _v * absq) / _l;
-            //return pow(2, 1 - _v) / std::lgamma(_v) * pow(r_scl, _v) * std::cyl_bessel_k(_v, r_scl);
-            return 0;
+            auto r_scl = sqrt(2 * _v * absq) / _l;
+            return pow(2, 1 - _v) / std::lgamma(_v) * pow(r_scl, _v) * bessel_k(_v, r_scl);
         }
 
         virtual FloatDD cov(FloatDD absq) const override {
-            assert(false);
-            //auto r_scl = sqrt(2 * _v * absq) / _l;
-            //return pow(2, 1 - _v) / std::lgamma(_v) * pow(r_scl, _v) * std::cyl_bessel_k(_v, r_scl);
-            return 0;
+            auto r_scl = sqrt(2 * _v * absq) / _l;
+            return pow(2, 1 - _v) / std::lgamma(_v) * pow(r_scl, _v) * bessel_k(_v, r_scl);
         }
 
         virtual double cov(double absq) const override {

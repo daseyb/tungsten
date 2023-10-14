@@ -366,6 +366,11 @@ namespace Tungsten {
         std::vector<Derivative> derivs(_samplePoints);
         std::vector<double> ts(_samplePoints);
         float tOffset = sampler.next1D();
+
+        auto ro = vec_conv<Vec3d>(ray.pos());
+        auto rd = vec_conv<Vec3d>(ray.dir());
+
+
         for (int i = 0; i < _samplePoints; i++) {
             double t = lerp(ray.nearT(), ray.nearT() + min(1000.f, ray.farT() - ray.nearT()), clamp((i - tOffset) / (_samplePoints-1), 0.f, 1.f));
             if (i == 0)
@@ -374,13 +379,12 @@ namespace Tungsten {
                 t = ray.nearT() + min(1000.f, ray.farT() - ray.nearT());
 
             ts[i] =  t;
-            points[i] = vec_conv<Vec3d>(ray.pos()) + t * vec_conv<Vec3d>(ray.dir());
+            points[i] = ro + t * rd;
             derivs[i] = Derivative::None;
         }
 
         Eigen::MatrixXd gpSamples;
 
-        auto rd = vec_conv<Vec3d>(ray.dir());
 
         int startSign = 1;
         if (state.firstScatter) {
@@ -482,11 +486,17 @@ namespace Tungsten {
                 double offsetT = prevV / (prevV - currV);
                 t = lerp(prevT, currT, offsetT);
 
-                points.resize(p);
-                derivs.resize(p);
+                derivs.resize(p + 2);
+                points.resize(p + 2);
+                gpSamples.conservativeResize(p + 2, Eigen::NoChange);
 
-                //points[p] = ray.pos() + t * ray.dir();
-                //gpSamples(p, 0) = lerp(prevV, currV, offsetT);
+                points[p] = vec_conv<Vec3d>(ray.pos()) + t * vec_conv<Vec3d>(ray.dir());
+                gpSamples(p, 0) = 0;
+                derivs[p] = Derivative::None;
+
+                points[p + 1] = vec_conv<Vec3d>(ray.pos()) + t * vec_conv<Vec3d>(ray.dir());
+                gpSamples(p + 1, 0) = (prevV - currV) / (prevT - currT);
+                derivs[p + 1] = Derivative::First;
 
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
                 /*if (_ctxt == GPCorrelationContext::Dori) {
