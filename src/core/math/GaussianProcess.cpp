@@ -743,17 +743,9 @@ Eigen::MatrixXd GaussianProcess::sample_cond(
     CovMatrix solved;
 
 #ifdef SPARSE_COV
-    /*Eigen::SparseQR<CovMatrix, Eigen::AMDOrdering<int>> solver(s11);
-    if (solver.info() != Eigen::ComputationInfo::Success) {
-        std::cerr << "Conditioning failed!\n";
-    }*/
-
-    //Eigen::ConjugateGradient<CovMatrix, Eigen::Lower | Eigen::Upper> solver;
-    //Eigen::BiCGSTAB<CovMatrix> solver;
-    
     if (s11.rows() > 16) {
         Eigen::BDCSVD<Eigen::MatrixXd> solver(s11, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        solver.setThreshold(0.00001);
+        solver.setThreshold(_covEps);
 
         if (solver.info() != Eigen::ComputationInfo::Success) {
             std::cerr << "Conditioning decomposition failed (BDCSVD)!\n";

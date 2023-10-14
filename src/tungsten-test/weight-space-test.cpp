@@ -542,7 +542,7 @@ Vec3d sample_beckmann_vndf(Ray ray, Vec3d normal, std::shared_ptr<GaussianProces
 }
 
 
-void microfacet_sample_beckmann(std::shared_ptr<GaussianProcess> gp, Path outputDir, int samples, float angle, double zrange, size_t seed) {
+void microfacet_sample_beckmann(std::shared_ptr<GaussianProcess> gp, Path outputDir, int samples, float angle, double zrange, size_t seed, std::string tag) {
 
     Path basePath = outputDir / Path("beckmann") / Path(gp->_cov->id());
 
@@ -560,7 +560,7 @@ void microfacet_sample_beckmann(std::shared_ptr<GaussianProcess> gp, Path output
         ray.setFarT(-(ray.pos().z() + zrange) / ray.dir().z());
     }
 
-    std::string filename_normals = basePath.asString() + tinyformat::format("/%.1fdeg-normals-%d.bin", angle, seed);
+    std::string filename_normals = basePath.asString() + tinyformat::format("/%.1fdeg-%snormals-%d.bin", angle, tag, seed);
 
     std::vector<Vec3d> sampledNormals(samples);
 
@@ -579,7 +579,7 @@ void microfacet_sample_beckmann(std::shared_ptr<GaussianProcess> gp, Path output
     }
 }
 
-void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, Path outputDir, int samples, int numBasisFs, float angle, double zrange, size_t seed) {
+void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, Path outputDir, int samples, int numBasisFs, float angle, double zrange, size_t seed, std::string tag) {
 
     Path basePath = outputDir / Path("weight-space") / Path(gp->_cov->id());
 
@@ -595,7 +595,7 @@ void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, Path outputD
     ray.setNearT(-(ray.pos().z() - zrange) / ray.dir().z());
     ray.setFarT(-(ray.pos().z() + zrange) / ray.dir().z());
 
-    std::string filename_normals = basePath.asString() + tinyformat::format("/%.1fdeg-%d-normals-%d.bin", angle, numBasisFs, seed);
+    std::string filename_normals = basePath.asString() + tinyformat::format("/%.1fdeg-%d%s-normals-%d.bin", angle, numBasisFs, tag, seed);
 
     std::vector<Vec3d> sampledNormals(samples);
 
@@ -628,7 +628,7 @@ void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, Path outputD
 }
 
 
-void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, int seed, Path outputDir, float angle = (2 * PI) / 8, GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian, float zrange = 4.f, float maxStepSize = 0.15f, int numRaySamplePoints = 64) {
+void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, int seed, Path outputDir, float angle = (2 * PI) / 8, GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian, float zrange = 4.f, float maxStepSize = 0.15f, int numRaySamplePoints = 64, std::string tag = "") {
     
     Path basePath = outputDir / Path("function-space") / Path(gp->_cov->id());
 
@@ -691,7 +691,7 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, int see
 
     {
         std::ofstream xfile(
-            (basePath + Path(tinyformat::format("/%.1fdeg-%d-%s-%.3f-%.3f-normals-%d.bin", angle, numRaySamplePoints, GaussianProcessMedium::normalSamplingMethodToString(nsm), zrange, maxStepSize, seed))).asString(), 
+            (basePath + Path(tinyformat::format("/%.1fdeg-%d-%s-%.3f-%.3f%s-normals-%d.bin", angle, numRaySamplePoints, GaussianProcessMedium::normalSamplingMethodToString(nsm), zrange, maxStepSize, tag, seed))).asString(), 
             std::ios::out | std::ios::binary);
 
         xfile.write((char*)sampledNormals.data(), sizeof(sampledNormals[0]) * sampledNormals.size());
@@ -742,6 +742,9 @@ int main(int argc, const char** argv) {
         static const int OPT_INPUT_DIRECTORY   = 11;
         static const int OPT_RAYSAMPLES        = 12;
         static const int OPT_MAX_STEPSIZE      = 13;
+        static const int OPT_TAG               = 14;
+        static const int OPT_BOUND             = 15;
+        static const int OPT_SOLVER_THRESHOLD  = 16;
 
         CliParser parser("tungsten", "[options] covariances1 [covariances2 [covariances3...]]");
 
@@ -758,6 +761,9 @@ int main(int argc, const char** argv) {
         parser.addOption('\0', "beckmann", "Sample normals using beckmman distribution", false, OPT_BECKMANN);
         parser.addOption('\0', "weight-space", "Sample normals using weight space approach", false, OPT_WEIGHTSPACE);
         parser.addOption('\0', "function-space", "Sample normals using function space approach", false, OPT_FUNCTIONSPACE);
+        parser.addOption('\0', "tag", "Additional tag to append to output file", true, OPT_TAG);
+        parser.addOption('\0', "bound", "Distance from surface to start tracing. -1 for automatic", true, OPT_BOUND);
+        parser.addOption('\0', "solver-threshold", "Threshold below which Eigen discards singular values.", true, OPT_SOLVER_THRESHOLD);
         
         parser.parse(argc, argv);
 
@@ -776,6 +782,9 @@ int main(int argc, const char** argv) {
         int _numBasis = 300;
         int _numRaySamples = 64;
         double _maxStepSize = -1;
+        double _bound = -1;
+        double _solverThreshold = 0;
+        std::string _tag;
 
         bool _doWeightspace = parser.isPresent(OPT_WEIGHTSPACE);
         bool _doBeckmann = parser.isPresent(OPT_BECKMANN);
@@ -821,6 +830,15 @@ int main(int argc, const char** argv) {
         if (parser.isPresent(OPT_MAX_STEPSIZE))
             _maxStepSize = std::atof(parser.param(OPT_MAX_STEPSIZE).c_str());
 
+        if (parser.isPresent(OPT_BOUND))
+            _bound = std::atof(parser.param(OPT_BOUND).c_str());
+
+        if (parser.isPresent(OPT_TAG))
+            _tag = parser.param(OPT_TAG);
+
+        if (parser.isPresent(OPT_SOLVER_THRESHOLD))
+            _solverThreshold = std::atof(parser.param(OPT_SOLVER_THRESHOLD).c_str());
+
         for (const std::string &p : parser.operands()) {
             std::shared_ptr<JsonDocument> document;
             try {
@@ -851,11 +869,15 @@ int main(int argc, const char** argv) {
                     std::cout << cov->id() << "\n";
 
                     auto gp = std::make_shared<GaussianProcess>(lmean, cov);
-                    gp->_covEps = 0;
+                    gp->_covEps = _solverThreshold;
                     gp->_maxEigenvaluesN = 1024;
 
                     float alpha = gp->_cov->compute_beckmann_roughness();
-                    float bound = gp->noIntersectBound(Vec3d(0.), 0.9999);
+
+                    float bound = _bound;
+                    if(_bound < 0) {
+                        bound = gp->noIntersectBound(Vec3d(0.), 0.9999);
+                    }
 
                     float maxStepsize = _maxStepSize;
                     if(_maxStepSize < 0) {
@@ -869,17 +891,17 @@ int main(int argc, const char** argv) {
 
                     if(_doWeightspace) {
                         std::cout << "Weight space sampling...\n";
-                        microfacet_intersect_test(gp, _outputDirectory, _spp, _numBasis, _angle, bound, _seed);
+                        microfacet_intersect_test(gp, _outputDirectory, _spp, _numBasis, _angle, bound, _seed, _tag);
                     }
 
                     if(_doBeckmann) {
                         std::cout << "Beckmann sampling...\n";
-                        microfacet_sample_beckmann(gp, _outputDirectory, _spp, _angle, bound, _seed);
+                        microfacet_sample_beckmann(gp, _outputDirectory, _spp, _angle, bound, _seed, _tag);
                     }
 
                     if(_doFunctionspace) {
                         std::cout << "Function space sampling...\n";
-                        ndf_cond_validate(gp, _spp, _seed, _outputDirectory, _angle, GPNormalSamplingMethod::ConditionedGaussian, bound, maxStepsize, _numRaySamples);
+                        ndf_cond_validate(gp, _spp, _seed, _outputDirectory, _angle, GPNormalSamplingMethod::ConditionedGaussian, bound, maxStepsize, _numRaySamples, _tag);
                     }
 
                 } catch (std::exception& e) {

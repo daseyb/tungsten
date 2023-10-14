@@ -550,9 +550,9 @@ namespace Tungsten {
                     return false;
                 }
 
-                if (!sample.exited && grad.dot(vec_conv<Vec3d>(ray.dir())) > 0) {
-                    return false;
-                }
+                //if (!sample.exited && grad.dot(vec_conv<Vec3d>(ray.dir())) > 0) {
+                //    return false;
+                //}
 
                 sample.aniso = grad;
                 if (!std::isfinite(sample.aniso.avg())) {
