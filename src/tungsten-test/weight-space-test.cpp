@@ -663,6 +663,10 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, int see
         ray.setFarT(-(ray.pos().z() + zrange) / ray.dir().z());
     }
 
+    if(maxStepSize == 0) {
+        maxStepSize = (ray.farT() - ray.nearT()) / numRaySamplePoints;
+    }
+
     for (int s = 0; s < samples;) {
         Medium::MediumState state;
         state.reset();
@@ -736,7 +740,8 @@ int main(int argc, const char** argv) {
         static const int OPT_WEIGHTSPACE       = 9;
         static const int OPT_FUNCTIONSPACE     = 10;
         static const int OPT_INPUT_DIRECTORY   = 11;
-        static const int OPT_RAYSAMPLES   = 12;
+        static const int OPT_RAYSAMPLES        = 12;
+        static const int OPT_MAX_STEPSIZE      = 13;
 
         CliParser parser("tungsten", "[options] covariances1 [covariances2 [covariances3...]]");
 
@@ -749,6 +754,7 @@ int main(int argc, const char** argv) {
         parser.addOption('a', "angle", "Ray angle in degrees (0 orthogonal, 90 parallel)", true, OPT_ANGLE);
         parser.addOption('b', "basis", "Number of basis functions", true, OPT_BASIS);
         parser.addOption('r', "ray-samples", "Number of ray sample points", true, OPT_RAYSAMPLES);
+        parser.addOption('m', "max-stepsize", "Maximum step size to use in function-space approach. 0 for infinite, -1 for automatic", true, OPT_MAX_STEPSIZE);
         parser.addOption('\0', "beckmann", "Sample normals using beckmman distribution", false, OPT_BECKMANN);
         parser.addOption('\0', "weight-space", "Sample normals using weight space approach", false, OPT_WEIGHTSPACE);
         parser.addOption('\0', "function-space", "Sample normals using function space approach", false, OPT_FUNCTIONSPACE);
@@ -769,6 +775,7 @@ int main(int argc, const char** argv) {
         double _angle = 0;
         int _numBasis = 300;
         int _numRaySamples = 64;
+        double _maxStepSize = -1;
 
         bool _doWeightspace = parser.isPresent(OPT_WEIGHTSPACE);
         bool _doBeckmann = parser.isPresent(OPT_BECKMANN);
@@ -811,6 +818,9 @@ int main(int argc, const char** argv) {
         if (parser.isPresent(OPT_RAYSAMPLES))
             _numRaySamples = std::atoi(parser.param(OPT_RAYSAMPLES).c_str());
 
+        if (parser.isPresent(OPT_MAX_STEPSIZE))
+            _maxStepSize = std::atof(parser.param(OPT_MAX_STEPSIZE).c_str());
+
         for (const std::string &p : parser.operands()) {
             std::shared_ptr<JsonDocument> document;
             try {
@@ -846,7 +856,12 @@ int main(int argc, const char** argv) {
 
                     float alpha = gp->_cov->compute_beckmann_roughness();
                     float bound = gp->noIntersectBound(Vec3d(0.), 0.9999);
-                    float maxStepsize = gp->goodStepsize(Vec3d(0.), 0.99);
+
+                    float maxStepsize = _maxStepSize;
+                    if(_maxStepSize < 0) {
+                        maxStepsize = gp->goodStepsize(Vec3d(0.), 0.99);
+                    }
+
                     std::cout << "Beckmann roughness: " << alpha << "\n";
                     std::cout << "0.9999 percentile: " << bound << "\n";
                     std::cout << "Good stepsize: " << maxStepsize << "\n";
