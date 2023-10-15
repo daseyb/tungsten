@@ -797,6 +797,157 @@ Eigen::MatrixXd GaussianProcess::sample_cond(
 }
 
 
+double GaussianProcess::eval(
+    const Vec3d* points, const double* values, const Derivative* derivative_types, size_t numPts,
+    const Vec3d* ddirs,
+    Vec3d deriv_dir) const {
+
+    Eigen::Map<const Eigen::VectorXd> eval_values_View(values, numPts);
+    if (_globalCondPs.size() == 0) {
+        auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, ddirs, deriv_dir, numPts);
+        auto mvn = MultivariateNormalDistribution(ps_mean, ps_cov);
+        return mvn.eval(eval_values_View);
+    }
+    else {
+        auto mvn = create_mvn_cond(points, derivative_types, numPts,
+            ddirs,
+            _globalCondPs.data(), _globalCondValues.data(), _globalCondDerivs.data(), 0,
+            _globalCondDerivDirs.data(),
+            deriv_dir);
+        return mvn.eval(eval_values_View);
+    }
+}
+
+MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
+    const Vec3d* points, const Derivative* derivative_types, size_t numPts,
+    const Vec3d* ddirs,
+    const Vec3d* cond_points, const double* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+    const Vec3d* cond_ddirs,
+    Vec3d deriv_dir) const {
+
+    std::vector<Vec3d> cond_ps;
+    std::vector<Derivative> cond_derivs;
+    std::vector<Vec3d> cond_dds;
+    std::vector<double> cond_vs;
+
+    if (_globalCondPs.size() > 0) {
+        cond_ps.resize(_globalCondPs.size() + numCondPts);
+        cond_derivs.resize(_globalCondDerivs.size() + numCondPts);
+        cond_dds.resize(_globalCondDerivDirs.size() + numCondPts);
+        cond_vs.resize(_globalCondValues.size() + numCondPts);
+
+        std::copy(cond_points, cond_points + numCondPts, cond_ps.begin());
+        std::copy(_globalCondPs.begin(), _globalCondPs.end(), cond_ps.begin() + numCondPts);
+
+        std::copy(cond_derivative_types, cond_derivative_types + numCondPts, cond_derivs.begin());
+        std::copy(_globalCondDerivs.begin(), _globalCondDerivs.end(), cond_derivs.begin() + numCondPts);
+
+        if (cond_ddirs != nullptr) {
+            std::copy(cond_ddirs, cond_ddirs + numCondPts, cond_dds.begin());
+        }
+        else {
+            std::fill_n(cond_dds.begin(), numCondPts, deriv_dir);
+        }
+        std::copy(_globalCondDerivDirs.begin(), _globalCondDerivDirs.end(), cond_dds.begin() + numCondPts);
+
+        std::copy(cond_values, cond_values + numCondPts, cond_vs.begin());
+        std::copy(_globalCondValues.begin(), _globalCondValues.end(), cond_vs.begin() + numCondPts);
+
+        cond_points = cond_ps.data();
+        cond_derivative_types = cond_derivs.data();
+        cond_ddirs = _globalCondDerivDirs.data();
+        cond_values = cond_vs.data();
+
+        numCondPts = cond_ps.size();
+    }
+
+    if (numCondPts == 0) {
+        auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, ddirs, deriv_dir, numPts);
+        return MultivariateNormalDistribution(ps_mean, ps_cov);
+    }
+
+    CovMatrix s11 = cov(
+        cond_points, cond_points,
+        cond_derivative_types, cond_derivative_types,
+        cond_ddirs, cond_ddirs,
+        deriv_dir, numCondPts, numCondPts);
+
+    CovMatrix s12 = cov(
+        cond_points, points,
+        cond_derivative_types, derivative_types,
+        cond_ddirs, ddirs,
+        deriv_dir, numCondPts, numPts);
+
+    CovMatrix solved;
+
+#ifdef SPARSE_COV
+    if (s11.rows() > 16) {
+        Eigen::BDCSVD<Eigen::MatrixXd> solver(s11, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        solver.setThreshold(_covEps);
+
+        if (solver.info() != Eigen::ComputationInfo::Success) {
+            std::cerr << "Conditioning decomposition failed (BDCSVD)!\n";
+        }
+
+        Eigen::MatrixXd solvedDense = solver.solve(s12.toDense()).transpose();
+        solved = solvedDense.sparseView();
+        if (solver.info() != Eigen::ComputationInfo::Success) {
+            std::cerr << "Conditioning solving failed (BDCSVD)!\n";
+        }
+    }
+    else {
+        Eigen::SimplicialLDLT<CovMatrix> solver;
+        solver.compute(s11);
+        if (solver.info() != Eigen::ComputationInfo::Success) {
+            std::cerr << "Conditioning decomposition failed (LDLT)!\n";
+        }
+
+        solved = solver.solve(s12).transpose();
+        if (solver.info() != Eigen::ComputationInfo::Success) {
+            std::cerr << "Conditioning solving failed (LDLT)!\n";
+        }
+    }
+#else
+    Eigen::HouseholderQR<CovMatrix> solver(s11);
+    solver.compute(s11);
+    if (solver.info() != Eigen::ComputationInfo::Success) {
+        std::cerr << "Conditioning decomposition failed!\n";
+    }
+
+    CovMatrix solved = solver.solve(s12).transpose();
+    if (solver.info() != Eigen::ComputationInfo::Success) {
+        std::cerr << "Conditioning solving failed!\n";
+    }
+#endif
+
+    Eigen::Map<const Eigen::VectorXd> cond_values_view(cond_values, numCondPts);
+    Eigen::VectorXd m2 = mean(points, derivative_types, ddirs, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, cond_ddirs, deriv_dir, numCondPts)));
+
+    CovMatrix s22 = cov(
+        points, points,
+        derivative_types, derivative_types,
+        ddirs, ddirs,
+        deriv_dir, numPts, numPts);
+
+    CovMatrix s2 = s22 - (solved * s12);
+
+    return MultivariateNormalDistribution(m2, s2);
+}
+
+double GaussianProcess::eval_cond(
+    const Vec3d* points, const double* values, const Derivative* derivative_types, size_t numPts,
+    const Vec3d* ddirs,
+    const Vec3d* cond_points, const double* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+    const Vec3d* cond_ddirs,
+    Vec3d deriv_dir) const {
+
+    Eigen::Map<const Eigen::VectorXd> eval_values_View(values, numPts);
+    auto mvn = create_mvn_cond(points, derivative_types, numPts, ddirs, 
+        cond_points, cond_values, cond_derivative_types, numCondPts, cond_ddirs,
+        deriv_dir);
+
+    return mvn.eval(eval_values_View);
+}
 
 // Get me some bits
 uint64_t GaussianProcess::vec2uint(Vec2f v) const {
@@ -935,9 +1086,87 @@ Eigen::VectorXd sample_standard_normal(int n, PathSampleGenerator& sampler) {
     return result;
 }
 
+MultivariateNormalDistribution::MultivariateNormalDistribution(const Eigen::VectorXd& _mean, const CovMatrix& _cov) : mean(_mean) {
+    svd = Eigen::BDCSVD<Eigen::MatrixXd>(_cov, Eigen::ComputeThinU | Eigen::ComputeThinV);
+
+    double logDetCov = svd.singularValues().array().log().sum();
+    sqrt2PiN = std::exp(logDetCov);
+
+    // Compute the square root of the PSD matrix
+    normTransform = svd.matrixU() * svd.singularValues().array().max(0).sqrt().matrix().asDiagonal() * svd.matrixV().transpose();
+}
+
+double MultivariateNormalDistribution::eval(const Eigen::VectorXd& x) const {
+    Eigen::VectorXd diff = x - mean;
+    
+    double quadform = diff.transpose() * svd.solve(diff);
+
+    double inv_sqrt_2pi = 0.3989422804014327;
+    double normConst = pow(inv_sqrt_2pi, x.rows()) * pow(sqrt2PiN, -.5);
+    return normConst * exp(-.5 * quadform);
+}
+
+Eigen::MatrixXd MultivariateNormalDistribution::sample(const Constraint* constraints, int numConstraints,
+    int samples, PathSampleGenerator& sampler) const {
+
+    // Generate a vector of standard normal variates with the same dimension as the mean
+    Eigen::VectorXd z = Eigen::VectorXd(mean.size());
+    Eigen::MatrixXd sample(mean.size(), samples);
+
+    int numTries = 0;
+    for (int j = 0; j < samples; /*only advance sample idx if the sample passes all constraints*/) {
+
+        numTries++;
+
+        // We're always getting two samples, so make use of that
+        for (int i = 0; i < mean.size() / 2; i++) {
+            Vec2d norm_samp = rand_normal_2(sampler); // { (float)random_standard_normal(sampler), (float)random_standard_normal(sampler) };
+            z(i * 2) = norm_samp.x();
+            z(i * 2 + 1) = norm_samp.y();
+        }
+
+        // Fill up the last one for an uneven number of samples
+        if (mean.size() % 2) {
+            Vec2d norm_samp = rand_normal_2(sampler);
+            z(mean.size() - 1) = norm_samp.x();
+        }
+
+        Eigen::VectorXd currSample = mean + normTransform * z;
+
+        // Check constraints
+        bool passedConstraints = true;
+        for (int cIdx = 0; cIdx < numConstraints; cIdx++) {
+            const Constraint& con = constraints[cIdx];
+
+            for (int i = con.startIdx; i <= con.endIdx; i++) {
+                if (currSample(i) < con.minV || currSample(i) > con.maxV) {
+                    //currSample *= -1;
+                    passedConstraints = false;
+                    break;
+                }
+            }
+
+            if (!passedConstraints) {
+                break;
+            }
+        }
+
+        if (passedConstraints || numTries > 100000) {
+            if (numTries > 100000) {
+                std::cout << "Constraint not satisfied. " << mean(0) << "\n";
+            }
+            sample.col(j) = currSample;
+            j++;
+            numTries = 0;
+        }
+    }
+
+    return sample;
+}
+
 Eigen::MatrixXd sample_multivariate_normal(
     const Eigen::VectorXd& mean, const CovMatrix& cov,
-    const GaussianProcess::Constraint* constraints, int numConstraints,
+    const Constraint* constraints, int numConstraints,
     int samples, PathSampleGenerator& sampler) {
 
     Eigen::MatrixXd normTransform;
@@ -1013,7 +1242,7 @@ Eigen::MatrixXd sample_multivariate_normal(
         // Check constraints
         bool passedConstraints = true;
         for (int cIdx = 0; cIdx < numConstraints; cIdx++) {
-            const GaussianProcess::Constraint& con = constraints[cIdx];
+            const Constraint& con = constraints[cIdx];
 
             for (int i = con.startIdx; i <= con.endIdx; i++) {
                 if (currSample(i) < con.minV || currSample(i) > con.maxV) {

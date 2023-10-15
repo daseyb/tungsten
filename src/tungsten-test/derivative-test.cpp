@@ -36,10 +36,60 @@ void directional_deriv_testing() {
 
 }
 
+void mvn_testing() {
+    CovMatrix cov(2,2);
+    cov.coeffRef(0, 0) = 1;
+    cov.coeffRef(0, 1) = 0.5;
+    cov.coeffRef(1, 0) = 0.5;
+    cov.coeffRef(1, 1) = 1;
+
+    Eigen::VectorXd mean(2);
+    mean(0) = 1;
+    mean(1) = 2;
+
+    MultivariateNormalDistribution mvn(mean, cov);
+
+    UniformPathSampler sampler(0);
+    sampler.next2D();
+    auto samples = mvn.sample(nullptr, 0, 10000, sampler);
+
+    std::vector<double> pdf;
+    std::vector< Eigen::Vector2d> pdf_ps;
+
+    for (int j = 0; j < 100; j++) {
+        for (int i = 0; i < 100; i++) {
+            Eigen::Vector2d p = { i / 99. * 9 - 3, j / 99. * 9 - 3 };
+            pdf.push_back(mvn.eval(p));
+            pdf_ps.push_back(p);
+        }
+    }
+
+    Path basePath = Path("testing/basic/mvn");
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
+
+    {
+        std::ofstream xfile("testing/basic/mvn/samples.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)samples.data(), sizeof(double) * samples.size());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile("testing/basic/mvn/pdf.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)pdf.data(), sizeof(double) * pdf.size());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile("testing/basic/mvn/pdf_points.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)pdf_ps.data(), sizeof(pdf_ps[0]) * pdf_ps.size());
+        xfile.close();
+    }
+}
+
 int main() {
-
-    directional_deriv_testing();
-
+    mvn_testing();
     return 0;
 
 	auto gp = std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.0f, 1.0f));

@@ -391,7 +391,7 @@ namespace Tungsten {
             std::array<Vec3d, 1> cond_pts = { points[0] };
             std::array<Derivative, 1> cond_deriv = { Derivative::None };
             std::array<double, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
-            std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
+            std::array<Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
             gpSamples = _gp->sample_cond(
                 points.data(), derivs.data(), _samplePoints, nullptr,
                 cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
@@ -622,7 +622,7 @@ namespace Tungsten {
                     std::array<Vec3d, 1> cond_pts = { points[0] };
                     std::array<Derivative, 1> cond_deriv = { Derivative::None };
                     std::array<double, 1> cond_vs = { _gp->sample_start_value(points[0], sampler) };
-                    std::array<GaussianProcess::Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
+                    std::array<Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
                     gpSamples = _gp->sample_cond(
                         points.data(), derivs.data(), points.size(), nullptr,
                         cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,

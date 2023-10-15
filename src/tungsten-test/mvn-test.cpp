@@ -91,7 +91,7 @@ int main() {
     }
 
     {
-        std::array<GaussianProcess::Constraint, 1> constraints = { { 0, 0, 0, FLT_MAX } };
+        std::array<Constraint, 1> constraints = { { 0, 0, 0, FLT_MAX } };
         Eigen::MatrixXf samples = gp.sample(points.data(), derivs.data(), points.size(), nullptr, constraints.data(), constraints.size(), rd, 50, sampler).cast<float>();
         std::ofstream xfile("samples-free-space.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)samples.data(), sizeof(float) * samples.rows() * samples.cols());
@@ -99,7 +99,7 @@ int main() {
     }
 
     {
-        std::array<GaussianProcess::Constraint, 1> constraints = { { 0, 0, 0, FLT_MAX } };
+        std::array<Constraint, 1> constraints = { { 0, 0, 0, FLT_MAX } };
 
         Eigen::MatrixXd samples = gp.sample(
             points.data(), derivs.data(), points.size(), nullptr,
@@ -150,7 +150,7 @@ int main() {
         std::array<Vec3d, 2> cond_pts = { points[0], points[0] };
         std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
         std::array<double, 2> cond_vs = { 0, 1 };
-        std::array<GaussianProcess::Constraint, 0> constraints = {  };
+        std::array<Constraint, 0> constraints = {  };
 
 
         Eigen::MatrixXf samples = gp.sample_cond(
@@ -168,7 +168,7 @@ int main() {
         std::array<Vec3d, 2> cond_pts = { points[0], points[0] };
         std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
         std::array<double, 2> cond_vs = { 0, 1 };
-        std::array<GaussianProcess::Constraint, 0> constraints = {  };
+        std::array<Constraint, 0> constraints = {  };
 
         Eigen::MatrixXf samples = gp.sample_cond(
             points.data(), derivs.data(), points.size(), nullptr,

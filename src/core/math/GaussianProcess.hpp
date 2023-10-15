@@ -58,13 +58,28 @@ namespace Tungsten {
         return d.dot(Vec{ aniso.x(), aniso.y(), aniso.z() }.cwiseProduct(d));
     }
 
+#define SPARSE_COV
+#ifdef SPARSE_COV
+    using CovMatrix = Eigen::SparseMatrix<double>;
+#else
+    using CovMatrix = Eigen::MatrixXd;
+#endif
+
     // Box muller transform
     Vec2d rand_normal_2(PathSampleGenerator& sampler);
     double rand_truncated_normal(double mean, double sigma, double a, PathSampleGenerator& sampler);
-    Eigen::VectorXd sample_standard_normal(int n, PathSampleGenerator& sampler);
-
-
     double rand_gamma(double shape, double mean, PathSampleGenerator& samples);
+
+    struct Constraint {
+        int startIdx, endIdx;
+        float minV, maxV;
+    };
+    
+    Eigen::VectorXd sample_standard_normal(int n, PathSampleGenerator& sampler);
+    Eigen::MatrixXd sample_multivariate_normal(
+        const Eigen::VectorXd& mean, const CovMatrix& cov,
+        const Constraint* constraints, int numConstraints,
+        int samples, PathSampleGenerator& sampler);
 
     class Grid;
     class MeanFunction;
@@ -713,21 +728,29 @@ namespace Tungsten {
         virtual Vec3d dmean_da(Vec3d a) const override;
     };
 
-#define SPARSE_COV
 
-#ifdef SPARSE_COV
-    using CovMatrix = Eigen::SparseMatrix<double>;
-#else
-    using CovMatrix = Eigen::MatrixXd;
-#endif
+
+    struct MultivariateNormalDistribution {
+        Eigen::VectorXd mean;
+
+        Eigen::BDCSVD<Eigen::MatrixXd> svd;
+        //Eigen::LLT<Eigen::MatrixXd> chol;
+
+        double sqrt2PiN;
+
+        Eigen::MatrixXd normTransform;
+
+        MultivariateNormalDistribution(const Eigen::VectorXd& _mean, const CovMatrix& _cov);
+
+        double eval(const Eigen::VectorXd& x) const;
+
+        Eigen::MatrixXd sample(const Constraint* constraints, int numConstraints,
+            int samples, PathSampleGenerator& sampler) const;
+    };
 
     class GaussianProcess : public JsonSerializable {
     public:
 
-        struct Constraint {
-            int startIdx, endIdx;
-            float minV, maxV;
-        };
 
         GaussianProcess() : _mean(std::make_shared<HomogeneousMean>()), _cov(std::make_shared<SquaredExponentialCovariance>()) { }
         GaussianProcess(std::shared_ptr<MeanFunction> mean, std::shared_ptr<CovarianceFunction> cov) : _mean(mean), _cov(cov) { }
@@ -751,6 +774,13 @@ namespace Tungsten {
 
         double sample_start_value(Vec3d p, PathSampleGenerator& sampler) const;
 
+        MultivariateNormalDistribution create_mvn_cond(
+            const Vec3d* points, const Derivative* derivative_types, size_t numPts,
+            const Vec3d* ddirs,
+            const Vec3d* cond_points, const double* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+            const Vec3d* cond_ddirs,
+            Vec3d deriv_dir) const;
+
         Eigen::MatrixXd sample(
             const Vec3d* points, const Derivative* derivative_types, size_t numPts,
             const Vec3d* ddirs,
@@ -764,6 +794,20 @@ namespace Tungsten {
             const Vec3d* cond_ddirs,
             const Constraint* constraints, size_t numConstraints,
             Vec3d deriv_dir, int samples, PathSampleGenerator& sampler) const;
+
+
+        double eval(
+            const Vec3d* points, const double* values, const Derivative* derivative_types, size_t numPts,
+            const Vec3d* ddirs,
+            Vec3d deriv_dir) const;
+
+
+        double eval_cond(
+            const Vec3d* points, const double* values, const Derivative* derivative_types, size_t numPts,
+            const Vec3d* ddirs,
+            const Vec3d* cond_points, const double* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+            const Vec3d* cond_ddirs,
+            Vec3d deriv_dir) const;
 
 
         void setConditioning(std::vector<Vec3d> globalCondPs, 
@@ -797,11 +841,6 @@ namespace Tungsten {
         size_t _maxEigenvaluesN = 64;
         float _covEps = 0.f;
     };
-
-    Eigen::MatrixXd sample_multivariate_normal(
-        const Eigen::VectorXd& mean, const CovMatrix& cov,
-        const GaussianProcess::Constraint* constraints, int numConstraints,
-        int samples, PathSampleGenerator& sampler);
 }
 
 #endif /* GAUSSIANPROCESS_HPP_ */
