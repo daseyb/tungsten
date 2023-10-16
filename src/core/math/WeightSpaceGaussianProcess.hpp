@@ -9,7 +9,7 @@ namespace Tungsten {
 struct WeightSpaceBasis;
 
 struct WeightSpaceRealization {
-    const WeightSpaceBasis& basis;
+    std::shared_ptr<WeightSpaceBasis> basis;
     std::shared_ptr<GaussianProcess> gp;
     Eigen::VectorXd weights;
 
@@ -21,6 +21,8 @@ struct WeightSpaceRealization {
     RangeBound rangeBound(const Vec3d& c, const std::vector<Vec3d>& vs) const;
 
     double lipschitz() const;
+
+    static WeightSpaceRealization sample(std::shared_ptr<WeightSpaceBasis> basis, std::shared_ptr<GaussianProcess> gp, PathSampleGenerator& sampler);
 };
 
 struct WeightSpaceBasis {

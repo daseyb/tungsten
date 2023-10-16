@@ -1,4 +1,4 @@
-#include <core/media/GaussianProcessMedium.hpp>
+#include <core/media/FunctionSpaceGaussianProcessMedium.hpp>
 #include <core/math/GaussianProcess.hpp>
 #include <core/sampling/UniformPathSampler.hpp>
 #include <core/math/Ray.hpp>
@@ -640,7 +640,7 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, int see
         maxStepSize = 100000.f;
     }
 
-    auto gp_med = std::make_shared<GaussianProcessMedium>(
+    auto gp_med = std::make_shared<FunctionSpaceGaussianProcessMedium>(
         gp, 0, 1, 1, numRaySamplePoints, 
         nsm == GPNormalSamplingMethod::Beckmann ? GPCorrelationContext::Goldfish : GPCorrelationContext::Goldfish,
         nsm == GPNormalSamplingMethod::Beckmann ? GPIntersectMethod::Mean : GPIntersectMethod::GPDiscrete, 

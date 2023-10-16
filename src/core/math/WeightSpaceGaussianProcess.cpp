@@ -8,7 +8,7 @@ double WeightSpaceRealization::evaluate(const Vec3d& p) const {
     Derivative d = Derivative::None;
     double c = (*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d());
     double scale = sqrt(c);
-    return scale * basis.evaluate(vec_conv<Eigen::Vector3d>(p), weights) + gp->mean(&p, &d, nullptr, Vec3d(0.), 1)(0);
+    return scale * basis->evaluate(vec_conv<Eigen::Vector3d>(p), weights) + gp->mean(&p, &d, nullptr, Vec3d(0.), 1)(0);
 }
 
 Affine<1> WeightSpaceRealization::evaluate(const Affine<3>& p) const {
@@ -16,7 +16,7 @@ Affine<1> WeightSpaceRealization::evaluate(const Affine<3>& p) const {
     
     // Assume constant variance
     double scale = sqrt((*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d()));
-    auto basisRes = basis.evaluate(p, weights) * scale; 
+    auto basisRes = basis->evaluate(p, weights) * scale; 
     auto np = p;
     np.aff.resize(Eigen::NoChange, std::max(basisRes.aff.cols(), p.aff.cols()));
     np.aff.setZero();
@@ -29,7 +29,7 @@ Affine<1> WeightSpaceRealization::evaluate(const Affine<3>& p) const {
 Vec3d WeightSpaceRealization::evaluateGradient(const Vec3d& p) const {
     Derivative d = Derivative::None;
     double scale = sqrt((*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d()));
-    return scale * basis.evaluateGradient(vec_conv<Eigen::Vector3d>(p), weights) + gp->_mean->dmean_da(p);
+    return scale * basis->evaluateGradient(vec_conv<Eigen::Vector3d>(p), weights) + gp->_mean->dmean_da(p);
 }
 
 
@@ -42,7 +42,7 @@ Eigen::VectorXd WeightSpaceRealization::evaluate(const Vec3d* ps, size_t num_ps)
 }
 
 double WeightSpaceRealization::lipschitz() const {
-    return sqrt((*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d())) * basis.lipschitz(weights) + gp->_mean->lipschitz();
+    return sqrt((*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d())) * basis->lipschitz(weights) + gp->_mean->lipschitz();
 }
 
 RangeBound WeightSpaceRealization::rangeBound(const Vec3d& c, const std::vector<Vec3d>& vs) const {
@@ -147,9 +147,16 @@ WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> co
     return b;
 }
 
+WeightSpaceRealization WeightSpaceRealization::sample(std::shared_ptr<WeightSpaceBasis> basis, std::shared_ptr<GaussianProcess> gp, PathSampleGenerator& sampler) {
+    return WeightSpaceRealization{
+        basis, gp, sample_standard_normal(basis->size(), sampler)
+    };
+}
+
+
 WeightSpaceRealization WeightSpaceBasis::sampleRealization(std::shared_ptr<GaussianProcess> gp, PathSampleGenerator& sampler) const {
     return WeightSpaceRealization{
-        *this, gp, sample_standard_normal(size(), sampler)
+        std::make_shared<WeightSpaceBasis>(*this), gp, sample_standard_normal(size(), sampler)
     };
 }
 

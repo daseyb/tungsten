@@ -1,5 +1,5 @@
 #include <core/math/GaussianProcess.hpp>
-#include <core/media/GaussianProcessMedium.hpp>
+#include <core/media/FunctionSpaceGaussianProcessMedium.hpp>
 #include <core/sampling/UniformPathSampler.hpp>
 #include <core/math/Ray.hpp>
 #include <fstream>
@@ -19,7 +19,7 @@ void sample_ray_realizations(std::shared_ptr<GaussianProcess> gp, int samples, R
     numMicroSamplesPts = (numMicroSamplesPts / numMacroSteps) * numMacroSteps;
     
     float meanv = gp->_mean->operator()(Derivative::None, Vec3d(0.f), Vec3d(1.f));
-    GaussianProcessMedium gp_med(gp, 0, 1, 1, numMicroSamplesPts, corrCtxt);
+    FunctionSpaceGaussianProcessMedium gp_med(gp, 0, 1, 1, numMicroSamplesPts, corrCtxt);
     gp_med.prepareForRender();
 
     UniformPathSampler sampler(0);
@@ -132,12 +132,11 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
         FileUtils::createDirectory(basePath);
     }
 
-    auto gp_med = std::make_shared<GaussianProcessMedium>(
+    auto gp_med = std::make_shared<FunctionSpaceGaussianProcessMedium>(
         gp, 0, 1, 1, numMicroSamplesPts,
         corrCtxt,
         GPIntersectMethod::GPDiscrete,
         nsm);
-
     gp_med->loadResources();
     gp_med->prepareForRender();
 

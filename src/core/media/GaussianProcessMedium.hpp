@@ -8,20 +8,6 @@ namespace Tungsten {
 
 class GaussianProcess;
 
-struct GPContext {
-
-};
-
-struct GPContextWeightSpace : public GPContext {
-
-};
-
-struct GPContextFunctionSpace : public GPContext {
-    std::vector<Vec3d> points;
-    std::vector<double> values;
-    std::vector<Derivative> derivs;
-};
-
 enum class GPCorrelationContext {
     Elephant,
     Goldfish,
@@ -31,7 +17,6 @@ enum class GPCorrelationContext {
 
 enum class GPIntersectMethod {
     Mean,
-    MeanRaymarch,
     GPDiscrete
 };
 
@@ -40,6 +25,17 @@ enum class GPNormalSamplingMethod {
     ConditionedGaussian,
     Beckmann,
     GGX
+};
+
+
+struct GPContext {
+
+};
+
+struct GPContextFunctionSpace : public GPContext {
+    std::vector<Vec3d> points;
+    std::vector<double> values;
+    std::vector<Derivative> derivs;
 };
 
 class GaussianProcessMedium : public Medium
@@ -51,13 +47,10 @@ class GaussianProcessMedium : public Medium
     Vec3f _sigmaT;
     bool _absorptionOnly;
 
-    int _samplePoints;
-
+protected:
     GPCorrelationContext _ctxt = GPCorrelationContext::Goldfish;
     GPIntersectMethod _intersectMethod = GPIntersectMethod::GPDiscrete;
     GPNormalSamplingMethod _normalSamplingMethod = GPNormalSamplingMethod::ConditionedGaussian;
-
-
 
 public:
     static GPCorrelationContext stringToCorrelationContext(const std::string& name);
@@ -72,9 +65,9 @@ public:
     std::shared_ptr<GaussianProcess> _gp;
     GaussianProcessMedium();
     GaussianProcessMedium(std::shared_ptr<GaussianProcess> gp, 
-        float materialSigmaA, float materialSigmaS, float density, int samplePoints,
+        float materialSigmaA, float materialSigmaS, float density,
         GPCorrelationContext ctxt = GPCorrelationContext::Goldfish, GPIntersectMethod intersectMethod = GPIntersectMethod::GPDiscrete, GPNormalSamplingMethod normalSamplingMethod = GPNormalSamplingMethod::ConditionedGaussian) :
-        _gp(gp), _materialSigmaA(materialSigmaA), _materialSigmaS(materialSigmaS), _density(density), _samplePoints(samplePoints),
+        _gp(gp), _materialSigmaA(materialSigmaA), _materialSigmaS(materialSigmaS), _density(density),
         _ctxt(ctxt), _intersectMethod(intersectMethod), _normalSamplingMethod(normalSamplingMethod)
     {}
 
@@ -90,14 +83,13 @@ public:
     virtual Vec3f sigmaS(Vec3f p) const override;
     virtual Vec3f sigmaT(Vec3f p) const override;
 
-    bool sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3d& ip,
+    virtual bool sampleGradient(PathSampleGenerator& sampler, const Ray& ray, const Vec3d& ip,
         MediumState& state,
-        Vec3d& grad) const;
+        Vec3d& grad) const = 0;
 
     bool intersect(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const;
-    bool intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const;
+    virtual bool intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const = 0;
     bool intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const;
-    bool intersectMeanRaymarch(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const;
 
     virtual bool sampleDistance(PathSampleGenerator &sampler, const Ray &ray,
             MediumState &state, MediumSample &sample) const override;

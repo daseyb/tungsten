@@ -667,6 +667,21 @@ Eigen::MatrixXd GaussianProcess::sample(
 
     if (_globalCondPs.size() == 0) {
         auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dirs, deriv_dir, numPts);
+        auto mvn = MultivariateNormalDistribution(ps_mean, ps_cov);
+        return mvn.sample(constraints, numConstraints, samples, sampler);
+    }
+    else {
+        auto mvn = create_mvn_cond(points, derivative_types, numPts,
+            deriv_dirs,
+            _globalCondPs.data(), _globalCondValues.data(), _globalCondDerivs.data(), 0,
+            _globalCondDerivDirs.data(),
+            deriv_dir);
+        return mvn.sample(constraints, numConstraints, samples, sampler);
+    }
+
+#if 0
+    if (_globalCondPs.size() == 0) {
+        auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dirs, deriv_dir, numPts);
         return sample_multivariate_normal(ps_mean, ps_cov, constraints, numConstraints, samples, sampler);
     }
     else {
@@ -678,6 +693,7 @@ Eigen::MatrixXd GaussianProcess::sample(
             constraints, numConstraints,
             deriv_dir, samples, sampler);
     }
+#endif
 }
 
 Eigen::MatrixXd GaussianProcess::sample_cond(
@@ -688,6 +704,13 @@ Eigen::MatrixXd GaussianProcess::sample_cond(
     const Constraint* constraints, size_t numConstraints,
     Vec3d deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
+    auto mvn = create_mvn_cond(points, derivative_types, numPts, deriv_dirs,
+        cond_points, cond_values, cond_derivative_types, numCondPts, cond_deriv_dirs,
+        deriv_dir);
+
+    return mvn.sample(constraints, numConstraints, samples, sampler);
+
+#if 0
     std::vector<Vec3d> cond_ps;
     std::vector<Derivative> cond_derivs;
     std::vector<Vec3d> cond_dds;
@@ -794,6 +817,7 @@ Eigen::MatrixXd GaussianProcess::sample_cond(
     CovMatrix s2 = s22 - (solved * s12);
 
     return sample_multivariate_normal(m2, s2, constraints, numConstraints, samples, sampler);
+#endif
 }
 
 
@@ -930,6 +954,10 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         deriv_dir, numPts, numPts);
 
     CovMatrix s2 = s22 - (solved * s12);
+
+    if (m2.hasNaN()) {
+        std::cerr << "Posterior mean contains NaNs!\n";
+    }
 
     return MultivariateNormalDistribution(m2, s2);
 }
@@ -1089,11 +1117,21 @@ Eigen::VectorXd sample_standard_normal(int n, PathSampleGenerator& sampler) {
 MultivariateNormalDistribution::MultivariateNormalDistribution(const Eigen::VectorXd& _mean, const CovMatrix& _cov) : mean(_mean) {
     svd = Eigen::BDCSVD<Eigen::MatrixXd>(_cov, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
-    double logDetCov = svd.singularValues().array().log().sum();
+    if (svd.info() != Eigen::Success) {
+        std::cerr << "SVD for MVN computations failed!\n";
+    }
+
+    double logDetCov = 0;
+    for (int i = 0; i < svd.nonzeroSingularValues(); i++) {
+        logDetCov += log(svd.singularValues()(i));
+    }
     sqrt2PiN = std::exp(logDetCov);
 
     // Compute the square root of the PSD matrix
     normTransform = svd.matrixU() * svd.singularValues().array().max(0).sqrt().matrix().asDiagonal() * svd.matrixV().transpose();
+    if (normTransform.hasNaN()) {
+        std::cerr << "MVN sampling transform has nans!\n";
+    }
 }
 
 double MultivariateNormalDistribution::eval(const Eigen::VectorXd& x) const {
@@ -1159,6 +1197,10 @@ Eigen::MatrixXd MultivariateNormalDistribution::sample(const Constraint* constra
             j++;
             numTries = 0;
         }
+    }
+
+    if (sample.hasNaN()) {
+        std::cerr << "MVN Sample contains NaNs!\n";
     }
 
     return sample;

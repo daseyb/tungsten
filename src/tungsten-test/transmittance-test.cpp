@@ -1,5 +1,5 @@
 #include <core/math/GaussianProcess.hpp>
-#include <core/media/GaussianProcessMedium.hpp>
+#include <core/media/FunctionSpaceGaussianProcessMedium.hpp>
 #include <core/sampling/UniformPathSampler.hpp>
 #include <core/math/Ray.hpp>
 #include <fstream>
@@ -17,7 +17,7 @@ float rices_formula(float u, float L0, float L2) {
 
 void sample_ffds(std::shared_ptr<GaussianProcess> gp) {
     float meanv = gp->_mean->operator()(Derivative::None, Vec3d(0.f), Vec3d(1.f));
-    GaussianProcessMedium gp_med(gp, 0, 1, 1, NUM_SAMPLE_POINTS);
+    FunctionSpaceGaussianProcessMedium gp_med(gp, 0, 1, 1, NUM_SAMPLE_POINTS);
     gp_med.prepareForRender();
 
     UniformPathSampler sampler(0);

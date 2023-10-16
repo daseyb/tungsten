@@ -1,5 +1,5 @@
 #include <core/math/GaussianProcess.hpp>
-#include <core/media/GaussianProcessMedium.hpp>
+#include <core/media/FunctionSpaceGaussianProcessMedium.hpp>
 #include <core/sampling/UniformPathSampler.hpp>
 #include <core/math/Ray.hpp>
 #include <fstream>
@@ -94,7 +94,7 @@ int main() {
 
 	auto gp = std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.0f, 1.0f));
 
-    GaussianProcessMedium gp_med(gp, 0, 1, 1, NUM_SAMPLE_POINTS);
+    FunctionSpaceGaussianProcessMedium gp_med(gp, 0, 1, 1, NUM_SAMPLE_POINTS);
     gp_med.prepareForRender();
     
     UniformPathSampler sampler(0);

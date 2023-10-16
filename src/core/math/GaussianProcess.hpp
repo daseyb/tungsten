@@ -84,6 +84,8 @@ namespace Tungsten {
     class Grid;
     class MeanFunction;
 
+    
+
     enum class Derivative : uint8_t {
         None = 0,
         First = 1
@@ -727,8 +729,6 @@ namespace Tungsten {
         virtual double mean(Vec3d a) const override;
         virtual Vec3d dmean_da(Vec3d a) const override;
     };
-
-
 
     struct MultivariateNormalDistribution {
         Eigen::VectorXd mean;
