@@ -509,7 +509,7 @@ bool TraceBase::handleVolume(PathSampleGenerator &sampler, MediumSample &mediumS
     if (!mediumSample.phase->sample(sampler, ray.dir(), mediumSample, phaseSample))
         return false;
 
-    ray = ray.scatter(mediumSample.p, phaseSample.w, 0.0f);
+    ray = ray.scatter(mediumSample.p, phaseSample.w, 0.f);
     ray.setPrimaryRay(false);
     throughput *= phaseSample.weight;
 

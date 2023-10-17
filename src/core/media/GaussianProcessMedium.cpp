@@ -208,6 +208,11 @@ namespace Tungsten {
         sample.emission = Vec3f(0.0f);
         float maxT = ray.farT();
 
+        if (maxT == 0.f) {
+            std::cerr << "Can't sample distance with farT == 0\n";
+            return false;
+        }
+
         if (state.bounce >= _maxBounce) {
             sample.t = maxT;
             sample.weight = Vec3f(1.f);
@@ -236,6 +241,7 @@ namespace Tungsten {
 
                 Vec3d grad;
                 if (!sampleGradient(sampler, ray, vec_conv<Vec3d>(ip), state, grad)) {
+                    std::cout << "Failed to sample gradient.\n";
                     return false;
                 }
 

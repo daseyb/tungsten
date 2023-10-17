@@ -905,9 +905,24 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
     CovMatrix solved;
 
 #ifdef SPARSE_COV
-    if (s11.rows() > 16) {
+    bool succesfullSolve = false;
+    if (s11.rows() <= 16) {
+        Eigen::SimplicialLDLT<CovMatrix> solver;
+        solver.compute(s11);
+        if (solver.info() == Eigen::ComputationInfo::Success) {
+            solved = solver.solve(s12).transpose();
+            if (solver.info() == Eigen::ComputationInfo::Success) {
+                succesfullSolve = true;
+            }
+            else {
+                std::cerr << "Conditioning solving failed (LDLT)!\n";
+            }
+        }
+    }
+
+    if (!succesfullSolve) {
         Eigen::BDCSVD<Eigen::MatrixXd> solver(s11, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        solver.setThreshold(_covEps);
+        //solver.setThreshold(_covEps);
 
         if (solver.info() != Eigen::ComputationInfo::Success) {
             std::cerr << "Conditioning decomposition failed (BDCSVD)!\n";
@@ -919,18 +934,7 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
             std::cerr << "Conditioning solving failed (BDCSVD)!\n";
         }
     }
-    else {
-        Eigen::SimplicialLDLT<CovMatrix> solver;
-        solver.compute(s11);
-        if (solver.info() != Eigen::ComputationInfo::Success) {
-            std::cerr << "Conditioning decomposition failed (LDLT)!\n";
-        }
 
-        solved = solver.solve(s12).transpose();
-        if (solver.info() != Eigen::ComputationInfo::Success) {
-            std::cerr << "Conditioning solving failed (LDLT)!\n";
-        }
-    }
 #else
     Eigen::HouseholderQR<CovMatrix> solver(s11);
     solver.compute(s11);

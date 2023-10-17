@@ -47,6 +47,7 @@ Vec3f PathTracer::traceSample(Vec2u pixel, PathSampleGenerator &sampler)
     int bounce = 0;
     bool didHit = _scene->intersect(ray, data, info);
     bool wasSpecular = true;
+
     while ((didHit || medium) && bounce < _settings.maxBounces) {
         bool hitSurface = true;
         if (medium) {
@@ -58,6 +59,10 @@ Vec3f PathTracer::traceSample(Vec2u pixel, PathSampleGenerator &sampler)
             hitSurface = mediumSample.exited;
             if (hitSurface && !didHit)
                 break;
+
+            if (abs(mediumSample.t - ray.farT()) < 0.0000001f && !mediumSample.exited) {
+                std::cerr << "Reached end of ray, but not counting it as exited...\n";
+            }
         }
 
         if (hitSurface) {
@@ -136,6 +141,10 @@ Vec3f PathTracer::traceSample(Vec2u pixel, PathSampleGenerator &sampler)
         bounce++;
         if (bounce < _settings.maxBounces)
             didHit = _scene->intersect(ray, data, info);
+
+        if (ray.farT() == 0.f) {
+            std::cerr << "Path tracing bounces ended with farT == 0. Was surface event? " << (hitSurface ? "yes" : "no") << "\n";
+        }
     }
     if (bounce >= _settings.minBounces && bounce < _settings.maxBounces)
         handleInfiniteLights(data, info, _settings.enableLightSampling, ray, throughput, wasSpecular, emission);
