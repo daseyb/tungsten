@@ -1,6 +1,7 @@
 #include "WeightSpaceGaussianProcess.hpp"
 
 #include <sampling/SampleWarp.hpp>
+#include <math/TangentFrame.hpp>
 
 namespace Tungsten {
 
@@ -117,6 +118,8 @@ double WeightSpaceBasis::lipschitz(const Eigen::VectorXd& weights) const {
 WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> cov, int n, PathSampleGenerator& sampler) {
     WeightSpaceBasis b(n);
     b.weightNorm = 0;
+    TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame({0., 1., 0.});
+
     for (int i = 0; i < n; i++) {
         b.offsets(i) = sampler.next1D() * TWO_PI;
         
@@ -129,7 +132,8 @@ WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> co
 #elif 1
         auto dir2d = cov->sample_spectral_density_2d(sampler);
         auto dir = Vec3d(dir2d.x(), dir2d.y(), 0.);
-        b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir.normalized());
+
+        b.dirs.row(i) = frame.toGlobal(vec_conv<Eigen::Vector3d>(dir.normalized()));
         b.freqs(i) = dir.length();
         b.freqWeights(i) = 1.;
 

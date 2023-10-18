@@ -21,5 +21,5 @@
 #SBATCH --time=24:00:00
 # Email notifications (comma-separated options: BEGIN,END,FAIL)
 #SBATCH --mail-type=FAIL
-./build/tungsten-weight-space-test --threads 1 --spp 2048 --seed $((${SLURM_ARRAY_TASK_ID})) --angle 85 --basis 3000 -d $DATA_DIR/normal-gen ./data/microfacet-settings/covariances-smith-test.json  --weight-space
-./build/tungsten-weight-space-test --threads 1 --spp 2048 --seed $((${SLURM_ARRAY_TASK_ID})) --angle 89 --basis 3000 -d $DATA_DIR/normal-gen ./data/microfacet-settings/covariances-smith-test.json  --weight-space
+./build/tungsten-weight-space-test --threads 1 --spp 1024 --seed $((${SLURM_ARRAY_TASK_ID})) --angle 85 -d $DATA_DIR/normal-gen ./data/microfacet-settings/se-single.json -r 2048 --function-space --tag "-newcond"
+./build/tungsten-weight-space-test --threads 1 --spp 1024 --seed $((${SLURM_ARRAY_TASK_ID})) --angle 85 -d $DATA_DIR/normal-gen ./data/microfacet-settings/rq-single.json -r 2048 --function-space --tag "-newcond"

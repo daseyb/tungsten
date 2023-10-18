@@ -293,7 +293,7 @@ namespace Tungsten {
 
                 grad = vec_conv<Vec3d>(frame.toGlobal({
                     gradSamples(0,0), gradSamples(1,0), ctxt.values[ctxt.points.size()-1]
-                })).normalized();
+                }));
 
                 if (!std::isfinite(grad.avg())) {
                     std::cout << "Sampled gradient invalid.\n";
