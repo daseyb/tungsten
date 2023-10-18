@@ -58,7 +58,7 @@ namespace Tungsten {
         return d.dot(Vec{ aniso.x(), aniso.y(), aniso.z() }.cwiseProduct(d));
     }
 
-#define SPARSE_COV
+//#define SPARSE_COV
 #ifdef SPARSE_COV
     using CovMatrix = Eigen::SparseMatrix<double>;
 #else
@@ -771,6 +771,12 @@ namespace Tungsten {
             const Derivative* dtypes_a, const Derivative* dtypes_b,
             const Vec3d* ddirs_a, const Vec3d* ddirs_b,
             Vec3d deriv_dir, size_t numPtsA, size_t numPtsB) const;
+
+        CovMatrix cov_sym(
+            const Vec3d* points_a,
+            const Derivative* dtypes_a,
+            const Vec3d* ddirs_a,
+            Vec3d deriv_dir, size_t numPtsA) const;
 
         double sample_start_value(Vec3d p, PathSampleGenerator& sampler) const;
 

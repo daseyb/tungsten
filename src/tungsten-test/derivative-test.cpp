@@ -47,7 +47,7 @@ void mvn_testing() {
     mean(0) = 1;
     mean(1) = 2;
 
-    MultivariateNormalDistribution mvn(mean, cov);
+    MultivariateNormalDistribution mvn(mean, cov.triangularView<Eigen::Lower>());
 
     UniformPathSampler sampler(0);
     sampler.next2D();

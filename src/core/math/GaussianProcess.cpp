@@ -580,7 +580,7 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
         const Vec3d& ddir_a = ddirs ? ddirs[i] : deriv_dir;
         ps_mean(i) = (*_mean)(derivative_types[i], points[i], ddir_a);
 
-        for (size_t j = 0; j < numPts; j++) {
+        for (size_t j = 0; j <= i; j++) {
             const Vec3d& ddir_b = ddirs ? ddirs[j] : deriv_dir;
             double cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], ddir_a, ddir_b);
 
@@ -651,6 +651,44 @@ CovMatrix GaussianProcess::cov(
     return ps_cov;
 }
 
+CovMatrix GaussianProcess::cov_sym(
+    const Vec3d* points_a,
+    const Derivative* dtypes_a,
+    const Vec3d* ddirs_a,
+    Vec3d deriv_dir, size_t numPtsA) const {
+    CovMatrix ps_cov(numPtsA, numPtsA);
+
+#ifdef SPARSE_COV
+    std::vector<Eigen::Triplet<double>> tripletList;
+    tripletList.reserve(min(numPtsA * numPtsB / 10, (size_t)10000));
+#endif
+
+
+    for (size_t i = 0; i < numPtsA; i++) {
+        const Vec3d& ddir_a = ddirs_a ? ddirs_a[i] : deriv_dir;
+        for (size_t j = 0; j <= i; j++) {
+            const Vec3d& ddir_b = ddirs_a ? ddirs_a[j] : deriv_dir;
+
+            double cov_ij = (*_cov)(dtypes_a[i], dtypes_a[j], points_a[i], points_a[j], ddir_a, ddir_b);
+
+#ifdef SPARSE_COV
+            if (i == j || std::abs(cov_ij) > _covEps) {
+                tripletList.push_back(Eigen::Triplet<double>(i, j, cov_ij));
+            }
+#else
+            ps_cov(i, j) = cov_ij;
+#endif
+        }
+    }
+
+#ifdef SPARSE_COV
+    ps_cov.setFromTriplets(tripletList.begin(), tripletList.end());
+    ps_cov.makeCompressed();
+#endif
+
+    return ps_cov;
+}
+
 double GaussianProcess::sample_start_value(Vec3d p, PathSampleGenerator& sampler) const {
     double m = (*_mean)(Derivative::None, p, Vec3d(0.f));
     double sigma = sqrt((*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.)));
@@ -678,22 +716,6 @@ Eigen::MatrixXd GaussianProcess::sample(
             deriv_dir);
         return mvn.sample(constraints, numConstraints, samples, sampler);
     }
-
-#if 0
-    if (_globalCondPs.size() == 0) {
-        auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dirs, deriv_dir, numPts);
-        return sample_multivariate_normal(ps_mean, ps_cov, constraints, numConstraints, samples, sampler);
-    }
-    else {
-
-        return sample_cond(points, derivative_types, numPts,
-            deriv_dirs,
-            _globalCondPs.data(), _globalCondValues.data(), _globalCondDerivs.data(), 0,
-            _globalCondDerivDirs.data(),
-            constraints, numConstraints,
-            deriv_dir, samples, sampler);
-    }
-#endif
 }
 
 Eigen::MatrixXd GaussianProcess::sample_cond(
@@ -781,11 +803,11 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         return MultivariateNormalDistribution(ps_mean, ps_cov);
     }
 
-    CovMatrix s11 = cov(
-        cond_points, cond_points,
-        cond_derivative_types, cond_derivative_types,
-        cond_ddirs, cond_ddirs,
-        deriv_dir, numCondPts, numCondPts);
+    CovMatrix s11 = cov_sym(
+        cond_points,
+        cond_derivative_types,
+        cond_ddirs,
+        deriv_dir, numCondPts);
 
     CovMatrix s12 = cov(
         cond_points, points,
@@ -795,11 +817,13 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
 
     CovMatrix solved;
 
-#ifdef SPARSE_COV
     bool succesfullSolve = false;
     if (s11.rows() <= 16) {
-        Eigen::SimplicialLDLT<CovMatrix> solver;
-        solver.compute(s11);
+#ifdef SPARSE_COV
+        Eigen::SimplicialLLT<CovMatrix> solver(s11.triangularView<Eigen::Lower>());
+#else
+        Eigen::LLT<Eigen::MatrixXd> solver(s11.triangularView<Eigen::Lower>());
+#endif
         if (solver.info() == Eigen::ComputationInfo::Success) {
             solved = solver.solve(s12).transpose();
             if (solver.info() == Eigen::ComputationInfo::Success) {
@@ -812,47 +836,34 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
     }
 
     if (!succesfullSolve) {
-        Eigen::BDCSVD<Eigen::MatrixXd> solver(s11, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        //solver.setThreshold(_covEps);
+        Eigen::BDCSVD<Eigen::MatrixXd> solver(s11.triangularView<Eigen::Lower>(), Eigen::ComputeThinU | Eigen::ComputeThinV);
 
         if (solver.info() != Eigen::ComputationInfo::Success) {
             std::cerr << "Conditioning decomposition failed (BDCSVD)!\n";
         }
 
+#ifdef SPARSE_COV
         Eigen::MatrixXd solvedDense = solver.solve(s12.toDense()).transpose();
         solved = solvedDense.sparseView();
+#else
+        Eigen::MatrixXd solved = solver.solve(s12).transpose();
+#endif
         if (solver.info() != Eigen::ComputationInfo::Success) {
             std::cerr << "Conditioning solving failed (BDCSVD)!\n";
         }
     }
 
-#else
-    Eigen::HouseholderQR<CovMatrix> solver(s11);
-    solver.compute(s11);
-    if (solver.info() != Eigen::ComputationInfo::Success) {
-        std::cerr << "Conditioning decomposition failed!\n";
-    }
-
-    CovMatrix solved = solver.solve(s12).transpose();
-    if (solver.info() != Eigen::ComputationInfo::Success) {
-        std::cerr << "Conditioning solving failed!\n";
-    }
-#endif
-
     Eigen::Map<const Eigen::VectorXd> cond_values_view(cond_values, numCondPts);
     Eigen::VectorXd m2 = mean(points, derivative_types, ddirs, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, cond_ddirs, deriv_dir, numCondPts)));
 
-    CovMatrix s22 = cov(
-        points, points,
-        derivative_types, derivative_types,
-        ddirs, ddirs,
-        deriv_dir, numPts, numPts);
+    CovMatrix s22 = cov_sym(
+        points,
+        derivative_types,
+        ddirs,
+        deriv_dir, numPts);
 
-    CovMatrix s2 = s22 - (solved * s12);
-
-    if (m2.hasNaN()) {
-        std::cerr << "Posterior mean contains NaNs!\n";
-    }
+    CovMatrix s2(numPts, numPts);
+    s2 = s22 - (solved * s12);
 
     return MultivariateNormalDistribution(m2, s2);
 }
@@ -1010,6 +1021,7 @@ Eigen::VectorXd sample_standard_normal(int n, PathSampleGenerator& sampler) {
 }
 
 MultivariateNormalDistribution::MultivariateNormalDistribution(const Eigen::VectorXd& _mean, const CovMatrix& _cov) : mean(_mean) {
+#if 0
     svd = Eigen::BDCSVD<Eigen::MatrixXd>(_cov, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
     if (svd.info() != Eigen::Success) {
@@ -1024,9 +1036,36 @@ MultivariateNormalDistribution::MultivariateNormalDistribution(const Eigen::Vect
 
     // Compute the square root of the PSD matrix
     normTransform = svd.matrixU() * svd.singularValues().array().max(0).sqrt().matrix().asDiagonal() * svd.matrixV().transpose();
-    if (normTransform.hasNaN()) {
-        std::cerr << "MVN sampling transform has nans!\n";
+
+#else
+
+#ifdef SPARSE_COV
+    Eigen::SimplicialLLT<CovMatrix> chol(_cov);
+#else
+    Eigen::LLT<Eigen::MatrixXd> chol(_cov.triangularView<Eigen::Lower>());
+#endif
+
+    // We can only use the cholesky decomposition if 
+      // the covariance matrix is symmetric, pos-definite.
+      // But a covariance matrix might be pos-semi-definite.
+      // In that case, we'll go to an EigenSolver
+    if (chol.info() == Eigen::Success) {
+        // Use cholesky solver
+        normTransform = chol.matrixL();
     }
+    else
+    {
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigs(_cov);
+
+        if (eigs.info() != Eigen::ComputationInfo::Success) {
+            std::cerr << "Matrix square root failed!\n";
+        }
+
+        normTransform = eigs.eigenvectors()
+            * eigs.eigenvalues().cwiseMax(0).cwiseSqrt().asDiagonal();
+    }
+#endif
+
 }
 
 double MultivariateNormalDistribution::eval(const Eigen::VectorXd& x) const {
@@ -1091,10 +1130,6 @@ Eigen::MatrixXd MultivariateNormalDistribution::sample(const Constraint* constra
             j++;
             numTries = 0;
         }
-    }
-
-    if (sample.hasNaN()) {
-        std::cerr << "MVN Sample contains NaNs!\n";
     }
 
     return sample;

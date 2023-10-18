@@ -21,7 +21,7 @@
             "sample_points": 32,
 			"gaussian_process": {
 				"type": "standard",
-				"covariance_epsilon": 0,
+				"covariance_epsilon": 0.0,
 				"mean": {
 					"type": "linear",
 					"reference_point": [0,-1,0],
@@ -189,7 +189,7 @@
         "enable_resume_render": false,
         "stratified_sampler": false,
         "scene_bvh": true,
-        "spp": 2,
+        "spp": 1,
         "spp_step": 1,
         "checkpoint_interval": "0",
         "timeout": "0"
