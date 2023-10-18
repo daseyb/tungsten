@@ -124,7 +124,7 @@ namespace Tungsten {
             }
             case GPCorrelationContext::Goldfish:
             {
-                std::array<Vec3d, 2> cond_pts = { lastIntersectPt, lastIntersectPt };
+                std::array<Vec3d, 2> cond_pts = { lastIntersectPt, ro };
                 std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
 
                 double rayDeriv = state.lastAniso.dot(rd);
@@ -169,7 +169,7 @@ namespace Tungsten {
 
         double prevV = gpSamples(0, 0);
 
-        if (prevV < 0) {
+        if (state.firstScatter && prevV < 0) {
             return false;
         }
 
@@ -180,21 +180,18 @@ namespace Tungsten {
             if (currV < 0) {
                 double offsetT = prevV / (prevV - currV);
                 t = lerp(prevT, currT, offsetT);
-                if (abs(t - maxT) < 0.00001) {
-                    break;
-                }
 
                 derivs.resize(p + 1);
                 points.resize(p + 1);
                 gpSamples.conservativeResize(p + 1, Eigen::NoChange);
 
-                //points[p] = rd + t * ro;
-                //gpSamples(p, 0) = 0;
-                //derivs[p] = Derivative::None;
-
                 points[p] = rd + t * ro;
-                gpSamples(p, 0) = (prevV - currV) / (prevT - currT);
-                derivs[p] = Derivative::First;
+                gpSamples(p, 0) = 0;
+                derivs[p] = Derivative::None;
+
+                //points[p] = rd + t * ro;
+                //gpSamples(p, 0) = (prevV - currV) / (prevT - currT);
+                //derivs[p] = Derivative::First;
 
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
                 ctxt->derivs = std::move(derivs);
@@ -264,20 +261,18 @@ namespace Tungsten {
 
             if (ctxt.derivs[ctxt.points.size() - 1] == Derivative::None) {
                 std::array<Vec3d, 3> gradDirs{
-                    vec_conv<Vec3d>(frame.tangent),
-                    vec_conv<Vec3d>(frame.bitangent),
-                    vec_conv<Vec3d>(frame.normal)
+                    Vec3d(1., 0., 0.),
+                    Vec3d(0., 1., 0.),
+                    Vec3d(0., 0., 1.),
                 };
 
                 auto gradSamples = _gp->sample_cond(
-                    gradPs.data(), gradDerivs.data(), gradPs.size(), gradDirs.data(),
+                    gradPs.data(), gradDerivs.data(), gradDirs.size(), gradDirs.data(),
                     ctxt.points.data(), ctxt.values.data(), ctxt.derivs.data(), ctxt.points.size(), nullptr,
                     nullptr, 0,
                     rd, 1, sampler);
 
-                grad = vec_conv<Vec3d>(frame.toGlobal({
-                    gradSamples(0,0), gradSamples(1,0), gradSamples(2,0)
-                }));
+                grad = {gradSamples(0,0), gradSamples(1,0), gradSamples(2,0)};
             }
             else {
                 std::array<Vec3d, 2> gradDirs{

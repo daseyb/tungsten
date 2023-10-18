@@ -87,7 +87,7 @@
 	    {
             "name": "floor",
             "transform": {
-				"position": [ 0, -1.01, 0],
+				"position": [ 0, -1.1, 0],
                 "scale": [
                     200,
                     400,
@@ -105,7 +105,7 @@
         {
             "name": "upper",
             "transform": {
-				"position": [ 0, -0.99, 0],
+				"position": [ 0, -0.9, 0],
                 "scale": [
                     200,
                     400,
