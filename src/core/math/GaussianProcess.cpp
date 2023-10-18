@@ -1010,7 +1010,7 @@ Eigen::VectorXd sample_standard_normal(int n, PathSampleGenerator& sampler) {
 }
 
 MultivariateNormalDistribution::MultivariateNormalDistribution(const Eigen::VectorXd& _mean, const CovMatrix& _cov) : mean(_mean) {
-    /*svd = Eigen::BDCSVD<Eigen::MatrixXd>(_cov, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    svd = Eigen::BDCSVD<Eigen::MatrixXd>(_cov, Eigen::ComputeThinU | Eigen::ComputeThinV);
 
     if (svd.info() != Eigen::Success) {
         std::cerr << "SVD for MVN computations failed!\n";
@@ -1026,30 +1026,6 @@ MultivariateNormalDistribution::MultivariateNormalDistribution(const Eigen::Vect
     normTransform = svd.matrixU() * svd.singularValues().array().max(0).sqrt().matrix().asDiagonal() * svd.matrixV().transpose();
     if (normTransform.hasNaN()) {
         std::cerr << "MVN sampling transform has nans!\n";
-    }*/
-
-#ifdef SPARSE_COV
-    Eigen::SimplicialLLT<CovMatrix> chol(_cov);
-#else
-    Eigen::LLT<Eigen::MatrixXd> chol(_cov);
-#endif
-    // We can only use the cholesky decomposition if 
-    // the covariance matrix is symmetric, pos-definite.
-    // But a covariance matrix might be pos-semi-definite.
-    // In that case, we'll go to an EigenSolver
-    if (chol.info() == Eigen::Success) {
-        // Use cholesky solver
-        normTransform = chol.matrixL();
-    }
-    else 
-    {
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigs(_cov);
-        if (eigs.info() != Eigen::ComputationInfo::Success) {
-            std::cerr << "Matrix square root failed!\n";
-        }
-
-        normTransform = eigs.eigenvectors() 
-            * eigs.eigenvalues().cwiseMax(0).cwiseSqrt().asDiagonal();
     }
 }
 
@@ -1097,7 +1073,6 @@ Eigen::MatrixXd MultivariateNormalDistribution::sample(const Constraint* constra
 
             for (int i = con.startIdx; i <= con.endIdx; i++) {
                 if (currSample(i) < con.minV || currSample(i) > con.maxV) {
-                    //currSample *= -1;
                     passedConstraints = false;
                     break;
                 }

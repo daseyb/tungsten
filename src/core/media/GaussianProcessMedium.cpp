@@ -241,6 +241,7 @@ namespace Tungsten {
                 }
 
                 if (grad.dot(vec_conv<Vec3d>(ray.dir())) > 0) {
+                    std::cout << "Sampled gradient points in the wrong direction.\n";
                     return false;
                 }
 

@@ -51,14 +51,14 @@ namespace Tungsten {
 
 
         for (int i = 0; i < _samplePoints; i++) {
-            double t = lerp(ray.nearT(), ray.nearT() + min(1000.f, ray.farT() - ray.nearT()), clamp((i - tOffset) / (_samplePoints-1), 0.f, 1.f));
+            double rt = lerp(ray.nearT(), ray.nearT() + min(1000.f, ray.farT() - ray.nearT()), clamp((i - tOffset) / (_samplePoints-1), 0.f, 1.f));
             if (i == 0)
-                t = ray.nearT();
+                rt = ray.nearT();
             else if (i == _samplePoints - 1)
-                t = ray.nearT() + min(1000.f, ray.farT() - ray.nearT());
+                rt = ray.nearT() + min(1000.f, ray.farT() - ray.nearT());
 
-            ts[i] =  t;
-            points[i] = ro + t * rd;
+            ts[i] =  rt;
+            points[i] = ro + rt * rd;
             derivs[i] = Derivative::None;
         }
 
@@ -79,6 +79,10 @@ namespace Tungsten {
         }
         else {
             auto ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
+
+            if (ctxt->points.size() == 0) {
+                std::cerr << "Empty context!\n";
+            }
 
             assert(ctxt->points.size() > 0);
 
@@ -129,6 +133,12 @@ namespace Tungsten {
 
                 double rayDeriv = state.lastAniso.dot(rd);
 
+                if ((lastIntersectPt - ro).lengthSq() > 0.000001) {
+                    std::cerr << "Last intersect point does not correspond to ray origin. " << lastIntersectPt << "!=" << ro << "\n";
+                    std::cerr << "Last val is. " << lastIntersectVal << "\n";
+                }
+
+
                 std::array<double, 2> cond_vs = { lastIntersectVal, rayDeriv };
 
                 startSign = 1;
@@ -169,9 +179,12 @@ namespace Tungsten {
 
         double prevV = gpSamples(0, 0);
 
-        if (state.firstScatter && prevV < 0) {
+        if (prevV < -0.1) {
+            std::cerr << "First sample along ray was way less than 0: " << prevV << "\n";
             return false;
         }
+
+        prevV = max(prevV, 0.);
 
         double prevT = ts[0];
         for (int p = 1; p < _samplePoints; p++) {
@@ -181,17 +194,21 @@ namespace Tungsten {
                 double offsetT = prevV / (prevV - currV);
                 t = lerp(prevT, currT, offsetT);
 
-                derivs.resize(p + 1);
-                points.resize(p + 1);
-                gpSamples.conservativeResize(p + 1, Eigen::NoChange);
+                if (t >= maxT) {
+                    std::cerr << "Somehow got a distance that's greater than the max distance.\n";
+                }
 
-                points[p] = rd + t * ro;
+                derivs.resize(p + 2);
+                points.resize(p + 2);
+                gpSamples.conservativeResize(p + 2, Eigen::NoChange);
+
+                points[p] = ro + t * rd;
                 gpSamples(p, 0) = 0;
                 derivs[p] = Derivative::None;
 
-                //points[p] = rd + t * ro;
-                //gpSamples(p, 0) = (prevV - currV) / (prevT - currT);
-                //derivs[p] = Derivative::First;
+                points[p+1] = ro + t * rd;
+                gpSamples(p+1, 0) = (prevV - currV) / (prevT - currT);
+                derivs[p+1] = Derivative::First;
 
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
                 ctxt->derivs = std::move(derivs);
@@ -261,9 +278,9 @@ namespace Tungsten {
 
             if (ctxt.derivs[ctxt.points.size() - 1] == Derivative::None) {
                 std::array<Vec3d, 3> gradDirs{
-                    Vec3d(1., 0., 0.),
-                    Vec3d(0., 1., 0.),
-                    Vec3d(0., 0., 1.),
+                    vec_conv<Vec3d>(frame.tangent),
+                    vec_conv<Vec3d>(frame.bitangent),
+                    vec_conv<Vec3d>(frame.normal)
                 };
 
                 auto gradSamples = _gp->sample_cond(
@@ -289,11 +306,11 @@ namespace Tungsten {
                 grad = vec_conv<Vec3d>(frame.toGlobal({
                     gradSamples(0,0), gradSamples(1,0), ctxt.values[ctxt.points.size()-1]
                 }));
+            }
 
-                if (!std::isfinite(grad.avg())) {
-                    std::cout << "Sampled gradient invalid.\n";
-                    return false;
-                }
+            if (!std::isfinite(grad.avg())) {
+                std::cout << "Sampled gradient invalid.\n";
+                return false;
             }
 
             break;
