@@ -833,7 +833,7 @@ namespace Tungsten {
         // From numpy
         double random_standard_normal(PathSampleGenerator& sampler) const;
         double noIntersectBound(Vec3d p = Vec3d(0.), double q = 0.9999) const;
-        double goodStepsize(Vec3d p = Vec3d(0.), double targetCov = 0.95) const;
+        double goodStepsize(Vec3d p = Vec3d(0.), double targetCov = 0.95, Vec3d rd = Vec3d(1., 0., 0.)) const;
 
         std::vector<Vec3d> _globalCondPs;
         std::vector<Derivative> _globalCondDerivs;

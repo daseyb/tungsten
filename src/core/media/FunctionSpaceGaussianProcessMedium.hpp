@@ -10,12 +10,18 @@ class GaussianProcess;
 class FunctionSpaceGaussianProcessMedium : public GaussianProcessMedium
 {
     int _samplePoints;
+    double _stepSizeCov;
 
 public:
     FunctionSpaceGaussianProcessMedium();
     FunctionSpaceGaussianProcessMedium(std::shared_ptr<GaussianProcess> gp, 
         float materialSigmaA, float materialSigmaS, float density, int samplePoints,
-        GPCorrelationContext ctxt = GPCorrelationContext::Goldfish, GPIntersectMethod intersectMethod = GPIntersectMethod::GPDiscrete, GPNormalSamplingMethod normalSamplingMethod = GPNormalSamplingMethod::ConditionedGaussian) : GaussianProcessMedium(gp, materialSigmaA, materialSigmaS, density, ctxt, intersectMethod, normalSamplingMethod), _samplePoints(samplePoints)
+        GPCorrelationContext ctxt = GPCorrelationContext::Goldfish, 
+        GPIntersectMethod intersectMethod = GPIntersectMethod::GPDiscrete, 
+        GPNormalSamplingMethod normalSamplingMethod = GPNormalSamplingMethod::ConditionedGaussian,
+        double stepSizeCov = 0) : 
+            GaussianProcessMedium(gp, materialSigmaA, materialSigmaS, density, ctxt, intersectMethod, normalSamplingMethod), 
+            _samplePoints(samplePoints), _stepSizeCov(stepSizeCov)
     {}
 
     virtual void fromJson(JsonPtr value, const Scene &scene) override;

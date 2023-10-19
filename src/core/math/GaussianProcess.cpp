@@ -862,8 +862,9 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         ddirs,
         deriv_dir, numPts);
 
-    CovMatrix s2(numPts, numPts);
-    s2 = s22 - (solved * s12);
+    CovMatrix covAdjust = (solved * s12);
+
+    CovMatrix s2 = s22 - covAdjust;
 
     return MultivariateNormalDistribution(m2, s2);
 }
@@ -931,20 +932,21 @@ double GaussianProcess::noIntersectBound(Vec3d p, double q) const
     return stddev * sqrt(2.) * boost::math::erf_inv(2 * q - 1);
 }
 
-double GaussianProcess::goodStepsize(Vec3d p, double targetCov) const
+double GaussianProcess::goodStepsize(Vec3d p, double targetCov, Vec3d rd) const
 {
     targetCov *= (*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.));
-    double stepsize = 10.;
-    double cov = (*_cov)(Derivative::None, Derivative::None, p, p + Vec3d(stepsize, 0., 0.), Vec3d(0.), Vec3d(0.));
+    double stepsize = 0.5;
+    double cov = (*_cov)(Derivative::None, Derivative::None, p, p + rd * stepsize, Vec3d(0.), Vec3d(0.));
 
-    while (std::abs(cov - targetCov) > 0.0000001) {
+    size_t it = 0;
+    while (std::abs(cov - targetCov) > 0.00000000001 && it++ < 100) {
         if (cov > targetCov) {
             stepsize *= 1.5;
         }
         else {
             stepsize *= 0.5;
         }
-        cov = (*_cov)(Derivative::None, Derivative::None, p, p + Vec3d(stepsize, 0., 0.), Vec3d(0.), Vec3d(0.));
+        cov = (*_cov)(Derivative::None, Derivative::None, p, p + rd * stepsize, Vec3d(0.), Vec3d(0.));
     } 
 
     return stepsize;

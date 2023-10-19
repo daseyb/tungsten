@@ -260,6 +260,7 @@ namespace Tungsten {
                     }
 
                     state.lastAniso = sample.aniso = grad;
+                    state.firstScatter = false;
 
                     if (!std::isfinite(sample.aniso.avg())) {
                         sample.aniso = Vec3d(1.f, 0.f, 0.f);

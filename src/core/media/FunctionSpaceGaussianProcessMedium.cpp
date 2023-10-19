@@ -20,7 +20,8 @@ namespace Tungsten {
         : GaussianProcessMedium(
             std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(), std::make_shared<SquaredExponentialCovariance>()), 
             0.f, 0.f, 1.f, GPCorrelationContext::Goldfish, GPIntersectMethod::GPDiscrete, GPNormalSamplingMethod::ConditionedGaussian),
-            _samplePoints(32)
+            _samplePoints(32),
+            _stepSizeCov(0.)
     {
     }
 
@@ -28,13 +29,15 @@ namespace Tungsten {
     {
         GaussianProcessMedium::fromJson(value, scene);
         value.getField("sample_points", _samplePoints);
+        value.getField("step_size_cov", _stepSizeCov);
     }
 
     rapidjson::Value FunctionSpaceGaussianProcessMedium::toJson(Allocator& allocator) const
     {
         return JsonObject{ GaussianProcessMedium::toJson(allocator), allocator,
             "type", "function_space_gaussian_process",
-            "sample_points", _samplePoints
+            "sample_points", _samplePoints,
+            "step_size_cov", _stepSizeCov,
         };
     }
 
@@ -47,12 +50,22 @@ namespace Tungsten {
         auto ro = vec_conv<Vec3d>(ray.pos());
         auto rd = vec_conv<Vec3d>(ray.dir()).normalized();
 
-        double rayDistance = ray.farT() - ray.nearT();
+        double maxRayDist = ray.farT() - ray.nearT();
 
-        double maxRayDist = std::min(_gp->goodStepsize(ro, 0.999) * _samplePoints, rayDistance);
+        double determinedStepSize = maxRayDist / _samplePoints;
+
+        if (_stepSizeCov > 0) {
+            double goodStepSize = _gp->goodStepsize(ro, _stepSizeCov, rd);
+
+            if (goodStepSize < determinedStepSize) {
+                determinedStepSize = goodStepSize;
+            }
+        }
+
+        maxRayDist = determinedStepSize * _samplePoints;
+
 
         double maxT = ray.nearT() + maxRayDist;
-
 
         for (int i = 0; i < _samplePoints; i++) {
             double rt = lerp((double)ray.nearT(), ray.nearT() + maxRayDist, clamp((i - tOffset) / (_samplePoints-1), 0., 1.));
@@ -287,7 +300,9 @@ namespace Tungsten {
                     nullptr, 0,
                     rd, 1, sampler);
 
-                grad = {gradSamples(0,0), gradSamples(1,0), gradSamples(2,0)};
+                grad = vec_conv<Vec3d>(frame.toGlobal({
+                    gradSamples(0,0), gradSamples(1,0), gradSamples(2,0)
+                }));
             }
             else {
                 std::array<Vec3d, 2> gradDirs{
