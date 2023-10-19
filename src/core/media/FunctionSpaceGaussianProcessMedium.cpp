@@ -42,20 +42,24 @@ namespace Tungsten {
         std::vector<Vec3d> points(_samplePoints);
         std::vector<Derivative> derivs(_samplePoints);
         std::vector<double> ts(_samplePoints);
-        float tOffset = sampler.next1D();
+        double tOffset = sampler.next1D();
 
         auto ro = vec_conv<Vec3d>(ray.pos());
         auto rd = vec_conv<Vec3d>(ray.dir()).normalized();
 
-        double maxT = t;
+        double rayDistance = ray.farT() - ray.nearT();
+
+        double maxRayDist = std::min(_gp->goodStepsize(ro, 0.999) * _samplePoints, rayDistance);
+
+        double maxT = ray.nearT() + maxRayDist;
 
 
         for (int i = 0; i < _samplePoints; i++) {
-            double rt = lerp(ray.nearT(), ray.nearT() + min(1000.f, ray.farT() - ray.nearT()), clamp((i - tOffset) / (_samplePoints-1), 0.f, 1.f));
+            double rt = lerp((double)ray.nearT(), ray.nearT() + maxRayDist, clamp((i - tOffset) / (_samplePoints-1), 0., 1.));
             if (i == 0)
                 rt = ray.nearT();
             else if (i == _samplePoints - 1)
-                rt = ray.nearT() + min(1000.f, ray.farT() - ray.nearT());
+                rt = ray.nearT() + maxRayDist;
 
             ts[i] =  rt;
             points[i] = ro + rt * rd;
@@ -63,7 +67,6 @@ namespace Tungsten {
         }
 
         Eigen::MatrixXd gpSamples;
-
 
         int startSign = 1;
         if (state.firstScatter) {
@@ -128,16 +131,10 @@ namespace Tungsten {
             }
             case GPCorrelationContext::Goldfish:
             {
-                std::array<Vec3d, 2> cond_pts = { lastIntersectPt, ro };
+                std::array<Vec3d, 2> cond_pts = { lastIntersectPt, lastIntersectPt };
                 std::array<Derivative, 2> cond_deriv = { Derivative::None, Derivative::First };
 
                 double rayDeriv = state.lastAniso.dot(rd);
-
-                if ((lastIntersectPt - ro).lengthSq() > 0.000001) {
-                    std::cerr << "Last intersect point does not correspond to ray origin. " << lastIntersectPt << "!=" << ro << "\n";
-                    std::cerr << "Last val is. " << lastIntersectVal << "\n";
-                }
-
 
                 std::array<double, 2> cond_vs = { lastIntersectVal, rayDeriv };
 

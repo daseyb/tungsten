@@ -102,22 +102,26 @@
             "type": "quad",
             "bsdf": "floor"
         },
-        {
-            "name": "upper",
+		{
+            "name": "processBox",
             "transform": {
-				"position": [ 0, -0.9, 0],
+                "position": [
+                    0,
+                    -1,
+                    0
+                ],
                 "scale": [
                     200,
-                    400,
+                    0.2,
                     200
                 ],
                 "rotation": [
                     0,
-                    90,
+                    0,
                     0
                 ]
             },
-            "type": "quad",
+            "type": "cube",
             "bsdf": "upper",
 			"int_medium": "gp"
         },

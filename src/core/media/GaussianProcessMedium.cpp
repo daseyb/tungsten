@@ -206,7 +206,14 @@ namespace Tungsten {
         MediumState & state, MediumSample & sample) const
     {
         sample.emission = Vec3f(0.0f);
-        float maxT = ray.farT();
+        auto r = ray;
+
+        double startT = r.nearT();
+        if (!std::isfinite(r.farT())) {
+            r.setFarT(startT + 2000);
+        }
+
+        float maxT = r.farT();
 
         if (maxT == 0.f || state.bounce >= _maxBounce) {
             sample.t = maxT;
@@ -227,9 +234,7 @@ namespace Tungsten {
             sample.exited = true;
         }
         else {
-            auto r = ray;
             double t = maxT;
-            double startT = r.nearT();
 
             auto ro = vec_conv<Vec3d>(r.pos());
             auto rd = vec_conv<Vec3d>(r.dir());
