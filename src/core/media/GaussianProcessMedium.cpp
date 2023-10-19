@@ -227,28 +227,50 @@ namespace Tungsten {
             sample.exited = true;
         }
         else {
+            auto r = ray;
             double t = maxT;
+            double startT = r.nearT();
 
-            sample.exited = !intersect(sampler, ray, state, t);
-            if(!sample.exited)
-            {
-                Vec3d ip = vec_conv<Vec3d>(ray.pos()) + vec_conv<Vec3d>(ray.dir()).normalized() * t;
+            auto ro = vec_conv<Vec3d>(r.pos());
+            auto rd = vec_conv<Vec3d>(r.dir());
 
-                Vec3d grad;
-                if (!sampleGradient(sampler, ray, ip, state, grad)) {
-                    std::cout << "Failed to sample gradient.\n";
-                    return false;
+            // Handle the "ray marching" case
+            // I.e. we want to allow the intersect function to not handle the whole ray
+            // In that case it will tell us it didn't intersect, but t will be less than ray.farT()
+            do {
+                r.setNearT((float)startT);
+                sample.exited = !intersect(sampler, r, state, t);
+                
+                // We sample a gradient if:
+                // (1) The ray did intersect a surface
+                // (2) The ray did not intersect a surface, but we'll need to continue
+                if (t < maxT) {
+
+                    Vec3d ip = ro + rd * t;
+
+                    Vec3d grad;
+                    if (!sampleGradient(sampler, ray, ip, state, grad)) {
+                        std::cout << "Failed to sample gradient.\n";
+                        return false;
+                    }
+
+                    state.lastAniso = sample.aniso = grad;
+
+                    if (!std::isfinite(sample.aniso.avg())) {
+                        sample.aniso = Vec3d(1.f, 0.f, 0.f);
+                        std::cout << "Gradient invalid.\n";
+                        return false;
+                    }
                 }
 
-                if (grad.dot(vec_conv<Vec3d>(ray.dir())) > 0) {
-                    std::cout << "Sampled gradient points in the wrong direction.\n";
-                    return false;
-                }
+                startT = t;
 
-                sample.aniso = grad;
-                if (!std::isfinite(sample.aniso.avg())) {
-                    sample.aniso = Vec3d(1.f, 0.f, 0.f);
-                    std::cout << "Gradient invalid.\n";
+                // We only keep going in the case where we haven't finished processing the ray yet.
+            } while (t < maxT && sample.exited);
+
+            if (!sample.exited) {
+                if (sample.aniso.dot(vec_conv<Vec3d>(ray.dir())) > 0) {
+                    std::cout << "Sampled gradient at intersection point points in the wrong direction.\n";
                     return false;
                 }
 

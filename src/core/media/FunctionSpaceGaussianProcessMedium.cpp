@@ -222,6 +222,7 @@ namespace Tungsten {
             prevT = currT;
         }
 
+        t = maxT;
         auto ctxt = std::make_shared<GPContextFunctionSpace>();
         ctxt->derivs = std::move(derivs);
         ctxt->points = std::move(points);
