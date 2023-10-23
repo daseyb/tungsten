@@ -589,7 +589,7 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
                 tripletList.push_back(Eigen::Triplet<double>(i, j, cov_ij));
             }
 #else
-            ps_cov(i, j) = cov_ij;
+            ps_cov(i, j) = ps_cov(j, i) = cov_ij;
 #endif
         }
     }
@@ -674,9 +674,10 @@ CovMatrix GaussianProcess::cov_sym(
 #ifdef SPARSE_COV
             if (i == j || std::abs(cov_ij) > _covEps) {
                 tripletList.push_back(Eigen::Triplet<double>(i, j, cov_ij));
+                tripletList.push_back(Eigen::Triplet<double>(j, i, cov_ij));
             }
 #else
-            ps_cov(i, j) = cov_ij;
+            ps_cov(j, i) = ps_cov(i, j) = cov_ij;
 #endif
         }
     }
@@ -818,11 +819,11 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
     CovMatrix solved;
 
     bool succesfullSolve = false;
-    if (s11.rows() <= 16) {
+    if (s11.rows() <= 64) {
 #ifdef SPARSE_COV
-        Eigen::SimplicialLLT<CovMatrix> solver(s11.triangularView<Eigen::Lower>());
+        Eigen::SimplicialLLT<CovMatrix> solver(s11);
 #else
-        Eigen::LLT<Eigen::MatrixXd> solver(s11.triangularView<Eigen::Lower>());
+        Eigen::LLT<CovMatrix> solver(s11.triangularView<Eigen::Lower>());
 #endif
         if (solver.info() == Eigen::ComputationInfo::Success) {
             solved = solver.solve(s12).transpose();
@@ -846,7 +847,7 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         Eigen::MatrixXd solvedDense = solver.solve(s12.toDense()).transpose();
         solved = solvedDense.sparseView();
 #else
-        Eigen::MatrixXd solved = solver.solve(s12).transpose();
+        solved = solver.solve(s12).transpose();
 #endif
         if (solver.info() != Eigen::ComputationInfo::Success) {
             std::cerr << "Conditioning solving failed (BDCSVD)!\n";
