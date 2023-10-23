@@ -3,7 +3,7 @@ import json
 import os
 
 USER_ID = "f003hxy"
-DEFAULT_ARRAY_JOB_COUNT = 512
+DEFAULT_ARRAY_JOB_COUNT = 500
 
 if __name__ == '__main__':
     result = subprocess.run(['squeue', '--user', USER_ID, "--json"], stdout=subprocess.PIPE)
@@ -29,7 +29,7 @@ if __name__ == '__main__':
                     running_tasks[job_id] = 0
 
                 # Change report file depending on where your jobs output it to
-                report_file = f"./report/output.{job_id}.{task_id}.out"
+                report_file = f"./report/output-render.{job_id}.{task_id}.out"
 
                 # Get progress from printout in report file. Adapt to your application
                 try:

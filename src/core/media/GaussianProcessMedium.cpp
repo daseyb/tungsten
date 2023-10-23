@@ -237,7 +237,7 @@ namespace Tungsten {
             double t = maxT;
 
             auto ro = vec_conv<Vec3d>(r.pos());
-            auto rd = vec_conv<Vec3d>(r.dir());
+            auto rd = vec_conv<Vec3d>(r.dir()).normalized();
 
             // Handle the "ray marching" case
             // I.e. we want to allow the intersect function to not handle the whole ray
