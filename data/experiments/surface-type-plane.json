@@ -1,0 +1,12 @@
+{
+    "name": "surface-type-plane",
+    "base_file": "gp-medium-plane-newimpl/gp-medium-plane-softlight-rough-fs-se",
+    "deps": ["envmap.hdr"],
+    "params" : {
+        "media.gp.sample_points":[4,8,16],
+        "media.gp.step_size_cov":[0,0.99],
+        "media.gp.gaussian_process.covariance.lengthScale": [1.41421,0.141421,0.0141421],
+        "media.gp.gaussian_process.covariance.aniso.0": [0, 0.5, 1],
+        "media.gp.gaussian_process.mean.scale": [1, 0.2, 0]
+    }
+}
