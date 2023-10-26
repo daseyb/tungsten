@@ -1,6 +1,7 @@
 import subprocess
 import json
 import os
+from pathlib import Path
 
 USER_ID = "f003hxy"
 DEFAULT_ARRAY_JOB_COUNT = 500
@@ -29,7 +30,13 @@ if __name__ == '__main__':
                     running_tasks[job_id] = 0
 
                 # Change report file depending on where your jobs output it to
-                report_file = f"./report/output-render.{job_id}.{task_id}.out"
+                report_file = f"./report/output.{job_id}.{task_id}.out"
+
+                if not Path(report_file).exists():
+                    report_file = f"./report/output-render.{job_id}.{task_id}.out"
+
+                if not Path(report_file).exists():
+                    report_file = f"./report/output-normalgen.{job_id}.{task_id}.out"
 
                 # Get progress from printout in report file. Adapt to your application
                 try:
