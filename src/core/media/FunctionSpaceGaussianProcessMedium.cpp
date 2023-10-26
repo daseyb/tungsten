@@ -134,7 +134,7 @@ namespace Tungsten {
                 std::array<Derivative, 1> cond_deriv = { Derivative::None };
                 std::array<double, 1> cond_vs = { lastIntersectVal };
 
-                startSign = 1; // state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())) < 0 ? -1 : 1;
+                startSign = 1;
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
                     cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,

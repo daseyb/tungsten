@@ -18,7 +18,8 @@
             "sigma_a": 0.0,
             "sigma_s": 1.0,
             "density": 1,
-            "sample_points": 32,
+            "sample_points": 16,
+            "step_size_cov": 0.99,
 			"gaussian_process": {
 				"type": "standard",
 				"covariance_epsilon": 0,
@@ -29,12 +30,12 @@
 				},
 				"covariance": {
 					"type": "mg-nonstationary",
-					"aniso": [1,1,1000],
+					"aniso": [1,1,1],
 					"cov": {
 						"type": "rational_quadratic",
-						"lengthScale": 0.0141421,
-						"sigma": 0.001,
-                        "a": 0.2
+						"lengthScale": 0.141421,
+						"sigma": 0.01,
+						"a": 0.1
 					},
 					"mean": {
 						"type": "spherical",
@@ -114,7 +115,7 @@
             "name": "outer",
             "transform": {
 				"position": [ 0, 0.5, -5],
-                "scale": 1.01
+                "scale": 1.1
             },
             "type": "sphere",
             "bsdf": "upper",
@@ -124,7 +125,7 @@
             "name": "inner",
             "transform": {
 				"position": [ 0, 0.5, -5],
-                "scale": 0.99
+                "scale": 0.9
             },
             "type": "sphere",
             "bsdf": "floor",
@@ -186,20 +187,20 @@
         "max_bounces": 20,
         "enable_consistency_checks": false,
         "enable_two_sided_shading": true,
-        "enable_light_sampling": false,
+        "enable_light_sampling": true,
         "enable_volume_light_sampling": false
     },
     "renderer": {
-        "output_file": "gp-medium-sphere-softlight-rough.png",
-        "hdr_output_file": "gp-medium-sphere-softlight-rough.exr",
+        "output_file": "gp-medium-sphere-softlight-rough-rq.png",
+        "hdr_output_file": "gp-medium-sphere-softlight-rough-rq.exr",
         "resume_render_file": "",
         "overwrite_output_files": false,
         "adaptive_sampling": false,
         "enable_resume_render": false,
         "stratified_sampler": false,
         "scene_bvh": true,
-        "spp": 64,
-        "spp_step": 8,
+        "spp": 16,
+        "spp_step": 1,
         "checkpoint_interval": "0",
         "timeout": "0"
     }
