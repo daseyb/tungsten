@@ -936,21 +936,26 @@ double GaussianProcess::noIntersectBound(Vec3d p, double q) const
 double GaussianProcess::goodStepsize(Vec3d p, double targetCov, Vec3d rd) const
 {
     targetCov *= (*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.));
-    double stepsize = 0.5;
-    double cov = (*_cov)(Derivative::None, Derivative::None, p, p + rd * stepsize, Vec3d(0.), Vec3d(0.));
+
+    double stepsize_lb = 0;
+    double stepsize_ub = 2;
+
+    double stepsize_avg = (stepsize_lb + stepsize_ub) * 0.5;
+    double cov = (*_cov)(Derivative::None, Derivative::None, p, p + rd * stepsize_avg, Vec3d(0.), Vec3d(0.));
 
     size_t it = 0;
     while (std::abs(cov - targetCov) > 0.00000000001 && it++ < 100) {
+        stepsize_avg = (stepsize_lb + stepsize_ub) * 0.5;
         if (cov > targetCov) {
-            stepsize *= 1.5;
+            stepsize_lb = stepsize_avg;
         }
         else {
-            stepsize *= 0.5;
+            stepsize_ub = stepsize_avg;
         }
-        cov = (*_cov)(Derivative::None, Derivative::None, p, p + rd * stepsize, Vec3d(0.), Vec3d(0.));
+        cov = (*_cov)(Derivative::None, Derivative::None, p, p + rd * stepsize_avg, Vec3d(0.), Vec3d(0.));
     } 
 
-    return stepsize;
+    return stepsize_avg;
 }
 
 // Box muller transform
