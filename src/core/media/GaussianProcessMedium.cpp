@@ -298,6 +298,7 @@ namespace Tungsten {
         }
         sample.p = ray.pos() + sample.t * ray.dir();
         sample.phase = _phaseFunction.get();
+        sample.ctxt = state.gpContext.get();
 
         return true;
     }
@@ -305,18 +306,26 @@ namespace Tungsten {
 
 
     Vec3f GaussianProcessMedium::transmittance(PathSampleGenerator & sampler, const Ray & ray, bool startOnSurface,
-        bool endOnSurface, MediumSample * sample) const
+        bool endOnSurface, MediumSample *sample) const
     {
         if (ray.farT() == Ray::infinity())
             return Vec3f(0.0f);
 
         MediumState state;
         state.firstScatter = startOnSurface;
-        if(!sampleDistance(sampler, ray, state, *sample)) {
+        
+        if (sample) {
+            state.lastAniso = sample->aniso;
+            // HACK: Non-owning shared_ptr
+            state.gpContext = std::shared_ptr<GPContext>(sample->ctxt, [](GPContext*) {});
+        }
+
+        MediumSample smpl;
+        if(!sampleDistance(sampler, ray, state, smpl)) {
             return Vec3f(0.f);
         }
 
-        return sample->exited ? sample->weight : Vec3f(0.);
+        return smpl.exited ? smpl.weight : Vec3f(0.);
     }
 
     float GaussianProcessMedium::pdf(PathSampleGenerator&/*sampler*/, const Ray & ray, bool startOnSurface, bool endOnSurface) const

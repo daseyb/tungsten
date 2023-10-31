@@ -360,8 +360,9 @@ namespace Tungsten {
 
         return true;
     }
+    
 
-    Vec3f FunctionSpaceGaussianProcessMedium::transmittance(PathSampleGenerator & sampler, const Ray & ray, bool startOnSurface,
+    /*Vec3f FunctionSpaceGaussianProcessMedium::transmittance(PathSampleGenerator& sampler, const Ray& ray, bool startOnSurface,
         bool endOnSurface, MediumSample * sample) const
     {
         if (ray.farT() == Ray::infinity())
@@ -439,5 +440,5 @@ namespace Tungsten {
                 return intersectMean(sampler, ray, state, t) ? Vec3f(0.f) : Vec3f(1.f);
             }
         }
-    }
+    }*/
 }

@@ -33,8 +33,8 @@ public:
 
     virtual bool intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const override;
 
-    virtual Vec3f transmittance(PathSampleGenerator & sampler, const Ray & ray, bool startOnSurface,
-        bool endOnSurface, MediumSample * sample) const override;
+    /*virtual Vec3f transmittance(PathSampleGenerator& sampler, const Ray& ray, bool startOnSurface,
+        bool endOnSurface, MediumSample * sample) const override;*/
 };
 
 }

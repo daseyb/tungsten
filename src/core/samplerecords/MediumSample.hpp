@@ -7,6 +7,7 @@
 namespace Tungsten {
 
 class PhaseFunction;
+struct GPContext;
 
 struct MediumSample
 {
@@ -21,8 +22,7 @@ struct MediumSample
     bool exited;
     Vec3d aniso;
 
-    Eigen::MatrixXd* usedSamples;
-    int usedSampleIdx;
+    GPContext* ctxt;
 };
 
 }
