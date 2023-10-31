@@ -8,6 +8,7 @@
 #include "math/Vec.hpp"
 #include "math/MathUtil.hpp"
 #include "math/Angle.hpp"
+#include "sampling/SampleWarp.hpp"
 #include <functional>
 #include <vector>
 
@@ -120,6 +121,7 @@ namespace Tungsten {
         virtual double spectral_density(double s) const;
         virtual double sample_spectral_density(PathSampleGenerator& sampler) const;
         virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler) const;
+        virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler) const;
 
         virtual void loadResources() override;
 
@@ -284,6 +286,11 @@ namespace Tungsten {
             return Vec2d(sin(angle), cos(angle)) * rad;
         }
 
+        virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler) const override {
+            double rad = (sqrt(2) * sqrt(-log(sampler.next1D()))) / _l;
+            return vec_conv<Vec3d>(SampleWarp::uniformSphere(sampler.next2D())) * rad;
+        }
+
     private:
         float _sigma, _l;
 
@@ -348,6 +355,7 @@ namespace Tungsten {
             double angle = sampler.next1D() * 2 * PI;
             return Vec2d(sin(angle), cos(angle)) * rad;
         }
+
     private:
         float _sigma, _a, _l;
 

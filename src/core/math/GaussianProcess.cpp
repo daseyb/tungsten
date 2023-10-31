@@ -87,6 +87,10 @@ Vec2d CovarianceFunction::sample_spectral_density_2d(PathSampleGenerator& sample
     return Vec2d(0.);
 }
 
+Vec3d CovarianceFunction::sample_spectral_density_3d(PathSampleGenerator& sampler) const {
+    return Vec3d(0.);
+}
+
 
 FloatD CovarianceFunction::dcov_da(Vec3Diff a, Vec3Diff b, Eigen::Array3d dirA) const {
     Eigen::Array3d zd = Eigen::Array3d::Zero();

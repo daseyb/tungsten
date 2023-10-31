@@ -276,7 +276,7 @@ namespace Tungsten {
 
             if (!sample.exited) {
                 if (sample.aniso.dot(vec_conv<Vec3d>(ray.dir())) > 0) {
-                    std::cout << "Sampled gradient at intersection point points in the wrong direction.\n";
+                    //std::cout << "Sampled gradient at intersection point points in the wrong direction. "<< sample.aniso.dot(vec_conv<Vec3d>(ray.dir())) << "\n";
                     return false;
                 }
 

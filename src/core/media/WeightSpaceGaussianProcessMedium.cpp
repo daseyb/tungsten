@@ -125,7 +125,7 @@ namespace Tungsten {
         GPContextWeightSpace& ctxt = *(GPContextWeightSpace*)state.gpContext.get();
         const WeightSpaceRealization& real = ctxt.real;
 
-        double farT = min(ray.farT(), 1000.f);
+        double farT = ray.farT();
 
         const double sig_0 = (farT - ray.nearT()) * 0.1f;
         const double delta = 0.01;
@@ -168,11 +168,13 @@ namespace Tungsten {
             t += max(nsig, delta);
 
             if (t + ray.nearT() >= farT) {
+                t += ray.nearT();
                 return false;
             }
         }
 
         std::cerr << "Ran out of iterations in mean intersect IA." << std::endl;
+        t = ray.farT();
         return false;
     }
 }

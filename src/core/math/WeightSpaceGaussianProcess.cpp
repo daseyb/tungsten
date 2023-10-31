@@ -129,11 +129,21 @@ WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> co
         auto dir = SampleWarp::uniformCylinder(sampler.next2D());
         dir.z() = 0;
         b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir);
-#elif 1
+#elif 0
         auto dir2d = cov->sample_spectral_density_2d(sampler);
         auto dir = Vec3d(dir2d.x(), dir2d.y(), 0.);
 
         b.dirs.row(i) = frame.toGlobal(vec_conv<Eigen::Vector3d>(dir.normalized()));
+        b.freqs(i) = dir.length();
+        b.freqWeights(i) = 1.;
+
+        if (!std::isfinite(b.freqs(i))) {
+            std::cerr << "Sampling error!\n";
+        }
+#elif 1
+        auto dir = cov->sample_spectral_density_3d(sampler) * vec_conv<Vec3d>(cov->_aniso);
+
+        b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir.normalized());
         b.freqs(i) = dir.length();
         b.freqWeights(i) = 1.;
 
