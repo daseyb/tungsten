@@ -161,25 +161,29 @@ namespace Tungsten {
             }
             case GPCorrelationContext::Elephant:
             {
-                //ctxt->points.erase(ctxt->points.begin(), ctxt->points.end() - 3);
-                //ctxt->derivs.erase(ctxt->derivs.begin(), ctxt->derivs.end() - 3);
-                //ctxt->values.erase(ctxt->values.begin(), ctxt->values.end() - 3);
-                //ctxt->points.push_back(lastIntersectPt);
-                //ctxt->derivs.push_back(Derivative::First);
-                //ctxt->values.push_back(state.lastAniso.dot(vec_conv<Vec3d>(ray.dir().normalized())));
+                /*std::vector<Vec3d> cond_pts = ctxt->points;
+                std::vector<Derivative> cond_derivs = ctxt->derivs;
+                std::vector<double> cond_values = ctxt->values;
 
-                /*std::array<Vec3f, 4> cond_pts = {points[0], points[0], points[0], points[0]};
-                std::array<Derivative, 4> cond_deriv = { Derivative::None, Derivative::First, Derivative::First, Derivative::First };
-                std::array<double, 4> cond_vs = { 0, state.lastAniso.x(), state.lastAniso.y(), state.lastAniso.z() };
-                std::array<Vec3f, 4> cond_dirs = { ray.dir().normalized(), 
-                    Vec3f(1.f, 0.f, 0.f), 
-                    Vec3f(0.f, 1.f, 0.f), 
-                    Vec3f(0.f, 0.f, 1.f) };*/ 
+                cond_values[cond_values.size() - 1] = state.lastAniso.dot(rd);
+                cond_derivs[cond_derivs.size() - 1] = Derivative::First;
 
                 startSign = 1;
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
-                    ctxt->points.data(), ctxt->values.data(), ctxt->derivs.data(), ctxt->points.size(), nullptr,
+                    ctxt->points.data(), cond_values.data(), cond_derivs.data(), ctxt->points.size(), nullptr,
+                    nullptr, 0,
+                    rd, 1, sampler) * startSign;*/
+
+                std::array<Vec3d, 3> cond_pts = { ctxt->points[0], lastIntersectPt, lastIntersectPt };
+                std::array<Derivative, 3> cond_deriv = { Derivative::None, Derivative::None, Derivative::First };
+
+                std::array<double, 3> cond_vs = { ctxt->values[0], lastIntersectVal, state.lastAniso.dot(rd) };
+
+                startSign = 1;
+                gpSamples = _gp->sample_cond(
+                    points.data(), derivs.data(), _samplePoints, nullptr,
+                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
                     nullptr, 0,
                     rd, 1, sampler) * startSign;
                 break;
