@@ -121,7 +121,8 @@ void sample_ray_realizations(std::shared_ptr<GaussianProcess> gp, int samples, R
     }
 }
 
-void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::string output, 
+
+void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::string output,
     int numMicroSamplesPts, float maxStepsize, float zrange, GPCorrelationContext corrCtxt, float angle = (2 * PI) / 8,
     GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian)
 {
@@ -155,12 +156,11 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
         maxStepsize = (ray.farT() - ray.nearT()) / numMicroSamplesPts;
     }
 
-
     int numMacroSteps = int(std::ceil((ray.farT() - ray.nearT()) / (numMicroSamplesPts * maxStepsize)));
 
-    std::string filename = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-samples.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, ray.farT()-ray.nearT());
+    std::string filename = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-samples.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, ray.farT() - ray.nearT());
     std::string filename_ts = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-ts.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, ray.farT() - ray.nearT());
-    std::string filename_derivs = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-derivs.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, ray.farT()-ray.nearT());
+    std::string filename_derivs = basePath.asString() + tinyformat::format("/%s-%d-%d-%.2f-derivs.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, numMacroSteps, ray.farT() - ray.nearT());
 
     std::cout << filename << "\n";
     std::cout << zrange << "\n";
@@ -174,10 +174,8 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
     std::vector<double> sampledDerivsAll;
 
     for (int s = 0; s < samples;) {
-
         std::vector<double> sampledValues;
         sampledValues.resize(numMicroSamplesPts * numMacroSteps, 0.);
-
 
         std::vector<double> sampledTs;
         sampledTs.resize(numMicroSamplesPts * numMacroSteps, ray.farT());
@@ -191,12 +189,12 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
         MediumSample sample;
         Ray tRay = ray;
         tRay.setFarT(tRay.nearT() + maxStepsize * numMicroSamplesPts);
-        
+
         int macroStep = 0;
 
         bool success = gp_med->sampleDistance(sampler, tRay, state, sample);
         auto ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
-        std::copy(ctxt->values.begin(), ctxt->values.begin() + min((size_t)numMicroSamplesPts, ctxt->values.size()-1), sampledValues.begin() + macroStep * numMicroSamplesPts);
+        std::copy(ctxt->values.begin(), ctxt->values.begin() + min((size_t)numMicroSamplesPts, ctxt->values.size() - 1), sampledValues.begin() + macroStep * numMicroSamplesPts);
         std::transform(ctxt->points.begin(), ctxt->points.begin() + min((size_t)numMicroSamplesPts, ctxt->points.size() - 1), sampledTs.begin() + macroStep * numMicroSamplesPts, [rp = vec_conv<Vec3d>(ray.pos())](auto pt) { return (pt - rp).length(); });
         sampledDerivs[macroStep] = sample.aniso.dot(vec_conv<Vec3d>(ray.dir()));
 
@@ -246,12 +244,121 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
     }
 }
 
+
+void ndf_cond_validate_new(std::shared_ptr<GaussianProcess> gp, int samples, std::string output,
+    int numMicroSamplesPts, float zrange, GPCorrelationContext corrCtxt, float angle = (2 * PI) / 8,
+    GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian)
+{
+
+    Path basePath = Path("testing/ray-realizations/") / Path(output) / Path(gp->_cov->id());
+
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
+
+    auto gp_med = std::make_shared<FunctionSpaceGaussianProcessMedium>(
+        gp, 0, 1, 1, numMicroSamplesPts,
+        corrCtxt,
+        GPIntersectMethod::GPDiscrete,
+        nsm);
+
+    gp_med->loadResources();
+    gp_med->prepareForRender();
+
+    UniformPathSampler sampler(0);
+    sampler.next2D();
+
+    Ray ray = Ray(Vec3f(0.f, 0.f, 500.f), Vec3f(sin(angle), 0.f, -cos(angle)));
+
+    Mat4f mat = Mat4f::rotAxis(Vec3f(0.f, 0.f, 1.0f), 45);
+    ray.setDir(mat.transformVector(ray.dir()).normalized());
+
+    ray.setNearT(-(ray.pos().z() - zrange) / ray.dir().z());
+    ray.setFarT(-(ray.pos().z() + zrange) / ray.dir().z());
+
+    std::string filename = basePath.asString() + tinyformat::format("/%s-%d-%.2f-samples.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, ray.farT() - ray.nearT());
+    std::string filename_ts = basePath.asString() + tinyformat::format("/%s-%d-%.2f-ts.bin", GaussianProcessMedium::correlationContextToString(corrCtxt), numMicroSamplesPts, ray.farT() - ray.nearT());
+
+    std::cout << filename << "\n";
+
+    if (Path(filename).exists()) {
+        //continue;
+    }
+
+    std::vector<double> sampledValuesAll;
+    std::vector<double> sampledTsAll;
+
+    float percentCorrect = 0.f;
+
+    for (int s = 0; s < samples;) {
+
+        std::vector<double> sampledValues(numMicroSamplesPts * 2, 0.);
+        std::vector<double> sampledTs(numMicroSamplesPts * 2, 10000.);
+
+        Medium::MediumState state;
+        state.reset();
+
+        MediumSample sample;
+
+        bool success = gp_med->sampleDistance(sampler, ray, state, sample);
+        if (!success || sample.exited) {
+            continue;
+        }
+
+        auto ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
+        std::copy(ctxt->values.begin(), ctxt->values.begin()+ min((size_t)numMicroSamplesPts, ctxt->points.size()), sampledValues.begin());
+        std::transform(ctxt->points.begin(), ctxt->points.begin() + min((size_t)numMicroSamplesPts, ctxt->points.size()), sampledTs.begin(), [rp = ctxt->points[0]](auto pt) { return (pt - rp).length(); });
+
+        auto bounceRay = Ray(sample.p, -ray.dir());
+        bounceRay.setNearT(0.f);
+        bounceRay.setFarT(sample.t-ray.nearT());
+
+        gp_med->sampleDistance(sampler, bounceRay, state, sample);
+        ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
+        std::copy(ctxt->values.begin(), ctxt->values.begin() + min((size_t)numMicroSamplesPts, ctxt->points.size()), sampledValues.begin() + numMicroSamplesPts);
+        std::transform(ctxt->points.begin(), ctxt->points.begin() + min((size_t)numMicroSamplesPts, ctxt->points.size()), sampledTs.begin() + numMicroSamplesPts, [rp = vec_conv<Vec3d>(bounceRay.pos()), off = bounceRay.farT()](auto pt) { return off + (pt - rp).length(); });
+
+
+        if (sample.exited) {
+            percentCorrect += 1;
+        }
+        
+        if (!success) {
+            continue;
+        }
+        
+        std::copy(sampledValues.begin(), sampledValues.end(), std::back_inserter(sampledValuesAll));
+        std::copy(sampledTs.begin(), sampledTs.end(), std::back_inserter(sampledTsAll));
+        s++;
+    }
+
+    std::cout << "Percent correct: " << percentCorrect / samples << "\n";
+
+    {
+        std::ofstream xfile(
+            filename,
+            std::ios::out | std::ios::binary);
+        xfile.write((char*)sampledValuesAll.data(), sizeof(double) * sampledValuesAll.size());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(
+            filename_ts,
+            std::ios::out | std::ios::binary);
+        xfile.write((char*)sampledTsAll.data(), sizeof(double) * sampledTsAll.size());
+        xfile.close();
+    }
+
+}
+
+
 int main() {
     
 
     auto mean = std::make_shared<LinearMean>(Vec3d(0.), Vec3d(0., 0., 1.), 1.);
     //auto mean = std::make_shared<HomogeneousMean>(8.0f);
-    auto gp = std::make_shared<GaussianProcess>(mean, std::make_shared<RationalQuadraticCovariance>(2.0f, 1.0f, 0.1f));
+    auto gp = std::make_shared<GaussianProcess>(mean, std::make_shared<SquaredExponentialCovariance>(1.0f, 0.1f));
     //auto gp = std::make_shared<GaussianProcess>(mean, std::make_shared<SquaredExponentialCovariance>(2.0f, 1.0f));
     gp->_cov->_aniso = Vec3f(1.0f, 1.0f, 0.f);
     gp->_covEps = 0;
@@ -279,7 +386,9 @@ int main() {
     //ndf_cond_validate(gp, samples, "microfacet", microsteps, stepSize, bound, GPCorrelationContext::Goldfish, 0. / 180 * PI);
     //ndf_cond_validate(gp, samples, "microfacet", microsteps, stepSize, bound, GPCorrelationContext::Goldfish, 10. / 180 * PI);
     
-    ndf_cond_validate(gp, samples, "microfacet", microsteps, 0, bound, GPCorrelationContext::Goldfish, 85. / 180 * PI);
+    ndf_cond_validate_new(gp, samples, "retro", 256, bound, GPCorrelationContext::Goldfish, 45. / 180 * PI);
+    ndf_cond_validate_new(gp, samples, "retro", 256, bound, GPCorrelationContext::Dori, 45. / 180 * PI);
+    ndf_cond_validate_new(gp, samples, "retro", 256, bound, GPCorrelationContext::Elephant, 45. / 180 * PI);
     
     //ndf_cond_validate(gp, samples, "microfacet", microsteps, stepSize, bound, GPCorrelationContext::Goldfish, 89. / 180 * PI);
 

@@ -161,7 +161,7 @@ namespace Tungsten {
             }
             case GPCorrelationContext::Elephant:
             {
-                /*std::vector<Vec3d> cond_pts = ctxt->points;
+                std::vector<Vec3d> cond_pts = ctxt->points;
                 std::vector<Derivative> cond_derivs = ctxt->derivs;
                 std::vector<double> cond_values = ctxt->values;
 
@@ -173,19 +173,8 @@ namespace Tungsten {
                     points.data(), derivs.data(), _samplePoints, nullptr,
                     ctxt->points.data(), cond_values.data(), cond_derivs.data(), ctxt->points.size(), nullptr,
                     nullptr, 0,
-                    rd, 1, sampler) * startSign;*/
-
-                std::array<Vec3d, 3> cond_pts = { ctxt->points[0], lastIntersectPt, lastIntersectPt };
-                std::array<Derivative, 3> cond_deriv = { Derivative::None, Derivative::None, Derivative::First };
-
-                std::array<double, 3> cond_vs = { ctxt->values[0], lastIntersectVal, state.lastAniso.dot(rd) };
-
-                startSign = 1;
-                gpSamples = _gp->sample_cond(
-                    points.data(), derivs.data(), _samplePoints, nullptr,
-                    cond_pts.data(), cond_vs.data(), cond_deriv.data(), cond_pts.size(), nullptr,
-                    nullptr, 0,
                     rd, 1, sampler) * startSign;
+
                 break;
             }
             }

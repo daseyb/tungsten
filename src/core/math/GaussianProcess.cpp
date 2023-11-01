@@ -823,7 +823,7 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
     CovMatrix solved;
 
     bool succesfullSolve = false;
-    if (s11.rows() <= 64) {
+    if (true || s11.rows() <= 64) {
 #ifdef SPARSE_COV
         Eigen::SimplicialLLT<CovMatrix> solver(s11);
 #else
@@ -842,6 +842,7 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
 
     if (!succesfullSolve) {
         Eigen::BDCSVD<Eigen::MatrixXd> solver(s11.triangularView<Eigen::Lower>(), Eigen::ComputeThinU | Eigen::ComputeThinV);
+        solver.setThreshold(0.);
 
         if (solver.info() != Eigen::ComputationInfo::Success) {
             std::cerr << "Conditioning decomposition failed (BDCSVD)!\n";
