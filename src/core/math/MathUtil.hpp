@@ -55,6 +55,21 @@ Vec<ElementType, Size> max(const Vec<ElementType, Size> &a, const Vec<ElementTyp
 }
 
 template<typename T>
+T abs(const T& a)
+{
+    return std::abs(a);
+}
+
+template<typename ElementType, unsigned Size>
+Vec<ElementType, Size> abs(const Vec<ElementType, Size>& a)
+{
+    Vec<ElementType, Size> result(a);
+    for (unsigned i = 0; i < Size; ++i)
+        result.data()[i] = abs(a.data()[i]);
+    return result;
+}
+
+template<typename T>
 T clamp(T val, T minVal, T maxVal)
 {
     return min(max(val, minVal), maxVal);

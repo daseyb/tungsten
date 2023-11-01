@@ -26,9 +26,12 @@
 
 #include "grids/GridFactory.hpp"
 
+#include "math/GaussianProcess.hpp"
+
 #include <tinyformat/tinyformat.hpp>
 #include <rapidjson/document.h>
 #include <functional>
+
 
 namespace Tungsten {
 

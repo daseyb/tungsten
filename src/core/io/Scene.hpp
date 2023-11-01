@@ -15,8 +15,6 @@
 
 #include "transmittances/Transmittance.hpp"
 
-#include "math/GaussianProcess.hpp"
-
 #include "phasefunctions/PhaseFunction.hpp"
 
 #include "integrators/Integrator.hpp"
@@ -35,6 +33,10 @@
 #include "bsdfs/Bsdf.hpp"
 
 namespace Tungsten {
+
+    class GaussianProcess;
+    class CovarianceFunction;
+    class MeanFunction;
 
 class Scene : public JsonSerializable
 {
