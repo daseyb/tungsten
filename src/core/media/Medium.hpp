@@ -33,6 +33,7 @@ public:
         bool firstScatter;
         int component;
         int bounce;
+        int lastGPId;
         Vec3d lastAniso;
         std::shared_ptr<GPContext> gpContext;
 
@@ -41,6 +42,7 @@ public:
             firstScatter = true;
             bounce = 0;
             gpContext.reset();
+            lastGPId = 0;
         }
 
         void advance()

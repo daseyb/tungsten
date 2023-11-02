@@ -6,6 +6,7 @@ namespace Tungsten {
 
 DEFINE_STRINGABLE_ENUM(GaussianProcessFactory, "gaussian_process", ({
     {"standard", std::make_shared<GaussianProcess>},
+    {"csg", std::make_shared<GPSampleNodeCSG>},
 }))
 
 
@@ -15,6 +16,7 @@ DEFINE_STRINGABLE_ENUM(MeanFunctionFactory, "mean", ({
     {"linear", std::make_shared<LinearMean>},
     {"tabulated", std::make_shared<TabulatedMean>},
     {"mesh", std::make_shared<MeshSdfMean>},
+    {"procedural", std::make_shared<ProceduralMean>},
 }))
 
 

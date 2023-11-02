@@ -37,7 +37,7 @@ int gen3d(int argc, char** argv) {
 
     std::shared_ptr<GaussianProcessMedium> gp_medium = std::static_pointer_cast<GaussianProcessMedium>(scene->media()[0]);
 
-    auto gp = gp_medium->_gp;
+    auto gp = std::static_pointer_cast<GaussianProcess>(gp_medium->_gp);
 
     UniformPathSampler sampler(0);
     sampler.next1D();

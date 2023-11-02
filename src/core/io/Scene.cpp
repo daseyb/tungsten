@@ -130,9 +130,9 @@ std::shared_ptr<CovarianceFunction> Scene::fetchCovarianceFunction(JsonPtr value
     return instantiate<CovarianceFunction>(value, *this);
 }
 
-std::shared_ptr<GaussianProcess> Scene::fetchGaussianProcess(JsonPtr value) const
+std::shared_ptr<GPSampleNode> Scene::fetchGaussianProcess(JsonPtr value) const
 {
-    return instantiate<GaussianProcess>(value, *this);
+    return instantiate<GPSampleNode>(value, *this);
 }
 
 std::shared_ptr<Bsdf> Scene::fetchBsdf(JsonPtr value) const

@@ -69,7 +69,11 @@ void sample_ray_realizations(std::shared_ptr<GaussianProcess> gp, int samples, R
         auto ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
         int macroStep = 0;
 
-        std::copy(ctxt->values.begin(), ctxt->values.end(), sampledValues.begin() + macroStep * numMicroSamplesPts);
+        {
+            auto [values, ids] = ctxt->values->flatten();
+            std::copy(values.begin(), values.end(), sampledValues.begin() + macroStep * numMicroSamplesPts);
+        }
+
         std::transform(ctxt->points.begin(), ctxt->points.end(), sampledTs.begin() + macroStep * numMicroSamplesPts, [](auto pt) { return pt.x(); });
         sampledDerivs[macroStep] = sample.aniso.dot(vec_conv<Vec3d>(r.dir()));
 
@@ -80,7 +84,10 @@ void sample_ray_realizations(std::shared_ptr<GaussianProcess> gp, int samples, R
             success = gp_med.sampleDistance(sampler, tRay, state, sample);
             macroStep++;
             ctxt = std::static_pointer_cast<GPContextFunctionSpace>(state.gpContext);
-            std::copy(ctxt->values.begin(), ctxt->values.end(), sampledValues.begin() + macroStep * numMicroSamplesPts);
+            {
+                auto [values, ids] = ctxt->values->flatten();
+                std::copy(values.begin(), values.end(), sampledValues.begin() + macroStep * numMicroSamplesPts);
+            }
             std::transform(ctxt->points.begin(), ctxt->points.end(), sampledTs.begin() + macroStep * numMicroSamplesPts, [](auto pt) { return pt.x(); });
 
             sampledDerivs[macroStep] = sample.aniso.dot(vec_conv<Vec3d>(r.dir()));

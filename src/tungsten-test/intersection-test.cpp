@@ -158,7 +158,9 @@ void first_intersect_ansio(std::string scene_file, Scene* scene) {
     std::vector<Eigen::Matrix3f> anisotropies;
     std::vector<Vec3f> intersectPositions;
 
-    auto cov = std::static_pointer_cast<MeanGradNonstationaryCovariance>(std::static_pointer_cast<GaussianProcessMedium>(scene->media()[0])->_gp->_cov);
+    auto cov = std::static_pointer_cast<MeanGradNonstationaryCovariance>( 
+        std::static_pointer_cast<GaussianProcess>(
+            std::static_pointer_cast<GaussianProcessMedium>(scene->media()[0])->_gp)->_cov);
 
     Vec2u currentPixel;
 

@@ -22,9 +22,132 @@ namespace Tungsten {
 //#define SPARSE_SOLVE
 #endif
 
+void GPSampleNodeCSG::fromJson(JsonPtr value, const Scene& scene) {
+    GPSampleNode::fromJson(value, scene);
+
+    if (auto left = value["left"])
+        _left = scene.fetchGaussianProcess(left);
+    if (auto right = value["right"])
+        _right = scene.fetchGaussianProcess(right);
+}
+
+rapidjson::Value GPSampleNodeCSG::toJson(Allocator& allocator) const {
+    return JsonObject{ GPSampleNode::toJson(allocator), allocator,
+        "type", "csg",
+        "left", *_left,
+        "right", *_right,
+    };
+}
+
+void GPSampleNodeCSG::loadResources() {
+    _left->loadResources();
+    _right->loadResources();
+}
+
+double GPSampleNodeCSG::perform_op(double leftSample, double rightSample) const {
+    return min(leftSample, rightSample);
+}
+
+
+std::tuple<Eigen::VectorXd, std::vector<int>> GPRealNodeValues::flatten() const {
+    return { _values.col(0), std::vector<int>(_values.rows(), _gp->_id) };
+}
+
+void GPRealNodeValues::makeIntersect(size_t p, double offsetT, double dt) {
+    _values.conservativeResize(p + 2, Eigen::NoChange);
+    auto prevV = _values(p - 1, 0);
+    auto currV = _values(p, 0);
+
+    // Value at intersection point
+    _values(p, 0) = lerp(prevV, currV, offsetT);
+    // Derivative at intersection point;
+    _values(p + 1, 0) = (prevV - currV) / dt;
+
+    _isIntersect = true;
+}
+
+void GPRealNodeValues::sampleGrad(int pickId, Vec3d ip, Vec3d rd, Vec3d* points, Derivative* derivs, PathSampleGenerator& sampler, Vec3d& grad) {
+    std::array<Vec3d, 3> gradPs{ ip, ip, ip };
+    std::array<Derivative, 3> gradDerivs{ Derivative::First, Derivative::First, Derivative::First };
+
+    TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame(vec_conv<Eigen::Vector3d>(rd));
+
+    if (_isIntersect) {
+        std::array<Vec3d, 2> gradDirs{
+            vec_conv<Vec3d>(frame.tangent),
+            vec_conv<Vec3d>(frame.bitangent)
+        };
+
+        auto [gradSamples, gradId] = _gp->sample_cond(
+            gradPs.data(), gradDerivs.data(), gradDirs.size(), gradDirs.data(),
+            points, this, derivs, _values.rows(), nullptr,
+            nullptr, 0,
+            rd, 1, sampler)->flatten();
+
+        _sampledGrad = vec_conv<Vec3d>(frame.toGlobal({
+            gradSamples(0,0), gradSamples(1,0), _values(_values.rows() - 1,0)
+            }));
+
+    }
+    else {
+        std::array<Vec3d, 3> gradDirs{
+            vec_conv<Vec3d>(frame.tangent),
+            vec_conv<Vec3d>(frame.bitangent),
+            vec_conv<Vec3d>(frame.normal)
+        };
+
+        auto [gradSamples, gradId] = _gp->sample_cond(
+            gradPs.data(), gradDerivs.data(), gradDirs.size(), gradDirs.data(),
+            points, this, derivs, _values.rows(), nullptr,
+            nullptr, 0,
+            rd, 1, sampler)->flatten();
+
+        _sampledGrad = vec_conv<Vec3d>(frame.toGlobal({
+            gradSamples(0,0), gradSamples(1,0), gradSamples(2,0)
+            }));
+    }
+
+    if (_gp->_id == pickId) {
+        grad = _sampledGrad;
+    }
+}
+
+void GPRealNodeValues::applyMemory(GPCorrelationContext ctxt, Vec3d rd) {
+    switch (ctxt) {
+    case GPCorrelationContext::None: {
+        _values = Eigen::MatrixXd(0, _values.cols());
+        break;
+    }
+    case GPCorrelationContext::Dori: {
+        auto newValues = Eigen::VectorXd(1);
+        if (_isIntersect)
+            newValues(0) = _values(_values.size() - 2, 0);
+        else
+            newValues(0) = _values(_values.size() - 1, 0);
+        _values = newValues;
+        break;
+    }
+    case GPCorrelationContext::Goldfish: {
+        auto newValues = Eigen::VectorXd(2);
+        if (_isIntersect)
+            newValues(0) = _values(_values.size() - 2, 0);
+        else
+            newValues(0) = _values(_values.size() - 1, 0);
+       
+        newValues(1) = _sampledGrad.dot(rd);
+        _values = newValues;
+        break;
+    }
+    case GPCorrelationContext::Elephant: {
+        _values(_values.size() - 1, 0) = _sampledGrad.dot(rd);
+        break;
+    }
+    }
+}
+
 
 void GaussianProcess::fromJson(JsonPtr value, const Scene& scene) {
-    JsonSerializable::fromJson(value, scene);
+    GPSampleNode::fromJson(value, scene);
 
     if (auto mean = value["mean"])
         _mean = scene.fetchMeanFunction(mean);
@@ -33,6 +156,7 @@ void GaussianProcess::fromJson(JsonPtr value, const Scene& scene) {
 
     value.getField("max_num_eigenvalues", _maxEigenvaluesN);
     value.getField("covariance_epsilon", _covEps);
+    value.getField("id", _id);
 
     if (auto conditioningDataPath = value["conditioning_data"])
         _conditioningDataPath = scene.fetchResource(conditioningDataPath);
@@ -40,13 +164,14 @@ void GaussianProcess::fromJson(JsonPtr value, const Scene& scene) {
 }
 
 rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
-    return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+    return JsonObject{ GPSampleNode::toJson(allocator), allocator,
         "type", "standard",
         "conditioning_data",* _conditioningDataPath,
         "mean", *_mean,
         "covariance", *_cov,
         "max_num_eigenvalues", _maxEigenvaluesN,
-        "covariance_epsilon", _covEps
+        "covariance_epsilon", _covEps,
+        "id", _id,
     };
 }
 
@@ -198,15 +323,18 @@ CovMatrix GaussianProcess::cov_sym(
     return ps_cov;
 }
 
-double GaussianProcess::sample_start_value(Vec3d p, PathSampleGenerator& sampler) const {
+std::shared_ptr<GPRealNode> GaussianProcess::sample_start_value(Vec3d p, PathSampleGenerator& sampler) const {
     double m = (*_mean)(Derivative::None, p, Vec3d(0.f));
     double sigma = sqrt((*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.)));
 
-    return max(0., rand_truncated_normal(m, sigma, 0, sampler));
+    Eigen::VectorXd vals(1);
+    vals(0) = max(0., rand_truncated_normal(m, sigma, 0, sampler));
+
+    return std::make_shared<GPRealNodeValues>(vals, this);
 }
 
 
-Eigen::MatrixXd GaussianProcess::sample(
+std::shared_ptr<GPRealNode> GaussianProcess::sample(
     const Vec3d* points, const Derivative* derivative_types, size_t numPts,
     const Vec3d* deriv_dirs,
     const Constraint* constraints, size_t numConstraints,
@@ -215,7 +343,7 @@ Eigen::MatrixXd GaussianProcess::sample(
     if (_globalCondPs.size() == 0) {
         auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dirs, deriv_dir, numPts);
         auto mvn = MultivariateNormalDistribution(ps_mean, ps_cov);
-        return mvn.sample(constraints, numConstraints, samples, sampler);
+        return std::make_shared<GPRealNodeValues>(mvn.sample(constraints, numConstraints, samples, sampler), this);
     }
     else {
         auto mvn = create_mvn_cond(points, derivative_types, numPts,
@@ -223,23 +351,25 @@ Eigen::MatrixXd GaussianProcess::sample(
             _globalCondPs.data(), _globalCondValues.data(), _globalCondDerivs.data(), 0,
             _globalCondDerivDirs.data(),
             deriv_dir);
-        return mvn.sample(constraints, numConstraints, samples, sampler);
+        return std::make_shared<GPRealNodeValues>(mvn.sample(constraints, numConstraints, samples, sampler), this);
     }
 }
 
-Eigen::MatrixXd GaussianProcess::sample_cond(
+std::shared_ptr<GPRealNode> GaussianProcess::sample_cond(
     const Vec3d* points, const Derivative* derivative_types, size_t numPts,
     const Vec3d* deriv_dirs,
-    const Vec3d* cond_points, const double* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
+    const Vec3d* cond_points, const GPRealNode* cond_values, const Derivative* cond_derivatives, size_t numCondPts,
     const Vec3d* cond_deriv_dirs,
     const Constraint* constraints, size_t numConstraints,
     Vec3d deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
+    auto real = (const GPRealNodeValues*)cond_values;
+
     auto mvn = create_mvn_cond(points, derivative_types, numPts, deriv_dirs,
-        cond_points, cond_values, cond_derivative_types, numCondPts, cond_deriv_dirs,
+        cond_points, real->_values.data(), cond_derivatives, numCondPts, cond_deriv_dirs,
         deriv_dir);
 
-    return mvn.sample(constraints, numConstraints, samples, sampler);
+    return std::make_shared<GPRealNodeValues>(mvn.sample(constraints, numConstraints, samples, sampler), this);
 }
 
 

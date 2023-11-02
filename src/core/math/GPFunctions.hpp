@@ -9,6 +9,8 @@
 #include <sampling/SampleWarp.hpp>
 #include <sampling/Gaussian.hpp>
 
+#include <math/SdfFunctions.hpp>
+
 #include <autodiff/forward/real/real.hpp>
 #include <autodiff/forward/real/eigen.hpp>
 #include <autodiff/forward/dual.hpp>
@@ -670,6 +672,27 @@ namespace Tungsten {
         std::shared_ptr<Grid> _grid;
         float _offset;
         float _scale;
+
+        virtual double mean(Vec3d a) const override;
+        virtual Vec3d dmean_da(Vec3d a) const override;
+    };
+
+    class ProceduralMean : public MeanFunction {
+    public:
+
+        ProceduralMean(SdfFunctions::Function fn = SdfFunctions::Function::Knob) : _fn(fn) {}
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override;
+        virtual rapidjson::Value toJson(Allocator& allocator) const override;
+
+    private:
+        SdfFunctions::Function _fn;
+
+        float _min = -FLT_MAX;
+        float _scale = 1.f;
+
+        Mat4f _configTransform;
+        Mat4f _invConfigTransform;
 
         virtual double mean(Vec3d a) const override;
         virtual Vec3d dmean_da(Vec3d a) const override;

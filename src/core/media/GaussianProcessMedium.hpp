@@ -8,12 +8,7 @@ namespace Tungsten {
 
 class GaussianProcess;
 
-enum class GPCorrelationContext {
-    Elephant,
-    Goldfish,
-    Dori,
-    None
-};
+
 
 enum class GPIntersectMethod {
     Mean,
@@ -34,7 +29,7 @@ struct GPContext {
 
 struct GPContextFunctionSpace : public GPContext {
     std::vector<Vec3d> points;
-    std::vector<double> values;
+    std::shared_ptr<GPRealNode> values;
     std::vector<Derivative> derivs;
 };
 
@@ -46,6 +41,8 @@ class GaussianProcessMedium : public Medium
     Vec3f _sigmaA, _sigmaS;
     Vec3f _sigmaT;
     bool _absorptionOnly;
+
+    std::vector<std::shared_ptr<PhaseFunction>> _phaseFunctions;
 
 protected:
     GPCorrelationContext _ctxt = GPCorrelationContext::Goldfish;
@@ -62,9 +59,9 @@ public:
     static GPNormalSamplingMethod stringToNormalSamplingMethod(const std::string& name);
     static std::string normalSamplingMethodToString(GPNormalSamplingMethod ctxt);
 
-    std::shared_ptr<GaussianProcess> _gp;
+    std::shared_ptr<GPSampleNode> _gp;
     GaussianProcessMedium();
-    GaussianProcessMedium(std::shared_ptr<GaussianProcess> gp, 
+    GaussianProcessMedium(std::shared_ptr<GPSampleNode> gp,
         float materialSigmaA, float materialSigmaS, float density,
         GPCorrelationContext ctxt = GPCorrelationContext::Goldfish, GPIntersectMethod intersectMethod = GPIntersectMethod::GPDiscrete, GPNormalSamplingMethod normalSamplingMethod = GPNormalSamplingMethod::ConditionedGaussian) :
         _gp(gp), _materialSigmaA(materialSigmaA), _materialSigmaS(materialSigmaS), _density(density),

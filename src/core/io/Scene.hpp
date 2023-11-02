@@ -34,7 +34,7 @@
 
 namespace Tungsten {
 
-    class GaussianProcess;
+    class GPSampleNode;
     class CovarianceFunction;
     class MeanFunction;
 
@@ -82,7 +82,7 @@ public:
     std::shared_ptr<Texture> fetchTexture(JsonPtr value, TexelConversion conversion) const;
     std::shared_ptr<MeanFunction> fetchMeanFunction(JsonPtr value) const;
     std::shared_ptr<CovarianceFunction> fetchCovarianceFunction(JsonPtr value) const;
-    std::shared_ptr<GaussianProcess> fetchGaussianProcess(JsonPtr value) const;
+    std::shared_ptr<GPSampleNode> fetchGaussianProcess(JsonPtr value) const;
 
     PathPtr fetchResource(const std::string &path) const;
     PathPtr fetchResource(JsonPtr v) const;

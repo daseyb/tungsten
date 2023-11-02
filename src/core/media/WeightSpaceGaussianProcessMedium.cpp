@@ -79,15 +79,16 @@ namespace Tungsten {
             }
             case GPNormalSamplingMethod::Beckmann:
             {
+                auto deriv = Derivative::First;
                 Vec3d normal = Vec3d(
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(1.f, 0.f, 0.f)),
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 1.f, 0.f)),
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 0.f, 1.f)));
+                    _gp->mean(&ip, &deriv, nullptr, Vec3d(1.f, 0.f, 0.f), 1)(0),
+                    _gp->mean(&ip, &deriv, nullptr, Vec3d(0.f, 1.f, 0.f), 1)(0),
+                    _gp->mean(&ip, &deriv, nullptr, Vec3d(0.f, 0.f, 1.f), 1)(0)).normalized();
 
                 TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame(vec_conv<Eigen::Vector3d>(normal));
 
                 Eigen::Vector3d wi = frame.toLocal(vec_conv<Eigen::Vector3d>(-ray.dir()));
-                float alpha = _gp->_cov->compute_beckmann_roughness();
+                float alpha = _gp->compute_beckmann_roughness(ip);
                 BeckmannNDF ndf(0, alpha, alpha);
 
                 grad = vec_conv<Vec3d>(frame.toGlobal(vec_conv<Eigen::Vector3d>(ndf.sampleD_wi(vec_conv<Vector3>(wi)))));
@@ -95,15 +96,16 @@ namespace Tungsten {
             }
             case GPNormalSamplingMethod::GGX:
             {
+                auto deriv = Derivative::First;
                 Vec3d normal = Vec3d(
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(1.f, 0.f, 0.f)),
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 1.f, 0.f)),
-                    _gp->_mean->operator()(Derivative::First, ip, Vec3d(0.f, 0.f, 1.f)));
+                    _gp->mean(&ip, &deriv, nullptr, Vec3d(1.f, 0.f, 0.f), 1)(0),
+                    _gp->mean(&ip, &deriv, nullptr, Vec3d(0.f, 1.f, 0.f), 1)(0),
+                    _gp->mean(&ip, &deriv, nullptr, Vec3d(0.f, 0.f, 1.f), 1)(0)).normalized();
 
                 TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame(vec_conv<Eigen::Vector3d>(normal));
 
                 Eigen::Vector3d wi = frame.toLocal(vec_conv<Eigen::Vector3d>(-ray.dir()));
-                float alpha = _gp->_cov->compute_beckmann_roughness();
+                float alpha = _gp->compute_beckmann_roughness(ip);
                 GGXNDF ndf(0, alpha, alpha);
                 grad = vec_conv<Vec3d>(frame.toGlobal(vec_conv<Eigen::Vector3d>(ndf.sampleD_wi(vec_conv<Vector3>(wi)))));
                 break;
@@ -115,10 +117,12 @@ namespace Tungsten {
 
     bool WeightSpaceGaussianProcessMedium::intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const {
         if(state.firstScatter) {
-            WeightSpaceBasis basis = WeightSpaceBasis::sample(_gp->_cov, _numBasisFunctions, sampler);
+            auto gp = std::static_pointer_cast<GaussianProcess>(_gp);
+
+            WeightSpaceBasis basis = WeightSpaceBasis::sample(gp->_cov, _numBasisFunctions, sampler);
             
             auto ctxt = std::make_shared<GPContextWeightSpace>();
-            ctxt->real = WeightSpaceRealization::sample(std::make_shared<WeightSpaceBasis>(basis), _gp, sampler);
+            ctxt->real = WeightSpaceRealization::sample(std::make_shared<WeightSpaceBasis>(basis), gp, sampler);
             state.gpContext = ctxt;
         }
 

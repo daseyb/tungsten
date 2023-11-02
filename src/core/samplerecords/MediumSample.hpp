@@ -21,6 +21,7 @@ struct MediumSample
     float pdf;
     bool exited;
     Vec3d aniso;
+    int gpId;
 
     GPContext* ctxt;
 };

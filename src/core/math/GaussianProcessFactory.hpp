@@ -8,11 +8,11 @@
 
 namespace Tungsten {
 
-class GaussianProcess;
+class GPSampleNode;
 class CovarianceFunction;
 class MeanFunction;
 
-typedef StringableEnum<std::function<std::shared_ptr<GaussianProcess>()>> GaussianProcessFactory;
+typedef StringableEnum<std::function<std::shared_ptr<GPSampleNode>()>> GaussianProcessFactory;
 typedef StringableEnum<std::function<std::shared_ptr<CovarianceFunction>()>> CovarianceFunctionFactory;
 typedef StringableEnum<std::function<std::shared_ptr<MeanFunction>()>> MeanFunctionFactory;
 

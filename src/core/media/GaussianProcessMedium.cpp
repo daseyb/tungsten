@@ -116,6 +116,13 @@ namespace Tungsten {
         if (auto gp = value["gaussian_process"])
             _gp = scene.fetchGaussianProcess(gp);
 
+        // We always have the default one
+        _phaseFunctions.push_back(_phaseFunction);
+
+        if (auto addPhaseFunctions = value["additional_phase_functions"]) {
+            for (unsigned i = 0; i < addPhaseFunctions.size(); ++i)
+                _phaseFunctions.emplace_back(scene.fetchPhase(addPhaseFunctions[i]));
+        }
     }
 
     rapidjson::Value GaussianProcessMedium::toJson(Allocator& allocator) const
@@ -178,15 +185,16 @@ namespace Tungsten {
 
     bool GaussianProcessMedium::intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const {
         t = ray.nearT() + 0.0001f;
+        auto deriv = Derivative::None;
         for(int i = 0; i < 2048*4; i++) {
             auto p = vec_conv<Vec3d>(ray.pos()) + t * vec_conv<Vec3d>(ray.dir());
-            float m = (*_gp->_mean)(Derivative::None, p, Vec3d(0.f));
+            float m = _gp->mean(&p, &deriv, nullptr, Vec3d(0.f), 1)(0);
 
             if(m < 0.00001f) {
                 auto ctxt = std::make_shared<GPContextFunctionSpace>();
                 ctxt->derivs = { Derivative::None };
                 ctxt->points = { p };
-                ctxt->values = { 0. };
+                //ctxt->values = { 0. };
                 state.gpContext = ctxt;
                 return true;
             }
@@ -207,6 +215,7 @@ namespace Tungsten {
     {
         sample.emission = Vec3f(0.0f);
         auto r = ray;
+        size_t matId = 0;
 
         double startT = r.nearT();
         if (!std::isfinite(r.farT())) {
@@ -238,6 +247,7 @@ namespace Tungsten {
 
             auto ro = vec_conv<Vec3d>(r.pos());
             auto rd = vec_conv<Vec3d>(r.dir()).normalized();
+
 
             // Handle the "ray marching" case
             // I.e. we want to allow the intersect function to not handle the whole ray
@@ -297,7 +307,9 @@ namespace Tungsten {
             state.advance();
         }
         sample.p = ray.pos() + sample.t * ray.dir();
-        sample.phase = _phaseFunction.get();
+
+        sample.phase = _phaseFunctions[state.lastGPId].get();
+        sample.gpId = state.lastGPId;
         sample.ctxt = state.gpContext.get();
 
         return true;
@@ -316,6 +328,7 @@ namespace Tungsten {
         
         if (sample) {
             state.lastAniso = sample->aniso;
+            state.lastGPId = sample->gpId;
             // HACK: Non-owning shared_ptr
             state.gpContext = std::shared_ptr<GPContext>(sample->ctxt, [](GPContext*) {});
         }

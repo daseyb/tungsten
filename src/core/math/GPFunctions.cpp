@@ -430,6 +430,49 @@ namespace Tungsten {
         _grid->loadResources();
     }
 
+    void ProceduralMean::fromJson(JsonPtr value, const Scene& scene) {
+        MeanFunction::fromJson(value, scene);
+        value.getField("transform", _configTransform);
+        _invConfigTransform = _configTransform.invert();
+
+        std::string fnString = "knob";
+        value.getField("func", fnString);
+        _fn = SdfFunctions::stringToFunction(fnString);
+
+        value.getField("min", _min);
+        value.getField("scale", _scale);
+    }
+
+    rapidjson::Value ProceduralMean::toJson(Allocator& allocator) const {
+        return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+            "type", "procedural",
+            "func", SdfFunctions::functionToString(_fn),
+            "transform", _configTransform,
+            "min", _min,
+            "scale", _scale,
+        };
+    }
+
+    double ProceduralMean::mean(Vec3d a) const {
+        auto p = vec_conv<Vec3f>(a);
+        p = _invConfigTransform.transformPoint(p);
+        int matId;
+        float m = SdfFunctions::eval(_fn, p, matId);
+        m *= _scale;
+        return max(_min, m);
+    }
+
+    Vec3d ProceduralMean::dmean_da(Vec3d a) const {
+        double eps = 0.001f;
+        double vals[] = {
+            mean(a),
+            mean(a + Vec3d(eps, 0.f, 0.f)),
+            mean(a + Vec3d(0.f, eps, 0.f)),
+            mean(a + Vec3d(0.f, 0.f, eps))
+        };
+        return Vec3d(vals[1] - vals[0], vals[2] - vals[0], vals[3] - vals[0]) / eps;
+    }
+
 
     void MeshSdfMean::fromJson(JsonPtr value, const Scene& scene) {
         MeanFunction::fromJson(value, scene);
