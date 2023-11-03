@@ -25,6 +25,7 @@
 #include <io/Scene.hpp>
 #include <math/GaussianProcessFactory.hpp>
 #include <thread/ThreadUtils.hpp>
+#include <phasefunctions/BRDFPhaseFunction.hpp>
 
 using namespace Tungsten;
 
@@ -595,7 +596,7 @@ void microfacet_intersect_test(std::shared_ptr<GaussianProcess> gp, Path outputD
     ray.setNearT(-(ray.pos().z() - zrange) / ray.dir().z());
     ray.setFarT(-(ray.pos().z() + zrange) / ray.dir().z());
 
-    std::string filename_normals = basePath.asString() + tinyformat::format("/%.1fdeg-%d%s-normals-%d.bin", angle, numBasisFs, tag, seed);
+    std::string filename_normals = basePath.asString() + tinyformat::format("/%.1fdeg-%d-%snormals-%d.bin", angle, numBasisFs, tag, seed);
 
     std::vector<Vec3d> sampledNormals(samples);
 
@@ -691,7 +692,84 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, int see
 
     {
         std::ofstream xfile(
-            (basePath + Path(tinyformat::format("/%.1fdeg-%d-%s-%.3f-%.3f%s-normals-%d.bin", angle, numRaySamplePoints, GaussianProcessMedium::normalSamplingMethodToString(nsm), zrange, maxStepSize, tag, seed))).asString(), 
+            (basePath + Path(tinyformat::format("/%.1fdeg-%d-%s-%.3f-%.3f-%snormals-%d.bin", angle, numRaySamplePoints, GaussianProcessMedium::normalSamplingMethodToString(nsm), zrange, maxStepSize, tag, seed))).asString(), 
+            std::ios::out | std::ios::binary);
+
+        xfile.write((char*)sampledNormals.data(), sizeof(sampledNormals[0]) * sampledNormals.size());
+        xfile.close();
+    }
+}
+
+
+void bsdf_sample(std::shared_ptr<GaussianProcess> gp, std::shared_ptr<BRDFPhaseFunction> phase, int samples, int seed, Path outputDir, float angle = (2 * PI) / 8, GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian, float zrange = 4.f, float maxStepSize = 0.15f, int numRaySamplePoints = 64, std::string tag = "") {
+
+    Path basePath = outputDir / Path("function-space") / Path(gp->_cov->id());
+
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
+
+    if (nsm == GPNormalSamplingMethod::Beckmann) {
+        maxStepSize = 100000.f;
+    }
+
+    auto gp_med = std::make_shared<FunctionSpaceGaussianProcessMedium>(
+        gp, 0, 1, 1, numRaySamplePoints,
+        nsm == GPNormalSamplingMethod::Beckmann ? GPCorrelationContext::Goldfish : GPCorrelationContext::Goldfish,
+        nsm == GPNormalSamplingMethod::Beckmann ? GPIntersectMethod::Mean : GPIntersectMethod::GPDiscrete,
+        nsm);
+
+    gp_med->loadResources();
+    gp_med->prepareForRender();
+
+    UniformPathSampler sampler(seed);
+    sampler.next2D();
+
+    std::vector<Vec3d> sampledNormals(samples);
+
+    Ray ray = Ray(Vec3f(0.f, 0.f, 500.f), Vec3f(sin(angle / 180 * PI), 0.f, -cos(angle / 180 * PI)));
+
+    {
+        Mat4f mat = Mat4f::rotAxis(Vec3f(0.f, 0.f, 1.0f), 45);
+        ray.setDir(mat.transformVector(ray.dir()));
+        ray.setNearT(-(ray.pos().z() - zrange) / ray.dir().z());
+        ray.setFarT(-(ray.pos().z() + zrange) / ray.dir().z());
+    }
+
+    if (maxStepSize == 0) {
+        maxStepSize = (ray.farT() - ray.nearT()) / numRaySamplePoints;
+    }
+
+    for (int s = 0; s < samples;) {
+        Medium::MediumState state;
+        state.reset();
+
+        MediumSample sample;
+        Ray tRay = ray;
+        tRay.setFarT(tRay.nearT() + maxStepSize * numRaySamplePoints);
+        bool success = gp_med->sampleDistance(sampler, tRay, state, sample);
+        while (success && sample.exited) {
+            tRay.setNearT(tRay.farT());
+            tRay.setFarT(tRay.nearT() + maxStepSize * numRaySamplePoints);
+            success = gp_med->sampleDistance(sampler, tRay, state, sample);
+        }
+
+        if (!success) {
+            continue;
+        }
+
+        PhaseSample ps;
+        if (!phase->sample(sampler, ray.dir(), sample, ps)) {
+            continue;
+        }
+
+        sampledNormals[s] = vec_conv<Vec3d>(ps.w);
+        s++;
+    }
+
+    {
+        std::ofstream xfile(
+            (basePath + Path(tinyformat::format("/%.1fdeg-%d-%s-%.3f-%.3f-%sphase-%d.bin", angle, numRaySamplePoints, GaussianProcessMedium::normalSamplingMethodToString(nsm), zrange, maxStepSize, tag, seed))).asString(),
             std::ios::out | std::ios::binary);
 
         xfile.write((char*)sampledNormals.data(), sizeof(sampledNormals[0]) * sampledNormals.size());

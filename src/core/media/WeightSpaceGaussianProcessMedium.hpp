@@ -20,9 +20,9 @@ class WeightSpaceGaussianProcessMedium : public GaussianProcessMedium
 public:
 
     WeightSpaceGaussianProcessMedium();
-    WeightSpaceGaussianProcessMedium(std::shared_ptr<GaussianProcess> gp, 
+    WeightSpaceGaussianProcessMedium(std::shared_ptr<GaussianProcess> gp, std::vector<std::shared_ptr<PhaseFunction>> phases,
         float materialSigmaA, float materialSigmaS, float density, int numBasisFunctions) :
-        GaussianProcessMedium(gp, materialSigmaA, materialSigmaS, density), _numBasisFunctions(numBasisFunctions)
+        GaussianProcessMedium(gp, phases, materialSigmaA, materialSigmaS, density), _numBasisFunctions(numBasisFunctions)
     {}
 
     virtual void fromJson(JsonPtr value, const Scene &scene) override;

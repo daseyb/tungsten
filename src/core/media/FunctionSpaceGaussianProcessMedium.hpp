@@ -15,12 +15,13 @@ class FunctionSpaceGaussianProcessMedium : public GaussianProcessMedium
 public:
     FunctionSpaceGaussianProcessMedium();
     FunctionSpaceGaussianProcessMedium(std::shared_ptr<GaussianProcess> gp, 
+        std::vector<std::shared_ptr<PhaseFunction>> phase,
         float materialSigmaA, float materialSigmaS, float density, int samplePoints,
         GPCorrelationContext ctxt = GPCorrelationContext::Goldfish, 
         GPIntersectMethod intersectMethod = GPIntersectMethod::GPDiscrete, 
         GPNormalSamplingMethod normalSamplingMethod = GPNormalSamplingMethod::ConditionedGaussian,
         double stepSizeCov = 0) : 
-            GaussianProcessMedium(gp, materialSigmaA, materialSigmaS, density, ctxt, intersectMethod, normalSamplingMethod), 
+            GaussianProcessMedium(gp, phase, materialSigmaA, materialSigmaS, density, ctxt, intersectMethod, normalSamplingMethod),
             _samplePoints(samplePoints), _stepSizeCov(stepSizeCov)
     {}
 

@@ -1,0 +1,43 @@
+{
+    "covariances": [
+      {
+        "type": "rational_quadratic",
+        "lengthScale": 0.1,
+        "sigma": 0.1,
+        "a": 0.1,
+        "aniso": [
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "type": "squared_exponential",
+        "lengthScale": 0.1,
+        "sigma": 0.1,
+        "aniso": [
+          1,
+          1,
+          1
+        ]
+      }
+    ],
+	"phases": [
+		{
+			"name": "lambert",
+			"type": "brdf",
+			"bsdf": {
+				"albedo": 1,
+				"type": "lambert"
+			}
+		},
+		{
+			"name": "mirror",
+			"type": "brdf",
+			"bsdf": {
+				"albedo": 1,
+				"type": "mirror"
+			}
+		}
+    ]
+  }

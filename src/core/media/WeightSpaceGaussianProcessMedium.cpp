@@ -20,6 +20,7 @@ namespace Tungsten {
     WeightSpaceGaussianProcessMedium::WeightSpaceGaussianProcessMedium()
         : GaussianProcessMedium(
             std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(), std::make_shared<SquaredExponentialCovariance>()),
+            {},
             0.0f, 0.0f, 1.f),
           _numBasisFunctions(300)
     {

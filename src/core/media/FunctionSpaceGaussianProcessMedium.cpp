@@ -19,6 +19,7 @@ namespace Tungsten {
     FunctionSpaceGaussianProcessMedium::FunctionSpaceGaussianProcessMedium()
         : GaussianProcessMedium(
             std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(), std::make_shared<SquaredExponentialCovariance>()), 
+            {},
             0.f, 0.f, 1.f, GPCorrelationContext::Goldfish, GPIntersectMethod::GPDiscrete, GPNormalSamplingMethod::ConditionedGaussian),
             _samplePoints(32),
             _stepSizeCov(0.)

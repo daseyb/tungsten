@@ -61,10 +61,10 @@ public:
 
     std::shared_ptr<GPSampleNode> _gp;
     GaussianProcessMedium();
-    GaussianProcessMedium(std::shared_ptr<GPSampleNode> gp,
+    GaussianProcessMedium(std::shared_ptr<GPSampleNode> gp, std::vector<std::shared_ptr<PhaseFunction>> phases,
         float materialSigmaA, float materialSigmaS, float density,
         GPCorrelationContext ctxt = GPCorrelationContext::Goldfish, GPIntersectMethod intersectMethod = GPIntersectMethod::GPDiscrete, GPNormalSamplingMethod normalSamplingMethod = GPNormalSamplingMethod::ConditionedGaussian) :
-        _gp(gp), _materialSigmaA(materialSigmaA), _materialSigmaS(materialSigmaS), _density(density),
+        _gp(gp), _phaseFunctions(phases), _materialSigmaA(materialSigmaA), _materialSigmaS(materialSigmaS), _density(density),
         _ctxt(ctxt), _intersectMethod(intersectMethod), _normalSamplingMethod(normalSamplingMethod)
     {}
 
