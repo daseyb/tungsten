@@ -1,0 +1,44 @@
+{
+  "covariances": [
+	{
+      "type": "squared_exponential",
+      "lengthScale": 1.41421,
+      "sigma": 1.000,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+	{
+      "type": "squared_exponential",
+      "lengthScale": 0.141421,
+      "sigma": 0.1000,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+	{
+      "type": "squared_exponential",
+      "lengthScale": 0.0141421,
+      "sigma": 0.01000,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+	{
+      "type": "squared_exponential",
+      "lengthScale": 0.00141421,
+      "sigma": 0.001000,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    }
+  ]
+}

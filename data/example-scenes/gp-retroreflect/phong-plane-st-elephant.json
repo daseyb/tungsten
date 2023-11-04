@@ -1,0 +1,174 @@
+{
+    "media": [
+        {
+            "name": "gp",
+            "phase_function": {
+                "type": "brdf",
+				"bsdf": {
+					"name": "rough_beckmann",
+					"albedo": 1,
+					"type": "phong",
+                    "diffuse_ration": 0,
+                    "exponent": 10
+				}
+            },
+            "max_bounces": 1024,
+            "type": "gaussian_process",
+            "sigma_a": 0.0,
+            "sigma_s": 1.0,
+            "density": 1,
+            "sample_points": 16,
+            "step_size_cov": 0.99,
+            "correlation_context": "elephant",
+			"gaussian_process": {
+				"type": "standard",
+				"covariance_epsilon": 0.0,
+				"mean": {
+					"type": "linear",
+					"reference_point": [0,-1,0],
+					"direction": [0,1,0],
+					"scale": 1
+				},
+				"covariance": {
+					"aniso": [1,10,1],
+					"type": "squared_exponential",
+					"lengthScale": 0.141421,
+					"sigma": 0.5
+				}
+			}
+        }
+    ],
+    "bsdfs": [
+        {
+            "name": "backWall",
+            "albedo": {
+				"type": "checker"
+			},
+            "type": "lambert"
+        },
+		{
+            "name": "forward",
+            "albedo": 1.0,
+            "type": "forward"
+        },
+        {
+            "name": "light",
+            "albedo": 1,
+            "type": "null"
+        }
+    ],
+    "primitives": [
+        {
+            "name": "sphere",
+            "transform": {
+                "position": [
+                    -1,
+                    -0.7,
+                    -5
+                ],
+                "scale": 0.3
+            },
+            "type": "sphere",
+            "bsdf": "backWall"
+        },
+        {
+            "name": "sphere",
+            "transform": {
+                "position": [
+                    0,
+                    1,
+                    2.21
+                ],
+                "scale": 0.2
+            },
+            "type": "sphere",
+            "bsdf": "backWall"
+        },
+		{
+            "name": "processBox",
+            "transform": {
+                "position": [
+                    0,
+                    -1,
+                    0
+                ],
+                "scale": [
+                    200,
+                    0.2,
+                    200
+                ],
+                "rotation": [
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "type": "cube",
+            "bsdf": "forward",
+			"int_medium": "gp"
+        },
+        {
+            "transform": {
+                "rotation": [
+                    82.9,
+                    0,
+                    0
+                ]
+            },
+            "power": 7.5,
+            "type": "infinite_sphere_cap",
+            "sample": true,
+            "cap_angle": 0.1
+        }
+    ],
+    "camera": {
+        "tonemap": "filmic",
+        "resolution": [
+            512,
+            512
+        ],
+        "reconstruction_filter": "tent",
+        "transform": {
+            "position": [
+                0,
+                1,
+                2
+            ],
+            "look_at": [
+                0,
+                0,
+                -5
+            ],
+            "up": [
+                0,
+                1,
+                0
+            ]
+        },
+        "type": "pinhole",
+        "fov": 45
+    },
+    "integrator": {
+        "type": "path_tracer",
+        "min_bounces": 0,
+        "max_bounces": 64,
+        "enable_consistency_checks": false,
+        "enable_two_sided_shading": true,
+        "enable_light_sampling": true,
+        "enable_volume_light_sampling": true
+    },
+    "renderer": {
+        "output_file": "gp-medium-wedge.png",
+        "hdr_output_file": "gp-medium-wedge.exr",
+        "resume_render_file": "",
+        "overwrite_output_files": false,
+        "adaptive_sampling": false,
+        "enable_resume_render": false,
+        "stratified_sampler": false,
+        "scene_bvh": true,
+        "spp": 8,
+        "spp_step": 1,
+        "checkpoint_interval": "0",
+        "timeout": "0"
+    }
+}

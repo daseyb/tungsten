@@ -55,8 +55,8 @@ class VdbGrid : public Grid
     Mat4f _transform;
     Mat4f _invTransform;
     Box3f _bounds;
-    bool _requestGradient;
-    bool _requestSDF;
+    bool _requestGradient = false;
+    bool _requestSDF = false;
     
 
     static std::string sampleMethodToString(SampleMethod method);

@@ -14,7 +14,7 @@
 
 using namespace Tungsten;
 
-constexpr size_t NUM_SAMPLE_POINTS = 32;
+constexpr size_t NUM_SAMPLE_POINTS = 64;
 
 int gen3d(int argc, char** argv) {
 
@@ -28,10 +28,13 @@ int gen3d(int argc, char** argv) {
     openvdb::initialize();
 #endif
 
+    auto scenePath = Path(argv[1]);
+    std::cout << scenePath.parent().asString() << "\n";
+
     Scene* scene = nullptr;
     TraceableScene* tscene = nullptr;
     try {
-        scene = Scene::load(Path(argv[1]));
+        scene = Scene::load(scenePath);
         scene->loadResources();
         tscene = scene->makeTraceable();
     }
@@ -85,13 +88,13 @@ int gen3d(int argc, char** argv) {
 
                     Eigen::VectorXd samples(numEstSamples);
                     for (int s = 0; s < numEstSamples; s++) {
-                        Vec3d p = lerp(min, max, Vec3d((float)i + sampler.next1D(), (float)j + sampler.next1D(), (float)k + sampler.next1D()) / (NUM_SAMPLE_POINTS));
+                        Vec3d p = lerp(min, max, Vec3d((float)i + sampler.next1D() - 0.5f, (float)j + sampler.next1D() - 0.5f, (float)k + sampler.next1D() - 0.5f) / (NUM_SAMPLE_POINTS));
                         auto [samp, gpidx] = gp->sample(&p, &derivs[idx], 1, nullptr, nullptr, 0, Vec3d(), 1, sampler)->flatten();
                         samples[s] = samp[0];
                     }
 
                     mean[idx] = samples.mean();
-                    variance[idx] = sqrt((samples.array() - mean[idx]).square().sum() / (samples.size() - 1));
+                    variance[idx] = ((samples.array() - mean[idx]).square().sum() / (samples.size() - 1));
                 }
             }
         }
@@ -143,7 +146,7 @@ int gen3d(int argc, char** argv) {
             openvdb::GridPtrVec grids;
             grids.push_back(meanGrid);
             grids.push_back(varGrid);
-            openvdb::io::File file(tinyformat::format("./testing/bake-csg/%s-eval-avg-%d.vdb", prefix, NUM_SAMPLE_POINTS));
+            openvdb::io::File file(scenePath.parent().asString() + tinyformat::format("%s-eval-avg-%d.vdb", prefix, NUM_SAMPLE_POINTS));
             file.write(grids);
             file.close();
         }

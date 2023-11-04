@@ -1,0 +1,220 @@
+{
+  "covariances": [
+    {
+      "type": "squared_exponential",
+      "lengthScale": 0.1,
+      "sigma": 1,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "squared_exponential",
+      "lengthScale": 0.5,
+      "sigma": 1,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "squared_exponential",
+      "lengthScale": 1,
+      "sigma": 1,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "squared_exponential",
+      "lengthScale": 2,
+      "sigma": 1,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "rational_quadratic",
+      "lengthScale": 0.1,
+      "sigma": 1,
+      "a": 0.2,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "rational_quadratic",
+      "lengthScale": 0.5,
+      "sigma": 1,
+      "a": 0.2,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "rational_quadratic",
+      "lengthScale": 1,
+      "sigma": 1,
+      "a": 0.2,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "rational_quadratic",
+      "lengthScale": 2,
+      "sigma": 1,
+      "a": 0.2,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 1,
+      "sigma": 1,
+      "w": 1,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 1,
+      "sigma": 1,
+      "w": 0.5,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 1,
+      "sigma": 1,
+      "w": 2,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 0.5,
+      "sigma": 1,
+      "w": 1,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 0.5,
+      "sigma": 1,
+      "w": 0.5,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 0.5,
+      "sigma": 1,
+      "w": 2,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 0.1,
+      "sigma": 1,
+      "w": 1,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 0.1,
+      "sigma": 1,
+      "w": 0.5,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 0.1,
+      "sigma": 1,
+      "w": 2,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 2,
+      "sigma": 1,
+      "w": 1,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 2,
+      "sigma": 1,
+      "w": 0.5,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "type": "periodic",
+      "lengthScale": 2,
+      "sigma": 1,
+      "w": 2,
+      "aniso": [
+        1,
+        1,
+        0
+      ]
+    }
+  ]
+}

@@ -332,7 +332,7 @@ static inline float gridAt(TreeT &acc, Vec3f p)
 
 float VdbGrid::density(Vec3f p) const
 {
-    p = clamp(p, bounds().min(), bounds().max());
+    p = clamp(p, bounds().min(), bounds().max()-1);
     return gridAt(_densityGrid->tree(), p);
 }
 
