@@ -22,7 +22,7 @@ int gen3d(int argc, char** argv) {
 
     EmbreeUtil::initDevice();
 
-    std::string prefix = "csg-two-spheres";
+    std::string prefix = "csg-two-spheres-nofilter";
 
 #ifdef OPENVDB_AVAILABLE
     openvdb::initialize();
@@ -67,14 +67,14 @@ int gen3d(int argc, char** argv) {
     Eigen::VectorXf mean(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     Eigen::VectorXf variance(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
 
-    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(1000.f);
+    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(1.f);
     meanGrid->setGridClass(openvdb::GRID_LEVEL_SET);
     meanGrid->setName("mean");
     meanGrid->setTransform(openvdb::math::Transform::createLinearTransform(gridTransform));
 
     openvdb::FloatGrid::Accessor meanAccessor = meanGrid->getAccessor();
 
-    int numEstSamples = 1000;
+    int numEstSamples = 100;
     {
         for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
             std::cout << i << "\r";
@@ -88,7 +88,8 @@ int gen3d(int argc, char** argv) {
 
                     Eigen::VectorXd samples(numEstSamples);
                     for (int s = 0; s < numEstSamples; s++) {
-                        Vec3d p = lerp(min, max, Vec3d((float)i + sampler.next1D() - 0.5f, (float)j + sampler.next1D() - 0.5f, (float)k + sampler.next1D() - 0.5f) / (NUM_SAMPLE_POINTS));
+                        //Vec3d p = lerp(min, max, Vec3d((float)i + sampler.next1D() - 0.5f, (float)j + sampler.next1D() - 0.5f, (float)k + sampler.next1D() - 0.5f) / (NUM_SAMPLE_POINTS));
+                        Vec3d p = lerp(min, max, Vec3d((float)i - 0.5f, (float)j - 0.5f, (float)k - 0.5f) / (NUM_SAMPLE_POINTS));
                         auto [samp, gpidx] = gp->sample(&p, &derivs[idx], 1, nullptr, nullptr, 0, Vec3d(), 1, sampler)->flatten();
                         samples[s] = samp[0];
                     }

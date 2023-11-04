@@ -327,12 +327,12 @@ Box3f VdbGrid::bounds() const
 template<typename TreeT>
 static inline float gridAt(TreeT &acc, Vec3f p)
 {
-    return openvdb::tools::BoxSampler::sample(acc, vec_conv<openvdb::Vec3R>(p));
+    return openvdb::tools::QuadraticSampler::sample(acc, vec_conv<openvdb::Vec3R>(p));
 }
 
 float VdbGrid::density(Vec3f p) const
 {
-    p = clamp(p, bounds().min(), bounds().max()-1);
+    p = clamp(p, bounds().min()+2, bounds().max()-2);
     return gridAt(_densityGrid->tree(), p);
 }
 
