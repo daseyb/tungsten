@@ -245,11 +245,12 @@ namespace Tungsten {
             TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame(vec_conv<Eigen::Vector3d>(normal));
 
             Eigen::Vector3d wi = frame.toLocal(vec_conv<Eigen::Vector3d>(-ray.dir()));
-            float alpha = _gp->compute_beckmann_roughness(ip);
+            float alpha = std::min(_gp->compute_beckmann_roughness(ip), 10.);
             BeckmannNDF ndf(0, alpha, alpha);
 
             grad = vec_conv<Vec3d>(frame.toGlobal(vec_conv<Eigen::Vector3d>(ndf.sampleD_wi(vec_conv<Vector3>(wi)))));
-            ctxt.values->setGrad(grad);
+            if (ctxt.values)
+                ctxt.values->setGrad(grad);
             break;
         }
         case GPNormalSamplingMethod::GGX:
@@ -267,7 +268,8 @@ namespace Tungsten {
             GGXNDF ndf(0, alpha, alpha);
 
             grad = vec_conv<Vec3d>(frame.toGlobal(vec_conv<Eigen::Vector3d>(ndf.sampleD_wi(vec_conv<Vector3>(wi)))));
-            ctxt.values->setGrad(grad);
+            if (ctxt.values)
+                ctxt.values->setGrad(grad);
             break;
         }
         }

@@ -27,6 +27,7 @@ namespace Tungsten {
     void CovarianceFunction::loadResources() {
         if (hasAnalyticSpectralDensity()) return;
 
+        /*
         double max_t = 10;
         std::vector<double> covValues(pow(2, 12));
 
@@ -57,7 +58,7 @@ namespace Tungsten {
         std::transform(spectrumValues.begin(), spectrumValues.end(), std::back_inserter(r_per), [](auto spec) { return std::max(spec.real(), 0.); });
 
         discreteSpectralDensity = std::vector<double>();
-        std::transform(r_per.begin(), r_per.begin() + nf + 1, std::back_inserter(discreteSpectralDensity), [dt](auto per) { return std::abs(per) * dt / PI; });
+        std::transform(r_per.begin(), r_per.begin() + nf + 1, std::back_inserter(discreteSpectralDensity), [dt](auto per) { return std::abs(per) * dt / PI; });*/
     }
 
     double CovarianceFunction::spectral_density(double s) const {
@@ -119,13 +120,8 @@ namespace Tungsten {
             _variance = scene.fetchGrid(variance);
         }
 
-        if (_variance) {
-            _variance->requestGradient();
-        }
-
         if (auto aniso = value["ansio"]) {
             _aniso = scene.fetchGrid(aniso);
-            _aniso->requestGradient();
         }
 
         value.getField("offset", _offset);
@@ -149,15 +145,16 @@ namespace Tungsten {
         _stationaryCov->loadResources();
 
         if (_aniso) {
-            _variance->loadResources();
+            _aniso->loadResources();
         }
 
     }
 
     FloatD NonstationaryCovariance::sampleGrid(Vec3Diff a) const {
-        FloatD result;
+        FloatD result = 0;
         Vec3f ap = vec_conv<Vec3f>(from_diff(a));
         result[0] = _variance->density(ap);
+        return result;
 
         /**/
         float eps = 0.001f;
@@ -177,9 +174,10 @@ namespace Tungsten {
     }
 
     FloatDD NonstationaryCovariance::sampleGrid(Vec3DD a) const {
-        FloatDD result;
+        FloatDD result = 0;
         Vec3f ap = vec_conv<Vec3f>(from_diff(a));
         result.val = _variance->density(ap);
+        return result;
 
         /**/
         float eps = 0.001f;
@@ -212,7 +210,7 @@ namespace Tungsten {
 
         FloatD sigmaA = (sampleGrid(mult(_variance->invNaturalTransform(), a)) + _offset) * _scale;
         FloatD sigmaB = (sampleGrid(mult(_variance->invNaturalTransform(), b)) + _offset) * _scale;
-        //return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+        return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
 
         Mat3Diff anisoA = Mat3Diff::Identity();
         Mat3Diff anisoB = Mat3Diff::Identity();
@@ -234,7 +232,7 @@ namespace Tungsten {
 
         auto sigmaA = (sampleGrid(mult(_variance->invNaturalTransform(), a)) + _offset) * _scale;
         auto sigmaB = (sampleGrid(mult(_variance->invNaturalTransform(), b)) + _offset) * _scale;
-        //return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+        return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
 
         auto anisoA = Mat3DD::Identity();
         auto anisoB = Mat3DD::Identity();
@@ -253,9 +251,9 @@ namespace Tungsten {
     }
 
     double NonstationaryCovariance::cov(Vec3d a, Vec3d b) const {
-        double sigmaA = (_variance->density(_variance->invNaturalTransform() * vec_conv<Vec3f>(a)) + _offset) * _scale;
-        double sigmaB = (_variance->density(_variance->invNaturalTransform() * vec_conv<Vec3f>(b)) + _offset) * _scale;
-        //return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+        double sigmaA = (_variance->density(_variance->invNaturalTransform() * vec_conv<Vec3f>(a)) + _offset)* _scale;
+        double sigmaB = (_variance->density(_variance->invNaturalTransform() * vec_conv<Vec3f>(b)) + _offset)* _scale;
+        return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
 
         Eigen::Matrix3f anisoA = Eigen::Matrix3f::Identity();
         Eigen::Matrix3f anisoB = Eigen::Matrix3f::Identity();
@@ -387,8 +385,6 @@ namespace Tungsten {
 
         if (auto grid = value["grid"]) {
             _grid = scene.fetchGrid(grid);
-            _grid->requestSDF();
-            _grid->requestGradient();
         }
 
         value.getField("offset", _offset);
@@ -416,12 +412,11 @@ namespace Tungsten {
             mean(a + Vec3d(eps, 0.f, 0.f)),
             mean(a + Vec3d(0.f, eps, 0.f)),
             mean(a + Vec3d(0.f, 0.f, eps)),
-            mean(a - Vec3d(eps, 0.f, 0.f)),
-            mean(a - Vec3d(0.f, eps, 0.f)),
-            mean(a - Vec3d(0.f, 0.f, eps))
+            mean(a)
         };
 
-        return Vec3d(vals[0] - vals[3], vals[1] - vals[4], vals[2] - vals[5]) / (2 * eps);
+        auto grad = Vec3d(vals[0] - vals[3], vals[1] - vals[3], vals[2] - vals[3]) / eps;
+        return grad;
         /*Vec3d p = _grid->invNaturalTransform() * a;
         return _scale* _grid->naturalTransform().transformVector(_grid->gradient(p));*/
     }

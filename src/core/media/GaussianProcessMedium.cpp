@@ -186,8 +186,11 @@ namespace Tungsten {
     bool GaussianProcessMedium::intersectMean(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const {
         t = ray.nearT() + 0.0001f;
         auto deriv = Derivative::None;
+        auto rp = vec_conv<Vec3d>(ray.pos());
+        auto rd = vec_conv<Vec3d>(ray.dir());
+
         for(int i = 0; i < 2048*4; i++) {
-            auto p = vec_conv<Vec3d>(ray.pos()) + t * vec_conv<Vec3d>(ray.dir());
+            auto p = rp + t * rd;
             float m = _gp->mean(&p, &deriv, nullptr, Vec3d(0.f), 1)(0);
 
             if(m < 0.00001f) {
@@ -199,14 +202,16 @@ namespace Tungsten {
                 return true;
             }
 
-            t += m;
+            t += m * 0.05f;
 
             if(t >= ray.farT()) {
                 return false;
             }
         }
 
+        state.gpContext = std::make_shared<GPContextFunctionSpace>();
         std::cerr << "Ran out of iterations in mean intersect sphere trace." << std::endl;
+        t = ray.farT();
         return false;
     }
 
@@ -324,6 +329,7 @@ namespace Tungsten {
             return Vec3f(0.0f);
 
         MediumState state;
+        state.reset();
         state.firstScatter = startOnSurface;
         
         if (sample) {

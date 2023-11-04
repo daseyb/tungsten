@@ -210,7 +210,7 @@ set(tests
 	mvn-test derivative-test realization-gen 
 	lod-gen microfacet-gen dft-realization-gen
 	intersection-test transmittance-test ray-view-realizations weight-space-test
-	phase-function-sampling)
+	phase-function-sampling bake-csg)
 
 foreach (test IN LISTS tests)
 	add_executable(tungsten-${test} src/tungsten-test/${test}.cpp)
