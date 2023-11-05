@@ -46,6 +46,8 @@ class VdbGrid : public Grid
 
     Vec3f _emissionIndexOffset;
 
+    InterpolateMethod _interpolateMethod = InterpolateMethod::Linear;
+
     IntegrationMethod _integrationMethod;
     SampleMethod _sampleMethod;
     openvdb::FloatGrid::Ptr _densityGrid;
@@ -57,6 +59,7 @@ class VdbGrid : public Grid
     Box3f _bounds;
     bool _requestGradient = false;
     bool _requestSDF = false;
+    float _backgroundValue = NAN;
     
 
     static std::string sampleMethodToString(SampleMethod method);

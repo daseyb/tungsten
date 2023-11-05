@@ -205,8 +205,8 @@ namespace Tungsten {
         std::shared_ptr<StationaryCovariance> _stationaryCov;
         std::shared_ptr<Grid> _variance;
         std::shared_ptr<Grid> _aniso;
-        float _offset;
-        float _scale;
+        float _offset = 0;
+        float _scale = 1;
     };
 
 
@@ -670,8 +670,8 @@ namespace Tungsten {
 
     private:
         std::shared_ptr<Grid> _grid;
-        float _offset;
-        float _scale;
+        float _offset = 0;
+        float _scale = 1;
 
         virtual double mean(Vec3d a) const override;
         virtual Vec3d dmean_da(Vec3d a) const override;

@@ -138,6 +138,7 @@ void VdbGrid::generateSuperGrid()
 void VdbGrid::fromJson(JsonPtr value, const Scene &scene)
 {
     if (auto path = value["file"]) _path = scene.fetchResource(path);
+
     value.getField("grid_name", _densityName); /* Deprecated field for density grid name */
     value.getField("density_name", _densityName);
     value.getField("density_scale", _densityScale);
@@ -151,7 +152,12 @@ void VdbGrid::fromJson(JsonPtr value, const Scene &scene)
     value.getField("supergrid_subsample", _supergridSubsample);
     value.getField("transform", _configTransform);
     value.getField("request_gradient", _requestGradient);
+    value.getField("background_value", _backgroundValue);
 
+    std::string interpolateString = interpolateMethodToString(_interpolateMethod);
+    value.getField("interpolate", interpolateString);
+
+    _interpolateMethod = stringToInterpolateMethod(interpolateString);
     _integrationMethod = stringToIntegrationMethod(_integrationString);
     _sampleMethod = stringToSampleMethod(_sampleString);
 }
@@ -170,12 +176,17 @@ rapidjson::Value VdbGrid::toJson(Allocator &allocator) const
         "integration_method", _integrationString,
         "sampling_method", _sampleString,
         "transform", _configTransform,
-        "request_gradient", _requestGradient
+        "request_gradient", _requestGradient,
+        "interpolate", interpolateMethodToString(_interpolateMethod)
     };
     if (_integrationMethod == IntegrationMethod::ResidualRatio)
         result.add("supergrid_subsample", _supergridSubsample);
     if (_integrationMethod == IntegrationMethod::Raymarching || _sampleMethod == SampleMethod::Raymarching)
         result.add("step_size", _stepSize);
+
+    if (std::isfinite(_backgroundValue)) {
+        result.add("background_value", _backgroundValue);
+    }
 
     return result;
 }
@@ -210,6 +221,10 @@ void VdbGrid::loadResources()
     _densityGrid = openvdb::gridPtrCast<openvdb::FloatGrid>(ptr);
     if (!_densityGrid)
         FAIL("Failed to read grid '%s' from vdb file '%s': Grid is not a FloatGrid", _densityName, *_path);
+
+    if (std::isfinite(_backgroundValue)) {
+        openvdb::tools::changeBackground(_densityGrid->tree(), _backgroundValue);
+    }
 
     auto accessor = _densityGrid->getAccessor();
     for (openvdb::FloatGrid::ValueOnIter iter = _densityGrid->beginValueOn(); iter.test(); ++iter)
@@ -328,12 +343,20 @@ template<typename TreeT>
 static inline float gridAt(TreeT &acc, Vec3f p)
 {
     return openvdb::tools::QuadraticSampler::sample(acc, vec_conv<openvdb::Vec3R>(p));
+    //return openvdb::tools::BoxSampler::sample(acc, vec_conv<openvdb::Vec3R>(p));
 }
 
 float VdbGrid::density(Vec3f p) const
 {
-    p = clamp(p, bounds().min()+2, bounds().max()-2);
-    return gridAt(_densityGrid->tree(), p);
+    p = clamp(p, bounds().min()+1, bounds().max()-2);
+    switch (_interpolateMethod) {
+    case InterpolateMethod::Point:
+        return openvdb::tools::PointSampler::sample(_densityGrid->tree(), vec_conv<openvdb::Vec3R>(p));
+    case InterpolateMethod::Linear:
+        return openvdb::tools::BoxSampler::sample(_densityGrid->tree(), vec_conv<openvdb::Vec3R>(p));
+    case InterpolateMethod::Quadratic:
+        return openvdb::tools::QuadraticSampler::sample(_densityGrid->tree(), vec_conv<openvdb::Vec3R>(p));
+    }
 }
 
 Vec3f VdbGrid::gradient(Vec3f p) const

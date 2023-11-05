@@ -13,6 +13,17 @@ class PathSampleGenerator;
 class Grid : public JsonSerializable
 {
 public:
+
+    enum class InterpolateMethod
+    {
+        Point,
+        Linear,
+        Quadratic,
+    };
+
+    static std::string interpolateMethodToString(InterpolateMethod method);
+    static InterpolateMethod stringToInterpolateMethod(const std::string& name);
+
     virtual ~Grid() {}
 
     virtual Mat4f naturalTransform() const;

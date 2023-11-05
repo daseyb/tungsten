@@ -48,8 +48,7 @@ int gen3d(int argc, char** argv) {
     auto gp = std::static_pointer_cast<GPSampleNode>(gp_medium->_gp);
 
     UniformPathSampler sampler(0);
-    sampler.next1D();
-    sampler.next1D();
+    sampler.next2D();
 
     std::vector<Vec3d> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> derivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
@@ -67,19 +66,19 @@ int gen3d(int argc, char** argv) {
     Eigen::VectorXf mean(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     Eigen::VectorXf variance(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
 
-    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(1.f);
+    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(100.f);
     meanGrid->setGridClass(openvdb::GRID_LEVEL_SET);
     meanGrid->setName("mean");
     meanGrid->setTransform(openvdb::math::Transform::createLinearTransform(gridTransform));
 
     openvdb::FloatGrid::Accessor meanAccessor = meanGrid->getAccessor();
 
-    int numEstSamples = 100;
+    int numEstSamples = 10000;
     {
         for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
             std::cout << i << "\r";
-#pragma omp parallel for
             for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
+#pragma omp parallel for
                 for (int k = 0; k < NUM_SAMPLE_POINTS; k++) {
                     int idx = i * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS + j * NUM_SAMPLE_POINTS + k;
                     points[idx] = lerp(min, max, Vec3d((float)i, (float)j, (float)k) / (NUM_SAMPLE_POINTS));
@@ -88,14 +87,14 @@ int gen3d(int argc, char** argv) {
 
                     Eigen::VectorXd samples(numEstSamples);
                     for (int s = 0; s < numEstSamples; s++) {
-                        //Vec3d p = lerp(min, max, Vec3d((float)i + sampler.next1D() - 0.5f, (float)j + sampler.next1D() - 0.5f, (float)k + sampler.next1D() - 0.5f) / (NUM_SAMPLE_POINTS));
-                        Vec3d p = lerp(min, max, Vec3d((float)i - 0.5f, (float)j - 0.5f, (float)k - 0.5f) / (NUM_SAMPLE_POINTS));
+                        Vec3d offset = (Vec3d(sampler.next1D(), sampler.next1D(), sampler.next1D()) - 0.5) * 0.05;
+                        Vec3d p = lerp(min, max, (Vec3d((float)i, (float)j, (float)k) + offset) / (NUM_SAMPLE_POINTS));
                         auto [samp, gpidx] = gp->sample(&p, &derivs[idx], 1, nullptr, nullptr, 0, Vec3d(), 1, sampler)->flatten();
                         samples[s] = samp[0];
                     }
 
                     mean[idx] = samples.mean();
-                    variance[idx] = ((samples.array() - mean[idx]).square().sum() / (samples.size() - 1));
+                    variance[idx] = sqrt((samples.array() - mean[idx]).square().sum() / (samples.size() - 1));
                 }
             }
         }

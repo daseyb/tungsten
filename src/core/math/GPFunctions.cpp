@@ -147,7 +147,6 @@ namespace Tungsten {
         if (_aniso) {
             _aniso->loadResources();
         }
-
     }
 
     FloatD NonstationaryCovariance::sampleGrid(Vec3Diff a) const {
@@ -210,7 +209,7 @@ namespace Tungsten {
 
         FloatD sigmaA = (sampleGrid(mult(_variance->invNaturalTransform(), a)) + _offset) * _scale;
         FloatD sigmaB = (sampleGrid(mult(_variance->invNaturalTransform(), b)) + _offset) * _scale;
-        return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+        return sigmaA * sigmaB * _stationaryCov->cov(a, b);
 
         Mat3Diff anisoA = Mat3Diff::Identity();
         Mat3Diff anisoB = Mat3Diff::Identity();
@@ -232,7 +231,7 @@ namespace Tungsten {
 
         auto sigmaA = (sampleGrid(mult(_variance->invNaturalTransform(), a)) + _offset) * _scale;
         auto sigmaB = (sampleGrid(mult(_variance->invNaturalTransform(), b)) + _offset) * _scale;
-        return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+        return sigmaA * sigmaB * _stationaryCov->cov(a, b);
 
         auto anisoA = Mat3DD::Identity();
         auto anisoB = Mat3DD::Identity();
@@ -253,7 +252,7 @@ namespace Tungsten {
     double NonstationaryCovariance::cov(Vec3d a, Vec3d b) const {
         double sigmaA = (_variance->density(_variance->invNaturalTransform() * vec_conv<Vec3f>(a)) + _offset)* _scale;
         double sigmaB = (_variance->density(_variance->invNaturalTransform() * vec_conv<Vec3f>(b)) + _offset)* _scale;
-        return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+        return sigmaA * sigmaB * _stationaryCov->cov(a, b);
 
         Eigen::Matrix3f anisoA = Eigen::Matrix3f::Identity();
         Eigen::Matrix3f anisoB = Eigen::Matrix3f::Identity();
