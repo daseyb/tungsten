@@ -59,6 +59,23 @@ public:
     {
         return _uv;
     }
+
+    bool operator==(const Vertex& o) const
+    {
+        if (pos() != o.pos()) return false;
+        if (uv() != o.uv()) return false;
+        if (normal() != o.normal()) return false;
+        return true;
+    }
+
+    bool operator!=(const Vertex& o) const
+    {
+        if (pos() != o.pos()) return true;
+        if (uv() != o.uv()) return true;
+        if (normal() != o.normal()) return true;
+        return false;
+    }
+
 };
 
 // MSVC's views on what is POD or not differ from gcc or clang.
@@ -70,6 +87,27 @@ static_assert(std::is_pod<Vertex>::value, "Vertex needs to be of POD type!");
 
 }
 
+template <class T>
+inline void hash_combine(std::size_t& s, const T& v)
+{
+    std::hash<T> h;
+    s ^= h(v) + 0x9e3779b9 + (s << 6) + (s >> 2);
+}
 
+namespace std
+{
+    template <>
+    struct hash<Tungsten::Vertex>
+    {
+        std::size_t operator()(const Tungsten::Vertex& c) const
+        {
+            std::size_t result = 0;
+            hash_combine(result, c.pos());
+            hash_combine(result, c.normal());
+            hash_combine(result, c.uv());
+            return result;
+        }
+    };
+}
 
 #endif /* VERTEX_HPP_ */

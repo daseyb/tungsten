@@ -49,8 +49,8 @@ double GPSampleNodeCSG::perform_op(double leftSample, double rightSample) const 
 }
 
 
-std::tuple<Eigen::VectorXd, std::vector<int>> GPRealNodeValues::flatten() const {
-    return { _values.col(0), std::vector<int>(_values.rows(), _gp->_id) };
+std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> GPRealNodeValues::flatten() const {
+    return { _values, Eigen::MatrixXi::Ones(_values.rows(), _values.cols()) * _gp->_id};
 }
 
 void GPRealNodeValues::makeIntersect(size_t p, double offsetT, double dt) {
@@ -182,7 +182,13 @@ void GaussianProcess::loadResources() {
     std::vector<Vertex> verts;
     std::vector<TriangleI> tris;
     if (_conditioningDataPath && MeshIO::load(*_conditioningDataPath, verts, tris)) {
+        std::unordered_set<Vertex> unique_verts;
         for (const auto& v : verts) {
+            unique_verts.insert(v);
+        }
+
+
+        for (const auto& v : unique_verts) {
             _globalCondPs.push_back(vec_conv<Vec3d>(v.pos()));
             _globalCondDerivs.push_back(Derivative::None);
             _globalCondDerivDirs.push_back(vec_conv<Vec3d>(v.normal()));
@@ -193,8 +199,76 @@ void GaussianProcess::loadResources() {
             _globalCondDerivDirs.push_back(vec_conv<Vec3d>(v.normal()));
             _globalCondValues.push_back(1);
         }
+
+        setConditioning(_globalCondPs, _globalCondDerivs, _globalCondDerivDirs, _globalCondValues);
+    }
+}
+
+void GaussianProcess::setConditioning(
+    std::vector<Vec3d> globalCondPs,
+    std::vector<Derivative> globalCondDerivs,
+    std::vector<Vec3d> globalCondDerivDirs,
+    std::vector<double> globalCondValues) {
+
+    CovMatrix s11 = cov_prior(
+        globalCondPs.data(), globalCondPs.data(),
+        globalCondDerivs.data(), globalCondDerivs.data(),
+        globalCondDerivDirs.data(), globalCondDerivDirs.data(),
+        Vec3d(0.), globalCondPs.size(), globalCondPs.size());
+
+
+    Eigen::Map<const Eigen::VectorXd> cond_values_view(globalCondValues.data(), globalCondValues.size());
+    _globalCondPriorMean = cond_values_view - mean_prior(globalCondPs.data(), globalCondDerivs.data(), globalCondDerivDirs.data(), Vec3d(0.), globalCondPs.size());
+
+    _globalCondPs = globalCondPs;
+    _globalCondDerivs = globalCondDerivs;
+    _globalCondDerivDirs = globalCondDerivDirs;
+    _globalCondValues = globalCondValues;
+
+    CovMatrix solved;
+
+    bool succesfullSolve = false;
+    if (true || s11.rows() <= 64) {
+        auto lltSolver = Eigen::LDLT<CovMatrix>(s11.triangularView<Eigen::Lower>());
+
+        if (lltSolver.info() == Eigen::ComputationInfo::Success) {
+            succesfullSolve = true;
+            _globalCondSolver = lltSolver;
+            std::cout << "Using LLT solver for global conditioning.\n";
+        }
     }
 
+#if 0
+    if (!succesfullSolve) {
+        auto solver = Eigen::HouseholderQR<CovMatrix>();
+        solver.compute(s11.triangularView<Eigen::Lower>());
+
+        _globalCondSolver = solver;
+        std::cout << "Using HouseholderQR solver for global conditioning.\n";
+        succesfullSolve = true;
+
+        /*if (solver. == Eigen::ComputationInfo::Success) {
+            succesfullSolve = true;
+            _globalCondSolver = bdcsvdSolver;
+            std::cout << "Using BDCSVD solver for global conditioning.\n";
+        }*/
+    }
+#endif
+
+    if (!succesfullSolve) {
+        auto bdcsvdSolver = Eigen::BDCSVD<Eigen::MatrixXd, Eigen::ComputeThinU | Eigen::ComputeThinV>();
+        bdcsvdSolver.compute(s11.triangularView<Eigen::Lower>());
+
+        if (bdcsvdSolver.info() == Eigen::ComputationInfo::Success) {
+            succesfullSolve = true;
+            _globalCondSolver = bdcsvdSolver;
+            std::cout << "Using BDCSVD solver for global conditioning.\n";
+        }
+    }
+
+    if (!succesfullSolve) {
+        FAIL("Global conditioning decomposition failed!\n");
+    }
 }
 
 std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
@@ -232,12 +306,27 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
     ps_cov.makeCompressed();
 #endif
 
-    return { ps_mean, ps_cov };
+    if (_globalCondPs.size() == 0) {
+        return { ps_mean, ps_cov };
+    }
+    else {
+        CovMatrix s12 = cov_prior(
+            _globalCondPs.data(), points,
+            _globalCondDerivs.data(), derivative_types,
+            _globalCondDerivDirs.data(), ddirs,
+            deriv_dir, _globalCondPs.size(), numPts);
+
+
+        CovMatrix solved = std::visit([&s12](auto&& solver) -> CovMatrix { return solver.solve(s12).transpose(); }, _globalCondSolver);
+        
+        return { ps_mean + (solved * _globalCondPriorMean), ps_cov - (solved * s12) };
+    }
 }
 
-Eigen::VectorXd GaussianProcess::mean(
-    const Vec3d* points, const Derivative* derivative_types, const Vec3d* ddirs,
+Eigen::VectorXd GaussianProcess::mean_prior(
+    const Vec3d * points, const Derivative * derivative_types, const Vec3d * ddirs,
     Vec3d deriv_dir, size_t numPts) const {
+
     Eigen::VectorXd ps_mean(numPts);
     for (size_t i = 0; i < numPts; i++) {
         const Vec3d& ddir = ddirs ? ddirs[i] : deriv_dir;
@@ -246,11 +335,34 @@ Eigen::VectorXd GaussianProcess::mean(
     return ps_mean;
 }
 
-CovMatrix GaussianProcess::cov(
-    const Vec3d* points_a, const Vec3d* points_b, 
+Eigen::VectorXd GaussianProcess::mean(
+    const Vec3d* points, const Derivative* derivative_types, const Vec3d* ddirs,
+    Vec3d deriv_dir, size_t numPts) const {
+
+    Eigen::VectorXd ps_mean = mean_prior(points, derivative_types, ddirs, deriv_dir, numPts);
+
+    if (_globalCondPs.size() == 0) {
+        return ps_mean;
+    }
+    else {
+        CovMatrix s12 = cov_prior(
+            _globalCondPs.data(), points,
+            _globalCondDerivs.data(), derivative_types,
+            _globalCondDerivDirs.data(), ddirs,
+            deriv_dir, _globalCondPs.size(), numPts);
+
+        CovMatrix solved = std::visit([&s12](auto&& solver) -> CovMatrix { return solver.solve(s12).transpose(); }, _globalCondSolver);
+
+        return ps_mean + (solved * _globalCondPriorMean);
+    }
+}
+
+CovMatrix GaussianProcess::cov_prior(
+    const Vec3d* points_a, const Vec3d* points_b,
     const Derivative* dtypes_a, const Derivative* dtypes_b,
     const Vec3d* ddirs_a, const Vec3d* ddirs_b,
     Vec3d deriv_dir, size_t numPtsA, size_t numPtsB) const {
+
     CovMatrix ps_cov(numPtsA, numPtsB);
 
 #ifdef SPARSE_COV
@@ -282,6 +394,40 @@ CovMatrix GaussianProcess::cov(
 #endif
 
     return ps_cov;
+}
+
+
+CovMatrix GaussianProcess::cov(
+    const Vec3d* points_a, const Vec3d* points_b, 
+    const Derivative* dtypes_a, const Derivative* dtypes_b,
+    const Vec3d* ddirs_a, const Vec3d* ddirs_b,
+    Vec3d deriv_dir, size_t numPtsA, size_t numPtsB) const {
+    CovMatrix ps_cov = cov_prior(
+        points_a, points_b,
+        dtypes_a, dtypes_b,
+        ddirs_a, ddirs_b,
+        deriv_dir, numPtsA, numPtsB);
+
+    if (_globalCondPs.size() == 0) {
+        return ps_cov;
+    }
+    else {
+
+        CovMatrix sCB = cov_prior(
+            _globalCondPs.data(), points_b,
+            _globalCondDerivs.data(), dtypes_b,
+            _globalCondDerivDirs.data(), ddirs_b,
+            deriv_dir, _globalCondPs.size(), numPtsB);
+        CovMatrix solvedSCB = std::visit([&sCB](auto&& solver) -> CovMatrix { return solver.solve(sCB); }, _globalCondSolver);
+
+        CovMatrix sCA = cov_prior(
+            _globalCondPs.data(), points_a,
+            _globalCondDerivs.data(), dtypes_a,
+            _globalCondDerivDirs.data(), ddirs_a,
+            deriv_dir, _globalCondPs.size(), numPtsA);
+
+        return ps_cov - (sCA.transpose() * solvedSCB);
+    }
 }
 
 CovMatrix GaussianProcess::cov_sym(
@@ -320,14 +466,33 @@ CovMatrix GaussianProcess::cov_sym(
     ps_cov.makeCompressed();
 #endif
 
-    return ps_cov;
+    if (_globalCondPs.size() == 0) {
+        return ps_cov;
+    }
+    else {
+        CovMatrix s12 = cov_prior(
+            _globalCondPs.data(), points_a,
+            _globalCondDerivs.data(), dtypes_a,
+            _globalCondDerivDirs.data(), ddirs_a,
+            deriv_dir, _globalCondPs.size(), numPtsA);
+
+        CovMatrix solved = std::visit([&s12](auto&& solver) -> CovMatrix { return solver.solve(s12).transpose(); }, _globalCondSolver);
+
+        return ps_cov - (solved * s12);
+    }
 }
 
 std::shared_ptr<GPRealNode> GaussianProcess::sample_start_value(Vec3d p, PathSampleGenerator& sampler) const {
-    double m = (*_mean)(Derivative::None, p, Vec3d(0.f));
-    double sigma = sqrt((*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.)));
+    auto deriv = Derivative::None;
+    auto [mean, cov] = mean_and_cov(&p, &deriv, nullptr, Vec3d(0.), 1);
+
+    double m = mean(0);
+    double sigma = sqrt(cov(0,0));
 
     Eigen::VectorXd vals(1);
+
+    //vals(0) = m + sigma * rand_normal_2(sampler).x();
+
     vals(0) = max(0., rand_truncated_normal(m, sigma, 0, sampler));
 
     return std::make_shared<GPRealNodeValues>(vals, this);
@@ -340,19 +505,9 @@ std::shared_ptr<GPRealNode> GaussianProcess::sample(
     const Constraint* constraints, size_t numConstraints,
     Vec3d deriv_dir, int samples, PathSampleGenerator& sampler) const {
 
-    if (_globalCondPs.size() == 0) {
-        auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dirs, deriv_dir, numPts);
-        auto mvn = MultivariateNormalDistribution(ps_mean, ps_cov);
-        return std::make_shared<GPRealNodeValues>(mvn.sample(constraints, numConstraints, samples, sampler), this);
-    }
-    else {
-        auto mvn = create_mvn_cond(points, derivative_types, numPts,
-            deriv_dirs,
-            _globalCondPs.data(), _globalCondValues.data(), _globalCondDerivs.data(), 0,
-            _globalCondDerivDirs.data(),
-            deriv_dir);
-        return std::make_shared<GPRealNodeValues>(mvn.sample(constraints, numConstraints, samples, sampler), this);
-    }
+    auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, deriv_dirs, deriv_dir, numPts);
+    auto mvn = MultivariateNormalDistribution(ps_mean, ps_cov);
+    return std::make_shared<GPRealNodeValues>(mvn.sample(constraints, numConstraints, samples, sampler), this);
 }
 
 std::shared_ptr<GPRealNode> GaussianProcess::sample_cond(
@@ -379,19 +534,9 @@ double GaussianProcess::eval(
     Vec3d deriv_dir) const {
 
     Eigen::Map<const Eigen::VectorXd> eval_values_View(values, numPts);
-    if (_globalCondPs.size() == 0) {
-        auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, ddirs, deriv_dir, numPts);
-        auto mvn = MultivariateNormalDistribution(ps_mean, ps_cov);
-        return mvn.eval(eval_values_View);
-    }
-    else {
-        auto mvn = create_mvn_cond(points, derivative_types, numPts,
-            ddirs,
-            _globalCondPs.data(), _globalCondValues.data(), _globalCondDerivs.data(), 0,
-            _globalCondDerivDirs.data(),
-            deriv_dir);
-        return mvn.eval(eval_values_View);
-    }
+    auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, ddirs, deriv_dir, numPts);
+    auto mvn = MultivariateNormalDistribution(ps_mean, ps_cov);
+    return mvn.eval(eval_values_View);
 }
 
 MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
@@ -400,42 +545,6 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
     const Vec3d* cond_points, const double* cond_values, const Derivative* cond_derivative_types, size_t numCondPts,
     const Vec3d* cond_ddirs,
     Vec3d deriv_dir) const {
-
-    std::vector<Vec3d> cond_ps;
-    std::vector<Derivative> cond_derivs;
-    std::vector<Vec3d> cond_dds;
-    std::vector<double> cond_vs;
-
-    if (_globalCondPs.size() > 0) {
-        cond_ps.resize(_globalCondPs.size() + numCondPts);
-        cond_derivs.resize(_globalCondDerivs.size() + numCondPts);
-        cond_dds.resize(_globalCondDerivDirs.size() + numCondPts);
-        cond_vs.resize(_globalCondValues.size() + numCondPts);
-
-        std::copy(cond_points, cond_points + numCondPts, cond_ps.begin());
-        std::copy(_globalCondPs.begin(), _globalCondPs.end(), cond_ps.begin() + numCondPts);
-
-        std::copy(cond_derivative_types, cond_derivative_types + numCondPts, cond_derivs.begin());
-        std::copy(_globalCondDerivs.begin(), _globalCondDerivs.end(), cond_derivs.begin() + numCondPts);
-
-        if (cond_ddirs != nullptr) {
-            std::copy(cond_ddirs, cond_ddirs + numCondPts, cond_dds.begin());
-        }
-        else {
-            std::fill_n(cond_dds.begin(), numCondPts, deriv_dir);
-        }
-        std::copy(_globalCondDerivDirs.begin(), _globalCondDerivDirs.end(), cond_dds.begin() + numCondPts);
-
-        std::copy(cond_values, cond_values + numCondPts, cond_vs.begin());
-        std::copy(_globalCondValues.begin(), _globalCondValues.end(), cond_vs.begin() + numCondPts);
-
-        cond_points = cond_ps.data();
-        cond_derivative_types = cond_derivs.data();
-        cond_ddirs = _globalCondDerivDirs.data();
-        cond_values = cond_vs.data();
-
-        numCondPts = cond_ps.size();
-    }
 
     if (numCondPts == 0) {
         auto [ps_mean, ps_cov] = mean_and_cov(points, derivative_types, ddirs, deriv_dir, numPts);
@@ -459,9 +568,9 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
     bool succesfullSolve = false;
     if (true || s11.rows() <= 64) {
 #ifdef SPARSE_COV
-        Eigen::SimplicialLLT<CovMatrix> solver(s11);
+        Eigen::SimplicialLDLT<CovMatrix> solver(s11);
 #else
-        Eigen::LLT<CovMatrix> solver(s11.triangularView<Eigen::Lower>());
+        Eigen::LDLT<CovMatrix> solver(s11.triangularView<Eigen::Lower>());
 #endif
         if (solver.info() == Eigen::ComputationInfo::Success) {
             solved = solver.solve(s12).transpose();
@@ -474,9 +583,17 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         }
     }
 
+#if 0
     if (!succesfullSolve) {
-        Eigen::BDCSVD<Eigen::MatrixXd> solver(s11.triangularView<Eigen::Lower>(), Eigen::ComputeThinU | Eigen::ComputeThinV);
-        solver.setThreshold(0.);
+        Eigen::HouseholderQR<CovMatrix> solver(s11.triangularView<Eigen::Lower>());
+        solved = solver.solve(s12).transpose();
+        succesfullSolve = true;
+    }
+#endif
+
+    if (!succesfullSolve) {
+        Eigen::BDCSVD<Eigen::MatrixXd, Eigen::ComputeThinU | Eigen::ComputeThinV> solver;
+        solver.compute(s11.triangularView<Eigen::Lower>());
 
         if (solver.info() != Eigen::ComputationInfo::Success) {
             std::cerr << "Conditioning decomposition failed (BDCSVD)!\n";
@@ -502,9 +619,7 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         ddirs,
         deriv_dir, numPts);
 
-    CovMatrix covAdjust = (solved * s12);
-
-    CovMatrix s2 = s22 - covAdjust;
+    CovMatrix s2 = s22 - (solved * s12);
 
     return MultivariateNormalDistribution(m2, s2);
 }

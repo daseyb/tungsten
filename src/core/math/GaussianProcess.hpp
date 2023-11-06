@@ -14,6 +14,7 @@
 
 #include <functional>
 #include <vector>
+#include <variant>
 
 #include "io/JsonSerializable.hpp"
 #include "io/JsonObject.hpp"
@@ -30,7 +31,7 @@ namespace Tungsten {
     };
 
     struct GPRealNode {
-        virtual std::tuple<Eigen::VectorXd, std::vector<int>> flatten() const = 0;
+        virtual std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> flatten() const = 0;
         virtual void makeIntersect(size_t p, double offsetT, double dt) = 0;
         virtual void applyMemory(GPCorrelationContext ctxt, Vec3d rd) = 0;
         virtual void sampleGrad(int pickId, Vec3d ip, Vec3d rd, Vec3d* points, Derivative* derivs, PathSampleGenerator& sampler, Vec3d& grad) = 0;
@@ -49,18 +50,21 @@ namespace Tungsten {
             }
         }
         
-        virtual std::tuple<Eigen::VectorXd, std::vector<int>> flatten() const override {
+        virtual std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> flatten() const override {
             auto [lv, li] = _left->flatten();
             auto [rv, ri] = _right->flatten();
             
-            Eigen::VectorXd resV(lv.size());
-            std::vector<int> resI(lv.size());
+            Eigen::MatrixXd resV(lv.rows(), lv.cols());
+            Eigen::MatrixXi resI(lv.rows(), lv.cols());
 
-            for (size_t i = 0; i < lv.size(); i++) {
-                auto [v, id] = perform_op(lv[i], rv[i], li[i], ri[i]);
-                resV[i] = v;
-                resI[i] = id;
+            for (size_t c = 0; c < lv.cols(); c++) {
+                for (size_t r = 0; r < lv.rows(); r++) {
+                    auto [v, id] = perform_op(lv(r,c), rv(r,c), li(r,c), ri(r,c));
+                    resV(r,c) = v;
+                    resI(r,c) = id;
+                }
             }
+
 
             return { resV, resI };
         }
@@ -97,7 +101,7 @@ namespace Tungsten {
         bool _isIntersect = false;
         Vec3d _sampledGrad;
 
-        virtual std::tuple<Eigen::VectorXd, std::vector<int>> flatten() const override;
+        virtual std::tuple<Eigen::MatrixXd, Eigen::MatrixXi> flatten() const override;
         virtual void makeIntersect(size_t p, double offsetT, double dt) override;
         virtual void sampleGrad(int pickId, Vec3d ip, Vec3d rd, Vec3d* points, Derivative* derivs, PathSampleGenerator& sampler, Vec3d& grad) override;
         virtual void applyMemory(GPCorrelationContext ctxt, Vec3d rd) override;
@@ -228,6 +232,10 @@ namespace Tungsten {
             const Vec3d* points, const Derivative* derivative_types, const Vec3d* ddirs,
             Vec3d deriv_dir, size_t numPts) const override;
 
+        Eigen::VectorXd mean_prior(
+            const Vec3d* points, const Derivative* derivative_types, const Vec3d* ddirs,
+            Vec3d deriv_dir, size_t numPts) const;
+
         CovMatrix cov(
             const Vec3d* points_a, const Vec3d* points_b,
             const Derivative* dtypes_a, const Derivative* dtypes_b,
@@ -239,6 +247,12 @@ namespace Tungsten {
             const Derivative* dtypes_a,
             const Vec3d* ddirs_a,
             Vec3d deriv_dir, size_t numPtsA) const;
+
+        CovMatrix cov_prior(
+            const Vec3d* points_a, const Vec3d* points_b,
+            const Derivative* dtypes_a, const Derivative* dtypes_b,
+            const Vec3d* ddirs_a, const Vec3d* ddirs_b,
+            Vec3d deriv_dir, size_t numPtsA, size_t numPtsB) const;
 
         virtual std::shared_ptr<GPRealNode> sample_start_value(Vec3d p, PathSampleGenerator& sampler) const override;
 
@@ -278,15 +292,10 @@ namespace Tungsten {
             Vec3d deriv_dir) const;
 
 
-        void setConditioning(std::vector<Vec3d> globalCondPs, 
-            std::vector<Derivative> globalCondDerivs, 
+        void setConditioning(std::vector<Vec3d> globalCondPs,
+            std::vector<Derivative> globalCondDerivs,
             std::vector<Vec3d> globalCondDerivDirs,
-            std::vector<double> globalCondValues) {
-            _globalCondPs = globalCondPs;
-            _globalCondDerivs = globalCondDerivs;
-            _globalCondDerivDirs = globalCondDerivDirs;
-            _globalCondValues = globalCondValues;
-        }
+            std::vector<double> globalCondValues);
 
         virtual double noIntersectBound(Vec3d p = Vec3d(0.), double q = 0.9999) const override;
         virtual double goodStepsize(Vec3d p = Vec3d(0.), double targetCov = 0.95, Vec3d rd = Vec3d(1., 0., 0.)) const override;
@@ -297,6 +306,9 @@ namespace Tungsten {
         std::vector<Derivative> _globalCondDerivs;
         std::vector<Vec3d> _globalCondDerivDirs;
         std::vector<double> _globalCondValues;
+        Eigen::VectorXd _globalCondPriorMean;
+
+        std::variant<Eigen::BDCSVD<CovMatrix, Eigen::ComputeThinU | Eigen::ComputeThinV>, Eigen::LDLT<CovMatrix>, Eigen::HouseholderQR<CovMatrix>> _globalCondSolver;
 
         PathPtr _conditioningDataPath;
 

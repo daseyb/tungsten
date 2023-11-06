@@ -45,7 +45,7 @@ namespace Tungsten {
         double a_bar = (a - mean) / sigma;
         double x_bar;
 
-        while (true) {
+        for(int i = 0; i < 1000; i++) {
             double u = sampler.next1D();
             x_bar = sqrt(a_bar * a_bar - 2 * log(1 - u));
             double v = sampler.next1D();

@@ -86,11 +86,10 @@ namespace Tungsten {
             std::array<Vec3d, 1> cond_pts = { points[0] };
             std::array<Derivative, 1> cond_deriv = { Derivative::None };
             std::shared_ptr<GPRealNode> cond_vs = _gp->sample_start_value(points[0], sampler);
-            std::array<Constraint, 1> constraints = { {0, 0, 0, FLT_MAX } };
             gpSamples = _gp->sample_cond(
                 points.data(), derivs.data(), _samplePoints, nullptr,
-                cond_pts.data(), cond_vs.get(), cond_deriv.data(), cond_pts.size(), nullptr,
-                constraints.data(), constraints.size(),
+                cond_pts.data(), cond_vs.get(), cond_deriv.data(), 0, nullptr,
+                nullptr, 0,
                 rd, 1, sampler);
         }
         else {
@@ -159,8 +158,8 @@ namespace Tungsten {
 
         double prevV = sampleValues(0);
 
-        if (prevV < -0.1) {
-            std::cerr << "First sample along ray was way less than 0: " << prevV << "\n";
+        if (prevV < 0 && state.firstScatter) {
+            //std::cerr << "First sample along ray was way less than 0: " << prevV << "\n";
             return false;
         }
 
@@ -180,7 +179,7 @@ namespace Tungsten {
 
                 derivs.resize(p + 2);
                 points.resize(p + 2);
-                sampleValues.conservativeResize(p + 2);
+                sampleValues.conservativeResize(p + 2, Eigen::NoChange);
 
                 gpSamples->makeIntersect(p, offsetT, prevT - currT);
 
@@ -195,7 +194,7 @@ namespace Tungsten {
                 ctxt->points = std::move(points);
                 ctxt->values = gpSamples;
                 state.gpContext = ctxt;
-                state.lastGPId = sampleIds[p];
+                state.lastGPId = sampleIds(p,0);
 
                 return true;
             }
@@ -209,7 +208,7 @@ namespace Tungsten {
         ctxt->points = std::move(points);
         ctxt->values = gpSamples;
         state.gpContext = ctxt;
-        state.lastGPId = sampleIds[sampleIds.size()-1];
+        state.lastGPId = sampleIds(sampleIds.size()-1,0);
 
         return false;
     }
