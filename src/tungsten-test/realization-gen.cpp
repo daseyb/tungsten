@@ -47,12 +47,12 @@ std::tuple<std::vector<Vec3d>, std::vector<Vec3d>, std::vector<double>, std::vec
     return { ps, ns, vs, ds };
 }
 
-int main() {
+void gen_cond_test() {
 
     int num_reals = 2000;
 
-	auto gp = std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.0f, 1.0f));
-    
+    auto gp = std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.0f, 1.0f));
+
 #if 0
     {
         UniformPathSampler sampler(0);
@@ -96,7 +96,7 @@ int main() {
         cns,
         cvs
     );
-    
+
     {
         std::ofstream xfile(tinyformat::format("testing/realizations/%s-%d-cond-ps-cond.bin", gp->_cov->id(), NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
         xfile.write((char*)gp->_globalCondPs.data(), sizeof(Vec3d) * gp->_globalCondPs.size());
@@ -150,7 +150,7 @@ int main() {
                 Derivative::None,
             };
 
-            auto add_v = std::make_shared<GPRealNodeValues>(-0.1*Eigen::MatrixXd::Ones(2,1), gp.get());
+            auto add_v = std::make_shared<GPRealNodeValues>(-0.1 * Eigen::MatrixXd::Ones(2, 1), gp.get());
 
 
             auto [samples, gpIds] = gp->sample_cond(
@@ -166,39 +166,62 @@ int main() {
             }
         }
     }
+}
 
-#if 0
-    int sample_count = 10000;
-    std::cout << "fp" << std::endl;
-    {    
-        UniformPathSampler sampler(0);
-        sampler.next2D();
+void gen_real_microfacet_to_volume() {
 
-        GaussianProcessMedium gp_med(gp, 0, 1, 1, NUM_SAMPLE_POINTS);
-        gp_med.prepareForRender();
-        
-        Ray ray(Vec3f(0.f), Vec3f(1.f, 0.f, 0.f), 0.0f, 15.0f);
+    UniformPathSampler sampler(0);
+    sampler.next2D();
 
-        std::vector<float> ts;
-        for (int i = 0; i < sample_count; i++) {
-            if (i % 100 == 0) {
-                std::cout << i << "/" << sample_count << "\r";
+
+    std::vector<Vec3d> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+    std::vector<Derivative> derivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
+
+    {
+        int idx = 0;
+        for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
+            for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
+                points[idx] = 10. * (Vec3d((float)i, (float)j, 0.f) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
+                points[idx][2] = 0.f;
+                derivs[idx] = Derivative::None;
+                idx++;
             }
-
-            Medium::MediumState state;
-            state.reset();
-            MediumSample sample;
-            if (gp_med.sampleDistance(sampler, ray, state, sample)) {
-                ts.push_back(sample.continuedT);
-            }
-        }
-
-        {
-            std::ofstream xfile(tinyformat::format("cond-transmittance/%s-sample-fp.bin", gp->_cov->id()), std::ios::out | std::ios::binary);
-            xfile.write((char*)ts.data(), sizeof(float) * ts.size());
-            xfile.close();
         }
     }
-#endif
-   
+
+    for (auto [meanScale, meanMin] : { std::tuple{1.f, -10000.f}, std::tuple{5.f, -100.f}, std::tuple{100.f, 1.f} }) {
+        for (auto [isotropy, lengthScale] : { std::tuple{0.05f, 0.2f}, std::tuple{0.1f, 0.1f}, std::tuple{1.f, 0.05f} }) {
+            UniformPathSampler sampler(0);
+            sampler.next2D();
+
+            auto gp = std::make_shared<GaussianProcess>(
+                std::make_shared<LinearMean>(Vec3d(0., 0., 0.), Vec3d(0., 1., 0.), meanScale, meanMin),
+                std::make_shared<SquaredExponentialCovariance>(1.0f, lengthScale, Vec3f(1.f, isotropy, 1.f)));
+
+            auto [samples, gpIds] = gp->sample(
+                points.data(), derivs.data(), points.size(), nullptr,
+                nullptr, 0,
+                Vec3d(0.0f, 0.0f, 0.0f), 1, sampler)->flatten();
+
+            auto path = Path(tinyformat::format("testing/realizations/volume-to-surface/%s-%f-%d-grid-samples-cond.bin", gp->_cov->id(), meanScale, NUM_SAMPLE_POINTS));
+            
+            if (!path.parent().exists()) {
+                FileUtils::createDirectory(path.parent());
+            }
+
+            {
+                std::ofstream xfile(path.asString(), std::ios::out | std::ios::binary);
+                xfile.write((char*)samples.data(), sizeof(double) * samples.rows() * samples.cols());
+                xfile.close();
+            }
+        }
+    }
+
+
+}
+
+int main() {
+
+    gen_real_microfacet_to_volume();
+
 }

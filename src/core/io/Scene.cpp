@@ -27,6 +27,7 @@
 #include "grids/GridFactory.hpp"
 
 #include "math/GaussianProcess.hpp"
+#include "math/GPNeuralNetwork.hpp"
 
 #include <tinyformat/tinyformat.hpp>
 #include <rapidjson/document.h>
@@ -133,6 +134,11 @@ std::shared_ptr<CovarianceFunction> Scene::fetchCovarianceFunction(JsonPtr value
 std::shared_ptr<GPSampleNode> Scene::fetchGaussianProcess(JsonPtr value) const
 {
     return instantiate<GPSampleNode>(value, *this);
+}
+
+std::shared_ptr<GPNeuralNetwork> Scene::fetchNeuralNetwork(JsonPtr value) const
+{
+    return instantiate<GPNeuralNetwork>(value, *this);
 }
 
 std::shared_ptr<Bsdf> Scene::fetchBsdf(JsonPtr value) const

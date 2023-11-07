@@ -1,6 +1,7 @@
 #include "GaussianProcessFactory.hpp"
 
 #include "GaussianProcess.hpp"
+#include "GPNeuralNetwork.hpp"
 
 namespace Tungsten {
 
@@ -17,6 +18,7 @@ DEFINE_STRINGABLE_ENUM(MeanFunctionFactory, "mean", ({
     {"tabulated", std::make_shared<TabulatedMean>},
     {"mesh", std::make_shared<MeshSdfMean>},
     {"procedural", std::make_shared<ProceduralMean>},
+    {"neural", std::make_shared<NeuralMean>},
 }))
 
 
@@ -28,6 +30,7 @@ DEFINE_STRINGABLE_ENUM(CovarianceFunctionFactory, "covariance", ({
     {"nonstationary", std::make_shared<NonstationaryCovariance>},
     {"mg-nonstationary", std::make_shared<MeanGradNonstationaryCovariance>},
     {"thin_plate", std::make_shared<ThinPlateCovariance>},
+    {"neural", std::make_shared<NeuralNonstationaryCovariance>},
 }))
 
 

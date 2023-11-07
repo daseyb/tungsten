@@ -10,6 +10,7 @@
 #include <sampling/Gaussian.hpp>
 
 #include <math/SdfFunctions.hpp>
+#include <math/GPNeuralNetwork.hpp>
 
 #include <autodiff/forward/real/real.hpp>
 #include <autodiff/forward/real/eigen.hpp>
@@ -24,11 +25,13 @@ namespace Tungsten {
     using FloatDD = autodiff::dual2nd;
     using Vec3DD = autodiff::Vector3dual2nd;
     using Mat3DD = autodiff::Matrix3dual2nd;
+    using VecXDD = autodiff::VectorXdual2nd;
 
     using FloatD = autodiff::real2nd;
     using Vec3Diff = autodiff::Vector3real2nd;
     using Vec4Diff = autodiff::Vector4real2nd;
     using Mat3Diff = autodiff::Matrix3real2nd;
+    using VecXDiff = autodiff::VectorXreal2nd;
 
     inline Vec3d from_diff(const Vec3DD& vd) {
         return Vec3d{ vd.x().val.val, vd.y().val.val, vd.z().val.val };
@@ -209,6 +212,34 @@ namespace Tungsten {
         float _scale = 1;
     };
 
+    class NeuralNonstationaryCovariance : public CovarianceFunction {
+    public:
+
+        NeuralNonstationaryCovariance(
+            std::shared_ptr<GPNeuralNetwork> nn = nullptr,
+            float offset = 0, float scale = 1) : _nn(nn), _offset(offset), _scale(scale)
+        {
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override;
+        virtual rapidjson::Value toJson(Allocator& allocator) const override;
+        virtual void loadResources() override;
+
+        virtual std::string id() const {
+            return tinyformat::format("nn-ns");
+        }
+
+    private:
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override;
+        virtual FloatDD cov(Vec3DD a, Vec3DD b) const override;
+        virtual double cov(Vec3d a, Vec3d b) const override;
+
+        PathPtr _path;
+
+        std::shared_ptr<GPNeuralNetwork> _nn;
+        float _offset = 0;
+        float _scale = 1;
+    };
 
 
     class SquaredExponentialCovariance : public StationaryCovariance {
@@ -614,8 +645,8 @@ namespace Tungsten {
     class LinearMean : public MeanFunction {
     public:
 
-        LinearMean(Vec3d ref = Vec3d(0.), Vec3d dir = Vec3d(1., 0., 0.), float scale = 1.0f) :
-            _ref(ref), _dir(dir.normalized()), _scale(scale) {}
+        LinearMean(Vec3d ref = Vec3d(0.), Vec3d dir = Vec3d(1., 0., 0.), float scale = 1.0f, float min = -FLT_MAX) :
+            _ref(ref), _dir(dir.normalized()), _scale(scale), _min(min) {}
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             MeanFunction::fromJson(value, scene);
@@ -623,6 +654,7 @@ namespace Tungsten {
             value.getField("reference_point", _ref);
             value.getField("direction", _dir);
             value.getField("scale", _scale);
+            value.getField("min", _min);
 
             _dir.normalize();
         }
@@ -632,7 +664,8 @@ namespace Tungsten {
                 "type", "linear",
                 "reference_point", _ref,
                 "direction", _dir,
-                "scale", _scale
+                "scale", _scale,
+                "min", _min
             };
         }
 
@@ -644,13 +677,19 @@ namespace Tungsten {
         Vec3d _ref;
         Vec3d _dir;
         float _scale;
+        float _min = -FLT_MAX;
 
         virtual double mean(Vec3d a) const override {
-            return (a - _ref).dot(_dir) * _scale;
+            return max((a - _ref).dot(_dir) * _scale, (double)_min);
         }
 
         virtual Vec3d dmean_da(Vec3d a) const override {
-            return _dir * _scale;
+            if ((a - _ref).dot(_dir) * _scale < _min) {
+                return Vec3d(0.);
+            }
+            else {
+                return _dir * _scale;
+            }
         }
 
         virtual double lipschitz() const {
@@ -672,6 +711,25 @@ namespace Tungsten {
         std::shared_ptr<Grid> _grid;
         float _offset = 0;
         float _scale = 1;
+
+        virtual double mean(Vec3d a) const override;
+        virtual Vec3d dmean_da(Vec3d a) const override;
+    };
+
+    class NeuralMean : public MeanFunction {
+    public:
+
+        NeuralMean(std::shared_ptr<GPNeuralNetwork> nn = nullptr, float offset = 0, float scale = 1) : _nn(nn), _offset(offset), _scale(scale) {}
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override;
+        virtual rapidjson::Value toJson(Allocator& allocator) const override;
+        virtual void loadResources() override;
+
+    private:
+        std::shared_ptr<GPNeuralNetwork> _nn;
+        float _offset = 0;
+        float _scale = 1;
+        PathPtr _path;
 
         virtual double mean(Vec3d a) const override;
         virtual Vec3d dmean_da(Vec3d a) const override;

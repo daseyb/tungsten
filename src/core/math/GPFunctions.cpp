@@ -270,6 +270,51 @@ namespace Tungsten {
         return sqrt(sigmaA) * sqrt(sigmaB) * ansioFac * _stationaryCov->cov(dsq);
     }
 
+    void NeuralNonstationaryCovariance::fromJson(JsonPtr value, const Scene& scene) {
+        CovarianceFunction::fromJson(value, scene);
+
+        if (auto path = value["network"]) {
+            _path = scene.fetchResource(path);
+        }
+
+        value.getField("scale", _scale);
+    }
+
+    rapidjson::Value NeuralNonstationaryCovariance::toJson(Allocator& allocator) const {
+        return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+            "type", "nonstationary",
+            "network", *_path,
+            "scale", _scale,
+        };
+    }
+
+    void NeuralNonstationaryCovariance::loadResources() {
+        CovarianceFunction::loadResources();
+
+        std::shared_ptr<JsonDocument> document;
+        try {
+            document = std::make_shared<JsonDocument>(*_path);
+        }
+        catch (std::exception& e) {
+            std::cerr << e.what() << "\n";
+        }
+
+        _nn = std::make_shared<GPNeuralNetwork>();
+        _nn->read(*document, _path->parent());
+    }
+
+    FloatD NeuralNonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
+        return _nn->cov(a, b) * _scale;
+    }
+
+    FloatDD NeuralNonstationaryCovariance::cov(Vec3DD a, Vec3DD b) const {
+        return _nn->cov(a, b) * _scale;
+    }
+
+    double NeuralNonstationaryCovariance::cov(Vec3d a, Vec3d b) const {
+        return _nn->cov(a, b) * _scale;
+    }
+
 
     void MeanGradNonstationaryCovariance::fromJson(JsonPtr value, const Scene& scene) {
         CovarianceFunction::fromJson(value, scene);
@@ -422,6 +467,60 @@ namespace Tungsten {
 
     void TabulatedMean::loadResources() {
         _grid->loadResources();
+    }
+
+
+    void NeuralMean::fromJson(JsonPtr value, const Scene& scene) {
+        MeanFunction::fromJson(value, scene);
+
+        if (auto path = value["network"]) _path = scene.fetchResource(path);
+
+        if (auto network = value["network"]) {
+            _nn = scene.fetchNeuralNetwork(network);
+        }
+
+        value.getField("offset", _offset);
+        value.getField("scale", _scale);
+    }
+
+    rapidjson::Value NeuralMean::toJson(Allocator& allocator) const {
+        return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+            "type", "neural",
+            "network", *_path,
+            "offset", _offset,
+            "scale", _scale
+        };
+    }
+
+
+    double NeuralMean::mean(Vec3d a) const {
+        return (_nn->mean(a) + _offset) * _scale;
+    }
+
+    Vec3d NeuralMean::dmean_da(Vec3d a) const {
+        double eps = 0.001;
+        double vals[] = {
+            mean(a + Vec3d(eps, 0.f, 0.f)),
+            mean(a + Vec3d(0.f, eps, 0.f)),
+            mean(a + Vec3d(0.f, 0.f, eps)),
+            mean(a)
+        };
+
+        auto grad = Vec3d(vals[0] - vals[3], vals[1] - vals[3], vals[2] - vals[3]) / eps;
+        return grad;
+    }
+
+    void NeuralMean::loadResources() {
+        std::shared_ptr<JsonDocument> document;
+        try {
+            document = std::make_shared<JsonDocument>(*_path);
+        }
+        catch (std::exception& e) {
+            std::cerr << e.what() << "\n";
+        }
+
+        _nn = std::make_shared<GPNeuralNetwork>();
+        _nn->read(*document, _path->parent());
     }
 
     void ProceduralMean::fromJson(JsonPtr value, const Scene& scene) {

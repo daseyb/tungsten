@@ -17,18 +17,25 @@ constexpr size_t NUM_SAMPLE_POINTS = 128;
 
 int gen3d(int argc, char** argv) {
 
+    ThreadUtils::startThreads(1);
+
     EmbreeUtil::initDevice();
 
-    std::string prefix = "sphere";
+    std::string prefix = "csg-two-spheres-nofilter";
 
 #ifdef OPENVDB_AVAILABLE
     openvdb::initialize();
 #endif
 
+    auto scenePath = Path(argv[1]);
+    std::cout << scenePath.parent().asString() << "\n";
+
     Scene* scene = nullptr;
+    TraceableScene* tscene = nullptr;
     try {
-        scene = Scene::load(Path(argv[1]));
+        scene = Scene::load(scenePath);
         scene->loadResources();
+        tscene = scene->makeTraceable();
     }
     catch (std::exception& e) {
         std::cout << e.what();
@@ -37,27 +44,32 @@ int gen3d(int argc, char** argv) {
 
     std::shared_ptr<GaussianProcessMedium> gp_medium = std::static_pointer_cast<GaussianProcessMedium>(scene->media()[0]);
 
-    auto gp = std::static_pointer_cast<GaussianProcess>(gp_medium->_gp);
+    auto gp = std::static_pointer_cast<GPSampleNode>(gp_medium->_gp);
 
     UniformPathSampler sampler(0);
-    sampler.next1D();
-    sampler.next1D();
+    sampler.next2D();
 
     std::vector<Vec3d> points(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> derivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     std::vector<Derivative> fderivs(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
 
-    Vec3d min(-2.0f, 0.0f, -2.0f);
-    Vec3d max(2.0f, 4.0f, 2.0f);
+    auto processBox = scene->findPrimitive("processBox");
+
+    Vec3d min = vec_conv<Vec3d>(processBox->bounds().min());
+    Vec3d max = vec_conv<Vec3d>(processBox->bounds().max());
 
     Eigen::VectorXf mean(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     Eigen::VectorXf variance(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     Eigen::VectorXf aniso(6 * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
 
-    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(4.f);
+    auto gridTransform = openvdb::Mat4R::identity();
+    gridTransform.setToScale(vec_conv<openvdb::Vec3R>((max - min) / NUM_SAMPLE_POINTS));
+    gridTransform.setTranslation(vec_conv<openvdb::Vec3R>(min));
+
+    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(100.f);
     meanGrid->setGridClass(openvdb::GRID_LEVEL_SET);
-    meanGrid->setName("density");
-    meanGrid->setTransform(openvdb::math::Transform::createLinearTransform(4.0 / NUM_SAMPLE_POINTS));
+    meanGrid->setName("mean");
+    meanGrid->setTransform(openvdb::math::Transform::createLinearTransform(gridTransform));
 
     openvdb::FloatGrid::Accessor meanAccessor = meanGrid->getAccessor();
 

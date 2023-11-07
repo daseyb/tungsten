@@ -37,6 +37,7 @@ namespace Tungsten {
     class GPSampleNode;
     class CovarianceFunction;
     class MeanFunction;
+    class GPNeuralNetwork;
 
 class Scene : public JsonSerializable
 {
@@ -83,6 +84,7 @@ public:
     std::shared_ptr<MeanFunction> fetchMeanFunction(JsonPtr value) const;
     std::shared_ptr<CovarianceFunction> fetchCovarianceFunction(JsonPtr value) const;
     std::shared_ptr<GPSampleNode> fetchGaussianProcess(JsonPtr value) const;
+    std::shared_ptr<GPNeuralNetwork> fetchNeuralNetwork(JsonPtr value) const;
 
     PathPtr fetchResource(const std::string &path) const;
     PathPtr fetchResource(JsonPtr v) const;
