@@ -16,6 +16,8 @@ namespace Tungsten {
     using CovMatrix = Eigen::MatrixXd;
 #endif
 
+    CovMatrix project_to_psd(const CovMatrix& in);
+
     // Box muller transform
     Vec2d rand_normal_2(PathSampleGenerator& sampler);
     double rand_truncated_normal(double mean, double sigma, double a, PathSampleGenerator& sampler);

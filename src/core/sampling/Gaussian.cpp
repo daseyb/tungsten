@@ -5,6 +5,12 @@
 #include <random>
 
 namespace Tungsten {
+    CovMatrix project_to_psd(const CovMatrix& in) {
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigs(in);
+        return eigs.eigenvectors()
+            * eigs.eigenvalues().array().max(1e-6).matrix() * eigs.eigenvectors();
+    }
+
     // Box muller transform
     Vec2d rand_normal_2(PathSampleGenerator& sampler) {
         double u1 = sampler.next1D();

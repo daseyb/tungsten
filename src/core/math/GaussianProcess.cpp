@@ -157,6 +157,7 @@ void GaussianProcess::fromJson(JsonPtr value, const Scene& scene) {
     value.getField("max_num_eigenvalues", _maxEigenvaluesN);
     value.getField("covariance_epsilon", _covEps);
     value.getField("id", _id);
+    value.getField("project_cov", _requireCovProjection);
 
     if (auto conditioningDataPath = value["conditioning_data"])
         _conditioningDataPath = scene.fetchResource(conditioningDataPath);
@@ -172,6 +173,7 @@ rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
         "max_num_eigenvalues", _maxEigenvaluesN,
         "covariance_epsilon", _covEps,
         "id", _id,
+        "project_cov", _requireCovProjection
     };
 }
 
@@ -202,6 +204,8 @@ void GaussianProcess::loadResources() {
 
         setConditioning(_globalCondPs, _globalCondDerivs, _globalCondDerivDirs, _globalCondValues);
     }
+
+    _requireCovProjection |= _cov->requireProjection();
 }
 
 void GaussianProcess::setConditioning(
@@ -306,10 +310,7 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
     ps_cov.makeCompressed();
 #endif
 
-    if (_globalCondPs.size() == 0) {
-        return { ps_mean, ps_cov };
-    }
-    else {
+    if (_globalCondPs.size() != 0) {
         CovMatrix s12 = cov_prior(
             _globalCondPs.data(), points,
             _globalCondDerivs.data(), derivative_types,
@@ -318,9 +319,16 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
 
 
         CovMatrix solved = std::visit([&s12](auto&& solver) -> CovMatrix { return solver.solve(s12).transpose(); }, _globalCondSolver);
-        
-        return { ps_mean + (solved * _globalCondPriorMean), ps_cov - (solved * s12) };
+
+        ps_mean += (solved * _globalCondPriorMean);
+        ps_cov -= (solved * s12);
     }
+
+    if (_requireCovProjection) {
+        ps_cov = project_to_psd(ps_cov);
+    }
+
+    return { ps_mean, ps_cov };
 }
 
 Eigen::VectorXd GaussianProcess::mean_prior(
@@ -466,10 +474,8 @@ CovMatrix GaussianProcess::cov_sym(
     ps_cov.makeCompressed();
 #endif
 
-    if (_globalCondPs.size() == 0) {
-        return ps_cov;
-    }
-    else {
+    
+    if(_globalCondPs.size() != 0) {
         CovMatrix s12 = cov_prior(
             _globalCondPs.data(), points_a,
             _globalCondDerivs.data(), dtypes_a,
@@ -478,8 +484,14 @@ CovMatrix GaussianProcess::cov_sym(
 
         CovMatrix solved = std::visit([&s12](auto&& solver) -> CovMatrix { return solver.solve(s12).transpose(); }, _globalCondSolver);
 
-        return ps_cov - (solved * s12);
+        ps_cov = ps_cov - (solved * s12);
     }
+
+    if (_requireCovProjection) {
+        ps_cov = project_to_psd(ps_cov);
+    }
+
+    return ps_cov;
 }
 
 std::shared_ptr<GPRealNode> GaussianProcess::sample_start_value(Vec3d p, PathSampleGenerator& sampler) const {

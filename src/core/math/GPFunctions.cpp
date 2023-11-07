@@ -475,10 +475,6 @@ namespace Tungsten {
 
         if (auto path = value["network"]) _path = scene.fetchResource(path);
 
-        if (auto network = value["network"]) {
-            _nn = scene.fetchNeuralNetwork(network);
-        }
-
         value.getField("offset", _offset);
         value.getField("scale", _scale);
     }

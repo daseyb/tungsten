@@ -89,6 +89,7 @@ namespace Tungsten {
         }
 
         virtual bool hasAnalyticSpectralDensity() const { return false; }
+        virtual bool requireProjection() const { return false; }
         virtual double spectral_density(double s) const;
         virtual double sample_spectral_density(PathSampleGenerator& sampler) const;
         virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler) const;
@@ -221,6 +222,7 @@ namespace Tungsten {
         {
         }
 
+        virtual bool requireProjection() const { return true; }
         virtual void fromJson(JsonPtr value, const Scene& scene) override;
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
         virtual void loadResources() override;

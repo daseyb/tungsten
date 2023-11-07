@@ -317,6 +317,8 @@ namespace Tungsten {
         size_t _maxEigenvaluesN = 64;
         float _covEps = 0.f;
         int _id = 0;
+
+        bool _requireCovProjection = false;
     };
 }
 
