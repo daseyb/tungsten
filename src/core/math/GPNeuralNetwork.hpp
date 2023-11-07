@@ -152,7 +152,7 @@ public:
 	template<typename Scalar>
 	Scalar mean(const Eigen::Vector<Scalar, 3>& p) const {
 		if (!_bounds.contains(vec_conv<Vec3d>(p))) {
-			return 0;
+			return 0.1f;
 		}
 		return meanNetwork.infer<double>(vec_conv<Eigen::Vector3d>(p))(0);
 	}
@@ -168,7 +168,7 @@ public:
 	template<typename Scalar>
 	Scalar cov(const Eigen::Vector<Scalar, 3>& a, const Eigen::Vector<Scalar, 3>& b) const {
 		if (!(_bounds.contains(vec_conv<Vec3d>(a)) && _bounds.contains(vec_conv<Vec3d>(b)))) {
-			return 0;
+			return 1.f;
 		}
 		return covNetwork.infer(a,b);
 	}

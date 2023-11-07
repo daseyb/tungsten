@@ -238,6 +238,9 @@ namespace Tungsten {
 
         PathPtr _path;
 
+        Mat4f _configTransform;
+        Mat4f _invConfigTransform;
+
         std::shared_ptr<GPNeuralNetwork> _nn;
         float _offset = 0;
         float _scale = 1;
@@ -732,6 +735,9 @@ namespace Tungsten {
         float _offset = 0;
         float _scale = 1;
         PathPtr _path;
+
+        Mat4f _configTransform;
+        Mat4f _invConfigTransform;
 
         virtual double mean(Vec3d a) const override;
         virtual Vec3d dmean_da(Vec3d a) const override;

@@ -278,6 +278,8 @@ namespace Tungsten {
         }
 
         value.getField("scale", _scale);
+        value.getField("transform", _configTransform);
+        _invConfigTransform = _configTransform.invert();
     }
 
     rapidjson::Value NeuralNonstationaryCovariance::toJson(Allocator& allocator) const {
@@ -285,6 +287,7 @@ namespace Tungsten {
             "type", "nonstationary",
             "network", *_path,
             "scale", _scale,
+            "transform", _configTransform
         };
     }
 
@@ -300,19 +303,19 @@ namespace Tungsten {
         }
 
         _nn = std::make_shared<GPNeuralNetwork>();
-        _nn->read(*document, _path->parent());
+        _nn->read(*document, _path->absolute().parent());
     }
 
     FloatD NeuralNonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
-        return _nn->cov(a, b) * _scale;
+        return _nn->cov(mult(_invConfigTransform, a), mult(_invConfigTransform, b)) * _scale;
     }
 
     FloatDD NeuralNonstationaryCovariance::cov(Vec3DD a, Vec3DD b) const {
-        return _nn->cov(a, b) * _scale;
+        return _nn->cov(mult(_invConfigTransform, a), mult(_invConfigTransform, b)) * _scale;
     }
 
     double NeuralNonstationaryCovariance::cov(Vec3d a, Vec3d b) const {
-        return _nn->cov(a, b) * _scale;
+        return _nn->cov(mult(_invConfigTransform, a), mult(_invConfigTransform, b)) * _scale;
     }
 
 
@@ -477,6 +480,9 @@ namespace Tungsten {
 
         value.getField("offset", _offset);
         value.getField("scale", _scale);
+        value.getField("transform", _configTransform);
+
+        _invConfigTransform = _configTransform.invert();
     }
 
     rapidjson::Value NeuralMean::toJson(Allocator& allocator) const {
@@ -484,7 +490,8 @@ namespace Tungsten {
             "type", "neural",
             "network", *_path,
             "offset", _offset,
-            "scale", _scale
+            "scale", _scale,
+            "transform", _configTransform
         };
     }
 
@@ -516,7 +523,7 @@ namespace Tungsten {
         }
 
         _nn = std::make_shared<GPNeuralNetwork>();
-        _nn->read(*document, _path->parent());
+        _nn->read(*document, _path->absolute().parent());
     }
 
     void ProceduralMean::fromJson(JsonPtr value, const Scene& scene) {

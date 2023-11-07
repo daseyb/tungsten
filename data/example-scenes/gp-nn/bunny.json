@@ -21,8 +21,8 @@
             "sigma_a": 0.0,
             "sigma_s": 1.0,
             "density": 1,
-            "sample_points": 8,
-			"step_size_cov": 0.9,
+            "sample_points": 4,
+			"step_size_cov": 0.5,
 			"intersect_method": "gp_discrete",
 			"normal_method": "conditioned_gaussian",
 			"gaussian_process": {
@@ -31,11 +31,14 @@
 				"covariance_epsilon": 0,
 				"mean": {
 					"type": "neural",
-					"network": "bunny-network.json"
+					"network": "bunny-network.json",
+					"transform" : { "position": [0,1,0] }
 				},
 				"covariance": {
 					"type": "neural",
-					"network": "bunny-network.json"
+					"network": "bunny-network.json",
+					"scale": 0.1,
+					"transform" : { "position": [0,1,0] }
 				}
 			}
         }
@@ -185,7 +188,7 @@
     "integrator": {
         "type": "path_tracer",
         "min_bounces": 0,
-        "max_bounces": 20,
+        "max_bounces": 3,
         "enable_consistency_checks": false,
         "enable_two_sided_shading": true,
         "enable_light_sampling": true,
