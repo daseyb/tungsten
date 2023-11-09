@@ -153,6 +153,7 @@ void VdbGrid::fromJson(JsonPtr value, const Scene &scene)
     value.getField("transform", _configTransform);
     value.getField("request_gradient", _requestGradient);
     value.getField("background_value", _backgroundValue);
+    value.getField("request_sdf", _requestSDF);
 
     std::string interpolateString = interpolateMethodToString(_interpolateMethod);
     value.getField("interpolate", interpolateString);
@@ -297,7 +298,7 @@ void VdbGrid::loadResources()
 
         auto dilatedSdfGrid = openvdb::tools::dilateSdf(*mgrid.grid(downsample), 100, openvdb::tools::NearestNeighbors::NN_FACE_EDGE_VERTEX, 20);
 
-        //dilatedSdfGrid = openvdb::tools::sdfToSdf(*dilatedSdfGrid, 0, 10);
+        dilatedSdfGrid = openvdb::tools::sdfToSdf(*dilatedSdfGrid, 0, 10);
 
         float scaleFac = (1 << downsample);
 
@@ -348,7 +349,7 @@ static inline float gridAt(TreeT &acc, Vec3f p)
 
 float VdbGrid::density(Vec3f p) const
 {
-    p = clamp(p, bounds().min()+1, bounds().max()-2);
+    p = clamp(p, bounds().min()+2, bounds().max()-3);
     switch (_interpolateMethod) {
     case InterpolateMethod::Point:
         return openvdb::tools::PointSampler::sample(_densityGrid->tree(), vec_conv<openvdb::Vec3R>(p));

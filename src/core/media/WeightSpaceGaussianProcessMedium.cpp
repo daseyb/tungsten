@@ -3,6 +3,7 @@
 #include <cfloat>
 
 #include "sampling/PathSampleGenerator.hpp"
+#include "sampling/UniformPathSampler.hpp"
 
 #include "math/GaussianProcess.hpp"
 #include "math/TangentFrame.hpp"
@@ -22,7 +23,8 @@ namespace Tungsten {
             std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(), std::make_shared<SquaredExponentialCovariance>()),
             {},
             0.0f, 0.0f, 1.f),
-          _numBasisFunctions(300)
+        _numBasisFunctions(300),
+        _useSingleRealization(false)
     {
     }
 
@@ -30,6 +32,15 @@ namespace Tungsten {
     {
         GaussianProcessMedium::fromJson(value, scene);
         value.getField("basis_functions", _numBasisFunctions);
+        value.getField("single_realization", _useSingleRealization);
+
+        if (_useSingleRealization) {
+            auto basisSampler = UniformPathSampler(0xdeadbeef);
+            auto gp = std::static_pointer_cast<GaussianProcess>(_gp);
+            WeightSpaceBasis basis = WeightSpaceBasis::sample(gp->_cov, _numBasisFunctions, basisSampler);
+
+            _globalReal = WeightSpaceRealization::sample(std::make_shared<WeightSpaceBasis>(basis), gp, basisSampler);
+        }
     }
 
     rapidjson::Value WeightSpaceGaussianProcessMedium::toJson(Allocator& allocator) const
@@ -37,6 +48,7 @@ namespace Tungsten {
         return JsonObject{ GaussianProcessMedium::toJson(allocator), allocator,
             "type", "weight_space_gaussian_process",
             "basis_functions", _numBasisFunctions,
+            "single_realization", _useSingleRealization,
         };
     }
 
@@ -119,11 +131,17 @@ namespace Tungsten {
     bool WeightSpaceGaussianProcessMedium::intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const {
         if(state.firstScatter) {
             auto gp = std::static_pointer_cast<GaussianProcess>(_gp);
-
-            WeightSpaceBasis basis = WeightSpaceBasis::sample(gp->_cov, _numBasisFunctions, sampler);
-            
             auto ctxt = std::make_shared<GPContextWeightSpace>();
-            ctxt->real = WeightSpaceRealization::sample(std::make_shared<WeightSpaceBasis>(basis), gp, sampler);
+
+            PathSampleGenerator& basisSampler = sampler;
+            if (_useSingleRealization) {
+                ctxt->real = _globalReal;
+            }
+            else {
+                WeightSpaceBasis basis = WeightSpaceBasis::sample(gp->_cov, _numBasisFunctions, basisSampler);
+                ctxt->real = WeightSpaceRealization::sample(std::make_shared<WeightSpaceBasis>(basis), gp, basisSampler);
+            }
+            
             state.gpContext = ctxt;
         }
 

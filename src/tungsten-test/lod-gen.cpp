@@ -5,6 +5,7 @@
 #include <fstream>
 #include <cfloat>
 #include <io/Scene.hpp>
+#include <thread/ThreadUtils.hpp>
 
 #ifdef OPENVDB_AVAILABLE
 #include <openvdb/openvdb.h>
@@ -61,9 +62,10 @@ int gen3d(int argc, char** argv) {
     Eigen::VectorXf mean(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     Eigen::VectorXf variance(NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
     Eigen::VectorXf aniso(6 * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS * NUM_SAMPLE_POINTS);
-
+    
+    auto cellSize = (max - min) / NUM_SAMPLE_POINTS;
     auto gridTransform = openvdb::Mat4R::identity();
-    gridTransform.setToScale(vec_conv<openvdb::Vec3R>((max - min) / NUM_SAMPLE_POINTS));
+    gridTransform.setToScale(vec_conv<openvdb::Vec3R>(cellSize));
     gridTransform.setTranslation(vec_conv<openvdb::Vec3R>(min));
 
     auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(100.f);
@@ -91,7 +93,7 @@ int gen3d(int argc, char** argv) {
                         Vec2d s1 = rand_normal_2(sampler);
                         Vec2d s2 = rand_normal_2(sampler);
                         Vec3d offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
-                        Vec3d p = points[idx] + offset * 4.0 / NUM_SAMPLE_POINTS;
+                        Vec3d p = points[idx] + offset * cellSize;
                         samples[s] = gp->mean(&p, &derivs[idx], nullptr, Vec3d(1.0f, 0.0f, 0.0f), 1)(0);
                         mean[idx] += samples[s];
                     }
@@ -112,7 +114,9 @@ int gen3d(int argc, char** argv) {
         }
 
 
-        openvdb::tools::GridSampler<openvdb::FloatGrid, openvdb::tools::BoxSampler> meanGridSampler(meanGrid->tree(), meanGrid->transform());
+        openvdb::tools::GridSampler<openvdb::FloatGrid, openvdb::tools::QuadraticSampler> meanGridSampler(
+            meanGrid->tree(), 
+            meanGrid->transform());
 
 
         for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
@@ -138,8 +142,6 @@ int gen3d(int argc, char** argv) {
                         else {
                             float meanSample = meanGridSampler.isSample(openvdb::Vec3R(p.x(), p.y(), p.z()));
                             Vec3d bp = lerp(min, max, p / (NUM_SAMPLE_POINTS - 1));
-                            float occupiedSample = meanSample < 0;
-                            float occupiedStored = gp->mean(&bp, &derivs[idx], nullptr, Vec3d(1.0f, 0.0f, 0.0f), 1)(0) < 0;
                             samples[s] = gp->mean(&bp, &derivs[idx], nullptr, Vec3d(1.0f, 0.0f, 0.0f), 1)(0) - meanSample;
                             valid_samples++;
                         }
@@ -199,26 +201,6 @@ int gen3d(int argc, char** argv) {
     }
 
     {
-        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/%s-mean-eval-avg-%d.bin", prefix, NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
-        xfile.write((char*)mean.data(), sizeof(float) * mean.rows() * mean.cols());
-        xfile.close();
-    }
-
-    {
-        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/%s-var-eval-avg-%d.bin", prefix, NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
-        xfile.write((char*)variance.data(), sizeof(float) * variance.rows() * variance.cols());
-        xfile.close();
-    }
-
-    {
-        std::ofstream xfile(tinyformat::format("./data/testing/load-gen/%s-aniso-%d.bin", prefix, NUM_SAMPLE_POINTS), std::ios::out | std::ios::binary);
-        xfile.write((char*)aniso.data(), sizeof(float) * aniso.rows() * aniso.cols());
-        xfile.close();
-    }
-
-    {
-
-
         auto varGrid = openvdb::createGrid<openvdb::FloatGrid>();
         openvdb::FloatGrid::Accessor varAccessor = varGrid->getAccessor();
         varGrid->setName("density");
@@ -260,45 +242,13 @@ int gen3d(int argc, char** argv) {
         {
             openvdb::GridPtrVec grids;
             grids.push_back(meanGrid);
-            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/%s-mean-eval-avg-%d.vdb", prefix, NUM_SAMPLE_POINTS));
-            file.write(grids);
-            file.close();
-        }
-
-        {
-            openvdb::GridPtrVec grids;
             grids.push_back(varGrid);
-            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/%s-var-eval-avg-%d.vdb", prefix, NUM_SAMPLE_POINTS));
+            grids.insert(grids.end(), anisoGrids.begin(), anisoGrids.end());
+            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/%s-isotopric-%d.vdb", prefix, NUM_SAMPLE_POINTS));
             file.write(grids);
             file.close();
         }
-
-        {
-            openvdb::io::File file(tinyformat::format("./data/testing/load-gen/%s-aniso-%d.vdb", prefix, NUM_SAMPLE_POINTS));
-            file.write(anisoGrids);
-            file.close();
-        }
     }
-
-    /*{
-        Eigen::VectorXf gradx = gp->mean(points.data(), fderivs.data(), nullptr, Vec3f(1.0f, 0.0f, 0.0f), points.size());
-        std::ofstream xfile("./data/testing/load-gen/mean-dx-eval.bin", std::ios::out | std::ios::binary);
-        xfile.write((char*)gradx.data(), sizeof(float) * gradx.rows() * gradx.cols());
-        xfile.close();
-    }
-    {
-        Eigen::VectorXf grady = gp->mean(points.data(), fderivs.data(), nullptr, Vec3f(0.0f, 1.0f, 0.0f), points.size());
-        std::ofstream xfile("./data/testing/load-gen/mean-dy-eval.bin", std::ios::out | std::ios::binary);
-        xfile.write((char*)grady.data(), sizeof(float) * grady.rows() * grady.cols());
-        xfile.close();
-    }
-    {
-        Eigen::VectorXf gradz = gp->mean(points.data(), fderivs.data(), nullptr, Vec3f(0.0f, 0.0f, 1.0f), points.size());
-        std::ofstream xfile("./data/testing/load-gen/mean-dz-eval.bin", std::ios::out | std::ios::binary);
-        xfile.write((char*)gradz.data(), sizeof(float) * gradz.rows() * gradz.cols());
-        xfile.close();
-    }*/
-
 
     return 0;
 

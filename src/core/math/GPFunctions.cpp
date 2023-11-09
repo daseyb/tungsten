@@ -497,7 +497,7 @@ namespace Tungsten {
 
 
     double NeuralMean::mean(Vec3d a) const {
-        return (_nn->mean(a) + _offset) * _scale;
+        return (_nn->mean(mult(_invConfigTransform, a)) + _offset) * _scale;
     }
 
     Vec3d NeuralMean::dmean_da(Vec3d a) const {

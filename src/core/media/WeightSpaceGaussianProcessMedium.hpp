@@ -16,13 +16,16 @@ struct GPContextWeightSpace : public GPContext {
 class WeightSpaceGaussianProcessMedium : public GaussianProcessMedium
 {
     int _numBasisFunctions;
+    bool _useSingleRealization;
+
+    WeightSpaceRealization _globalReal;
 
 public:
 
     WeightSpaceGaussianProcessMedium();
     WeightSpaceGaussianProcessMedium(std::shared_ptr<GaussianProcess> gp, std::vector<std::shared_ptr<PhaseFunction>> phases,
-        float materialSigmaA, float materialSigmaS, float density, int numBasisFunctions) :
-        GaussianProcessMedium(gp, phases, materialSigmaA, materialSigmaS, density), _numBasisFunctions(numBasisFunctions)
+        float materialSigmaA, float materialSigmaS, float density, int numBasisFunctions, bool useSingleRealization) :
+        GaussianProcessMedium(gp, phases, materialSigmaA, materialSigmaS, density), _numBasisFunctions(numBasisFunctions), _useSingleRealization(useSingleRealization)
     {}
 
     virtual void fromJson(JsonPtr value, const Scene &scene) override;

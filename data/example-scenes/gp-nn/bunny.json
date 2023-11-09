@@ -6,7 +6,7 @@
                 "type": "brdf",
 				"bsdf": {
 					"albedo": [0.35, 0.9, 0.3],
-					"type": "mirror"
+					"type": "lambert"
 				}
             },
 			"additional_phase_functions": [{
@@ -16,13 +16,13 @@
 					"type": "mirror"
 				}
             }],
-            "max_bounces": 1024,
+            "max_bounces": 3,
             "type": "gaussian_process",
             "sigma_a": 0.0,
             "sigma_s": 1.0,
             "density": 1,
             "sample_points": 4,
-			"step_size_cov": 0.5,
+			"step_size": 0.1,
 			"intersect_method": "gp_discrete",
 			"normal_method": "conditioned_gaussian",
 			"gaussian_process": {
@@ -32,13 +32,14 @@
 				"mean": {
 					"type": "neural",
 					"network": "bunny-network.json",
-					"transform" : { "position": [0,1,0] }
+					"scale": 1,
+					"transform" : { "position": [0,0.8,0] }
 				},
 				"covariance": {
 					"type": "neural",
 					"network": "bunny-network.json",
-					"scale": 0.1,
-					"transform" : { "position": [0,1,0] }
+					"scale": 0.0001,
+					"transform" : { "position": [0,0.8,0] }
 				}
 			}
         }
@@ -188,7 +189,7 @@
     "integrator": {
         "type": "path_tracer",
         "min_bounces": 0,
-        "max_bounces": 3,
+        "max_bounces": 10,
         "enable_consistency_checks": false,
         "enable_two_sided_shading": true,
         "enable_light_sampling": true,

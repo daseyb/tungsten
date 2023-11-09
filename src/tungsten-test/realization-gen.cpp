@@ -5,12 +5,19 @@
 #include <fstream>
 #include <cfloat>
 #include <tinyformat/tinyformat.hpp>
+#include <thread/ThreadUtils.hpp>
+#include <io/Scene.hpp>
+
+#ifdef OPENVDB_AVAILABLE
+#include <openvdb/openvdb.h>
+#include <openvdb/tools/Interpolation.h>
+#endif
 
 using namespace Tungsten;
 
 constexpr size_t NUM_SAMPLE_POINTS = 32;
 
-std::tuple<std::vector<Vec3d>, std::vector<Vec3d>, std::vector<double>, std::vector<Derivative>> sample_surface() {
+std::tuple<std::vector<Vec3d>, std::vector<Vec3d>, std::vector<double>, std::vector<Derivative>> sample_surface(float scale) {
 
     std::vector<Vec3d> ps;
     std::vector<Vec3d> ns;
@@ -18,14 +25,14 @@ std::tuple<std::vector<Vec3d>, std::vector<Vec3d>, std::vector<double>, std::vec
     std::vector<Derivative> ds;
 
     Vec3d c = Vec3d(0.75, 0, 0.f);
-    float r = 0.4f;
+    double r = 0.4f;
     /*ps.push_back(c);
-    ns.push_back(Vec3f(0.f));
+    ns.push_back(Vec3d(0.f));
     vs.push_back(-r);
     ds.push_back(Derivative::None);
 
-    ps.push_back(c + r * 2 * Vec3f(-1.f, 1.f, 0.f).normalized());
-    ns.push_back(Vec3f(0.f));
+   ps.push_back(c + r * 2 * Vec3d(-1.f, 1.f, 0.f).normalized());
+    ns.push_back(Vec3d(0.f));
     vs.push_back(r);
     ds.push_back(Derivative::None);*/
 
@@ -33,15 +40,17 @@ std::tuple<std::vector<Vec3d>, std::vector<Vec3d>, std::vector<double>, std::vec
     for (int i = 0; i < num_pts; i++) {
         float a = lerp(PI/2, PI * 1.5f, float(i) / (num_pts-1));
         Vec3d p = c + Vec3d(cos(a), sin(a), 0.f) * r;
-        ps.push_back(p);
+        ps.push_back(p*scale);
         ns.push_back((p - c).normalized());
         vs.push_back(0);
         ds.push_back(Derivative::None);
 
-        ps.push_back(p);
+#if 1
+        ps.push_back(p * scale);
         ns.push_back((p - c).normalized());
         vs.push_back(1);
         ds.push_back(Derivative::First);
+#endif
     }
 
     return { ps, ns, vs, ds };
@@ -50,8 +59,13 @@ std::tuple<std::vector<Vec3d>, std::vector<Vec3d>, std::vector<double>, std::vec
 void gen_cond_test() {
 
     int num_reals = 2000;
+    
+    float scale = 10;
+    auto gp = std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(scale, 0.3f * scale));
 
-    auto gp = std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), std::make_shared<SquaredExponentialCovariance>(1.0f, 1.0f));
+    std::cout << gp->compute_beckmann_roughness(Vec3d(0.)) << "\n";
+
+    //return;
 
 #if 0
     {
@@ -88,7 +102,7 @@ void gen_cond_test() {
     }
 #endif
 
-    auto [cps, cns, cvs, cds] = sample_surface();
+    auto [cps, cns, cvs, cds] = sample_surface(10.f);
 
     gp->setConditioning(
         cps,
@@ -133,7 +147,7 @@ void gen_cond_test() {
             int idx = 0;
             for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
                 for (int j = 0; j < NUM_SAMPLE_POINTS; j++) {
-                    points[idx] = 2. * (Vec3d((float)i, (float)j, 0.f) / (NUM_SAMPLE_POINTS - 1) - 0.5f);
+                    points[idx] = 2. * (Vec3d((float)i, (float)j, 0.f) / (NUM_SAMPLE_POINTS - 1) - 0.5f) * scale;
                     points[idx][2] = 0.f;
                     derivs[idx] = Derivative::None;
                     idx++;
@@ -220,8 +234,104 @@ void gen_real_microfacet_to_volume() {
 
 }
 
-int main() {
+void sample_scene_gp(int argc, const char** argv) {
 
-    gen_real_microfacet_to_volume();
+    int dim = 32;
+
+    ThreadUtils::startThreads(1);
+
+    EmbreeUtil::initDevice();
+
+#ifdef OPENVDB_AVAILABLE
+    openvdb::initialize();
+#endif
+
+    auto scenePath = Path(argv[1]);
+    std::cout << scenePath.asString() << "\n";
+
+    Scene* scene = nullptr;
+    TraceableScene* tscene = nullptr;
+    try {
+        scene = Scene::load(scenePath);
+        scene->loadResources();
+        tscene = scene->makeTraceable();
+    }
+    catch (std::exception& e) {
+        std::cout << e.what();
+        return;
+    }
+
+    std::shared_ptr<GaussianProcessMedium> gp_medium = std::static_pointer_cast<GaussianProcessMedium>(scene->media()[0]);
+
+    auto gp = std::static_pointer_cast<GPSampleNode>(gp_medium->_gp);
+
+    UniformPathSampler sampler(0);
+    sampler.next2D();
+
+    std::vector<Vec3d> points(dim * dim);
+    std::vector<Derivative> derivs(dim * dim);
+    std::vector<Derivative> fderivs(dim * dim);
+
+    auto processBox = scene->findPrimitive("processBox");
+
+    Vec3d min = vec_conv<Vec3d>(processBox->bounds().min());
+    Vec3d max = vec_conv<Vec3d>(processBox->bounds().max());
+
+    auto gridTransform = openvdb::Mat4R::identity();
+    gridTransform.setToScale(vec_conv<openvdb::Vec3R>((max - min) / dim));
+    gridTransform.setTranslation(vec_conv<openvdb::Vec3R>(min));
+
+    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(100.f);
+    meanGrid->setGridClass(openvdb::GRID_LEVEL_SET);
+    meanGrid->setName("mean");
+    meanGrid->setTransform(openvdb::math::Transform::createLinearTransform(gridTransform));
+
+    openvdb::FloatGrid::Accessor meanAccessor = meanGrid->getAccessor();
+
+    {
+        for (int i = 0; i < dim; i++) {
+            for (int j = 0; j < dim; j++) {
+                int k = dim / 2;
+                int idx = i * dim + j ;
+                points[idx] = lerp(min, max, Vec3d((float)i, (float)j, (float)k) / (dim));
+                derivs[idx] = Derivative::None;
+            }
+        }
+    }
+
+    auto [samples, gpIds] = gp->sample(
+        points.data(), derivs.data(), points.size(), nullptr,
+        nullptr, 0,
+        Vec3d(0.0f, 0.0f, 0.0f), 1, sampler)->flatten();
+
+    auto mean = gp->mean(points.data(), derivs.data(), nullptr, Vec3d(0.), points.size());
+
+
+    auto path = Path(tinyformat::format("testing/realizations/scene/%s/%s-%d-samples.bin", 
+        scenePath.parent().baseName().asString(), 
+        scenePath.baseName().stripExtension().asString(), dim));
+
+    if (!path.parent().exists()) {
+        FileUtils::createDirectory(path.parent());
+    }
+
+    {
+        std::ofstream xfile(path.asString(), std::ios::out | std::ios::binary);
+        xfile.write((char*)samples.data(), sizeof(double) * samples.rows() * samples.cols());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(tinyformat::format("testing/realizations/scene/%s/%s-%d-mean.bin",
+            scenePath.parent().baseName().asString(),
+            scenePath.baseName().stripExtension().asString(), dim), std::ios::out | std::ios::binary);
+        xfile.write((char*)mean.data(), sizeof(double) * mean.rows() * mean.cols());
+        xfile.close();
+    }
+}
+
+int main(int argc, const char** argv) {
+    gen_cond_test();
+
 
 }

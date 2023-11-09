@@ -11,6 +11,7 @@ class FunctionSpaceGaussianProcessMedium : public GaussianProcessMedium
 {
     int _samplePoints;
     double _stepSizeCov;
+    double _stepSize;
 
 public:
     FunctionSpaceGaussianProcessMedium();
@@ -20,9 +21,9 @@ public:
         GPCorrelationContext ctxt = GPCorrelationContext::Goldfish, 
         GPIntersectMethod intersectMethod = GPIntersectMethod::GPDiscrete, 
         GPNormalSamplingMethod normalSamplingMethod = GPNormalSamplingMethod::ConditionedGaussian,
-        double stepSizeCov = 0) : 
+        double stepSizeCov = 0, double stepSize = 0) :
             GaussianProcessMedium(gp, phase, materialSigmaA, materialSigmaS, density, ctxt, intersectMethod, normalSamplingMethod),
-            _samplePoints(samplePoints), _stepSizeCov(stepSizeCov)
+            _samplePoints(samplePoints), _stepSizeCov(stepSizeCov), _stepSize(stepSize)
     {}
 
     virtual void fromJson(JsonPtr value, const Scene &scene) override;

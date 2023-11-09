@@ -22,7 +22,8 @@ namespace Tungsten {
             {},
             0.f, 0.f, 1.f, GPCorrelationContext::Goldfish, GPIntersectMethod::GPDiscrete, GPNormalSamplingMethod::ConditionedGaussian),
             _samplePoints(32),
-            _stepSizeCov(0.)
+            _stepSizeCov(0.),
+        _stepSize(0.)
     {
     }
 
@@ -31,6 +32,7 @@ namespace Tungsten {
         GaussianProcessMedium::fromJson(value, scene);
         value.getField("sample_points", _samplePoints);
         value.getField("step_size_cov", _stepSizeCov);
+        value.getField("step_size", _stepSize);
     }
 
     rapidjson::Value FunctionSpaceGaussianProcessMedium::toJson(Allocator& allocator) const
@@ -39,6 +41,7 @@ namespace Tungsten {
             "type", "function_space_gaussian_process",
             "sample_points", _samplePoints,
             "step_size_cov", _stepSizeCov,
+            "step_size", _stepSize,
         };
     }
 
@@ -61,6 +64,9 @@ namespace Tungsten {
             if (goodStepSize < determinedStepSize) {
                 determinedStepSize = goodStepSize;
             }
+        }
+        else if (_stepSize > 0 && _stepSize < determinedStepSize) {
+            determinedStepSize = _stepSize;
         }
 
         maxRayDist = determinedStepSize * _samplePoints;

@@ -54,7 +54,7 @@
 						"density_name": "variance",
 						"normalize_size": false,
 						"integration_method": "raymarching",
-						"interpolate": "point",
+						"interpolate": "linear",
 						"transform": { "position": [0, 0.8, 0] }
 					}
 				}
