@@ -139,7 +139,8 @@ void GPRealNodeValues::applyMemory(GPCorrelationContext ctxt, Vec3d rd) {
         break;
     }
     case GPCorrelationContext::Elephant: {
-        _values(_values.size() - 1, 0) = _sampledGrad.dot(rd);
+        _values.conservativeResize(_values.size() + 1, Eigen::NoChange);
+        _values.row(_values.size() - 1).array() = _sampledGrad.dot(rd);
         break;
     }
     }

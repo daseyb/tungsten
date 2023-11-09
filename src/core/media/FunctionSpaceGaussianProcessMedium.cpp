@@ -148,7 +148,9 @@ namespace Tungsten {
             {
                 std::vector<Vec3d> cond_pts = ctxt->points;
                 std::vector<Derivative> cond_derivs = ctxt->derivs;
-                cond_derivs[cond_derivs.size() - 1] = Derivative::First;
+
+                cond_pts.push_back(lastIntersectPt);
+                cond_derivs.push_back(Derivative::First);
 
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
@@ -165,7 +167,7 @@ namespace Tungsten {
         double prevV = sampleValues(0);
 
         if (prevV < 0 && state.firstScatter) {
-            //std::cerr << "First sample along ray was way less than 0: " << prevV << "\n";
+            std::cerr << "First sample along ray was less than 0: " << prevV << "\n";
             return false;
         }
 
@@ -185,7 +187,6 @@ namespace Tungsten {
 
                 derivs.resize(p + 2);
                 points.resize(p + 2);
-                sampleValues.conservativeResize(p + 2, Eigen::NoChange);
 
                 gpSamples->makeIntersect(p, offsetT, prevT - currT);
 
