@@ -67,14 +67,22 @@ param_objs = []
 param_values = []
 param_ids = []
 for param in experiment["params"]:
+    if param[0] != "_":
+        param_val = ([*experiment["params"][param]],)
+        param = [param]
+    else:
+        param_val = list(zip(*experiment["params"][param].values()))
+        param = list(experiment["params"][param].keys())
+
     param_objs.append(param)
-    param_values.append(experiment["params"][param])
-    param_ids.append(range(len(param_values[-1])))
+    param_values.append(param_val)
+    param_ids.append(list(range(len(param_values[-1]))))
 
 
 for element, ids in zip(itertools.product(*param_values), itertools.product(*param_ids)):
     for j, val in enumerate(element):
-        set_param_path(base_scene, param_objs[j], val)
+        for i, param_name in enumerate(param_objs[j]):
+            set_param_path(base_scene, param_name, val[i])
     
     out_file = output_folder + f"/{'-'.join([str(id) for id in ids])}.json"
     with open(out_file, 'w', encoding='utf-8') as f:

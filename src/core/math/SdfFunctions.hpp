@@ -59,4 +59,4 @@ namespace Tungsten {
 
 }
 
-#endif SDFFUNCTIONS_HPP_
+#endif //SDFFUNCTIONS_HPP_

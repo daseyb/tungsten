@@ -158,11 +158,14 @@ public:
 	}
 	
 	double mean(Vec3d p) const {
-		return mean(vec_conv<Eigen::Vector3d>(p));
+		auto pv =vec_conv<Eigen::Vector3d>(p);
+		return mean(pv);
 	}
 
 	double cov(Vec3d a, Vec3d b) const {
-		return cov(vec_conv<Eigen::Vector3d>(a), vec_conv<Eigen::Vector3d>(b));
+		auto av = vec_conv<Eigen::Vector3d>(a);
+		auto bv = vec_conv<Eigen::Vector3d>(b);
+		return cov(av, bv);
 	}
 
 	template<typename Scalar>
