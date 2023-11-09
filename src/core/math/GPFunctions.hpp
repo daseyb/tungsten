@@ -795,4 +795,4 @@ namespace Tungsten {
 
 }
 
-#endif GPFUNCTIONS_HPP_
+#endif //GPFUNCTIONS_HPP_
