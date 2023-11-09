@@ -10,6 +10,9 @@ class GaussianProcess;
 
 struct GPContextWeightSpace : public GPContext {
     WeightSpaceRealization real;
+    virtual void reset() override {
+        // Don't reset the realization, use it for the whole path
+    }
 };
 
 
@@ -19,13 +22,14 @@ class WeightSpaceGaussianProcessMedium : public GaussianProcessMedium
     bool _useSingleRealization;
 
     WeightSpaceRealization _globalReal;
+    float _rayMarchStepSize;
 
 public:
 
     WeightSpaceGaussianProcessMedium();
     WeightSpaceGaussianProcessMedium(std::shared_ptr<GaussianProcess> gp, std::vector<std::shared_ptr<PhaseFunction>> phases,
-        float materialSigmaA, float materialSigmaS, float density, int numBasisFunctions, bool useSingleRealization) :
-        GaussianProcessMedium(gp, phases, materialSigmaA, materialSigmaS, density), _numBasisFunctions(numBasisFunctions), _useSingleRealization(useSingleRealization)
+        float materialSigmaA, float materialSigmaS, float density, int numBasisFunctions, bool useSingleRealization, float rayMarchStepSize) :
+        GaussianProcessMedium(gp, phases, materialSigmaA, materialSigmaS, density), _numBasisFunctions(numBasisFunctions), _rayMarchStepSize(rayMarchStepSize)
     {}
 
     virtual void fromJson(JsonPtr value, const Scene &scene) override;

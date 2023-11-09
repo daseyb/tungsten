@@ -14,11 +14,12 @@ class NDFBsdf : public Bsdf
 {
     std::string _materialName;
     std::string _ndfType;
+    std::string _brdfType;
     Vec3f _eta;
     Vec3f _k;
     Vec2f _roughness;
 
-    ConductorBRDF micro_brdf;
+    std::shared_ptr<BSDF> micro_brdf;
     std::shared_ptr<NDF> ndf;
     Microsurface macro_brdf;
 

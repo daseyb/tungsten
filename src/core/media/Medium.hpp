@@ -18,7 +18,9 @@
 namespace Tungsten {
 
 class Scene;
-struct GPContext;
+struct GPContext {
+    virtual void reset() = 0;
+};
 
 class Medium : public JsonSerializable
 {
@@ -41,7 +43,9 @@ public:
         {
             firstScatter = true;
             bounce = 0;
-            gpContext.reset();
+            if (gpContext) {
+                gpContext->reset();
+            }
             lastGPId = 0;
         }
 

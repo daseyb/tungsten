@@ -229,7 +229,11 @@ namespace Tungsten {
 
         float maxT = r.farT();
 
-        if (maxT == 0.f || state.bounce >= _maxBounce) {
+        if (state.bounce >= _maxBounce) {
+            return false;
+        }
+
+        if (maxT == 0.f ) {
             sample.t = maxT;
             sample.weight = Vec3f(1.f);
             sample.pdf = 1.0f;

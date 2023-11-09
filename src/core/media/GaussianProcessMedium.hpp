@@ -8,8 +8,6 @@ namespace Tungsten {
 
 class GaussianProcess;
 
-
-
 enum class GPIntersectMethod {
     Mean,
     GPDiscrete
@@ -22,15 +20,16 @@ enum class GPNormalSamplingMethod {
     GGX
 };
 
-
-struct GPContext {
-
-};
-
 struct GPContextFunctionSpace : public GPContext {
     std::vector<Vec3d> points;
     std::shared_ptr<GPRealNode> values;
     std::vector<Derivative> derivs;
+
+    virtual void reset() override {
+        points.clear();
+        values.reset();
+        derivs.clear();
+    }
 };
 
 class GaussianProcessMedium : public Medium
