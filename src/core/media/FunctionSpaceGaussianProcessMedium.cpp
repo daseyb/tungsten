@@ -75,9 +75,9 @@ namespace Tungsten {
         double maxT = ray.nearT() + maxRayDist;
 
         for (int i = 0; i < _samplePoints; i++) {
-            double rt = lerp((double)ray.nearT(), ray.nearT() + maxRayDist, clamp((i - tOffset) / (_samplePoints-1), 0., 1.));
+            double rt = lerp((double)ray.nearT()+determinedStepSize*0.1, ray.nearT() + maxRayDist, clamp((i - tOffset) / (_samplePoints-1), 0., 1.));
             if (i == 0)
-                rt = ray.nearT();
+                rt = (double)ray.nearT() + determinedStepSize * 0.1;
             else if (i == _samplePoints - 1)
                 rt = ray.nearT() + maxRayDist;
 
@@ -89,9 +89,10 @@ namespace Tungsten {
         std::shared_ptr<GPRealNode> gpSamples;
 
         if (state.firstScatter) {
-            std::array<Vec3d, 1> cond_pts = { points[0] };
+            auto rp = vec_conv<Vec3d>(ray.pos() + ray.nearT() * ray.dir());
+            std::array<Vec3d, 1> cond_pts = { rp };
             std::array<Derivative, 1> cond_deriv = { Derivative::None };
-            std::shared_ptr<GPRealNode> cond_vs = _gp->sample_start_value(points[0], sampler);
+            std::shared_ptr<GPRealNode> cond_vs = _gp->sample_start_value(rp, sampler);
             gpSamples = _gp->sample_cond(
                 points.data(), derivs.data(), _samplePoints, nullptr,
                 cond_pts.data(), cond_vs.get(), cond_deriv.data(), 0, nullptr,
@@ -154,7 +155,7 @@ namespace Tungsten {
 
                 gpSamples = _gp->sample_cond(
                     points.data(), derivs.data(), _samplePoints, nullptr,
-                    ctxt->points.data(), ctxt->values.get(), cond_derivs.data(), ctxt->points.size(), nullptr,
+                    cond_pts.data(), ctxt->values.get(), cond_derivs.data(), cond_pts.size(), nullptr,
                     nullptr, 0,
                     rd, 1, sampler);
                 break;
@@ -166,10 +167,10 @@ namespace Tungsten {
 
         double prevV = sampleValues(0);
 
-        if (prevV < 0 && state.firstScatter) {
+        /*if (prevV < 0) {
             std::cerr << "First sample along ray was less than 0: " << prevV << "\n";
             return false;
-        }
+        }*/
 
         prevV = max(prevV, 0.);
 

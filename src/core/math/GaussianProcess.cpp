@@ -504,8 +504,6 @@ std::shared_ptr<GPRealNode> GaussianProcess::sample_start_value(Vec3d p, PathSam
 
     Eigen::VectorXd vals(1);
 
-    //vals(0) = m + sigma * rand_normal_2(sampler).x();
-
     vals(0) = max(0., rand_truncated_normal(m, sigma, 0, sampler));
 
     return std::make_shared<GPRealNodeValues>(vals, this);
