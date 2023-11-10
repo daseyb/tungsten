@@ -550,6 +550,25 @@ double GaussianProcess::eval(
     return mvn.eval(eval_values_View);
 }
 
+double _eigvalsh_to_eps(const Eigen::VectorXd& s) {
+    return 1e6 * DBL_EPSILON * s.cwiseAbs().maxCoeff();
+}
+
+Eigen::VectorXd _pinv_1d(const Eigen::VectorXd& v, double eps = 1e-5) {
+    return v.cwiseAbs().cwiseLessOrEqual(eps).select(
+        0., v.cwiseInverse()
+    );
+}
+
+
+CovMatrix pseudo_inverse(const CovMatrix& a) {
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigs(a);
+    double eps = _eigvalsh_to_eps(eigs.eigenvalues());
+    Eigen::VectorXd s_pinv = _pinv_1d(eigs.eigenvalues(), eps);
+    Eigen::MatrixXd U = eigs.eigenvectors() * s_pinv.cwiseSqrt().asDiagonal();
+    return U * U.transpose();
+}
+
 MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
     const Vec3d* points, const Derivative* derivative_types, size_t numPts,
     const Vec3d* ddirs,
@@ -574,8 +593,9 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         cond_ddirs, ddirs,
         deriv_dir, numCondPts, numPts);
 
-    CovMatrix solved;
+    CovMatrix solved = (pseudo_inverse(s11) * s12).transpose();
 
+    /*
     bool succesfullSolve = false;
     if (true || s11.rows() <= 64) {
 #ifdef SPARSE_COV
@@ -583,7 +603,7 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
 #else
         Eigen::LDLT<CovMatrix> solver(s11.triangularView<Eigen::Lower>());
 #endif
-        if (solver.info() == Eigen::ComputationInfo::Success) {
+        if (solver.info() == Eigen::ComputationInfo::Success && solver.isPositive()) {
             solved = solver.solve(s12).transpose();
             if (solver.info() == Eigen::ComputationInfo::Success) {
                 succesfullSolve = true;
@@ -594,13 +614,6 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         }
     }
 
-#if 0
-    if (!succesfullSolve) {
-        Eigen::HouseholderQR<CovMatrix> solver(s11.triangularView<Eigen::Lower>());
-        solved = solver.solve(s12).transpose();
-        succesfullSolve = true;
-    }
-#endif
 
     if (!succesfullSolve) {
         Eigen::BDCSVD<Eigen::MatrixXd, Eigen::ComputeThinU | Eigen::ComputeThinV> solver;
@@ -619,7 +632,7 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         if (solver.info() != Eigen::ComputationInfo::Success) {
             std::cerr << "Conditioning solving failed (BDCSVD)!\n";
         }
-    }
+    }*/
 
     Eigen::Map<const Eigen::VectorXd> cond_values_view(cond_values, numCondPts);
     Eigen::VectorXd m2 = mean(points, derivative_types, ddirs, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, cond_ddirs, deriv_dir, numCondPts)));
@@ -658,7 +671,7 @@ double GaussianProcess::noIntersectBound(Vec3d p, double q) const
 
 double GaussianProcess::goodStepsize(Vec3d p, double targetCov, Vec3d rd) const
 {
-    targetCov *= (*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.));
+    double sigma = (*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.));
 
     double stepsize_lb = 0;
     double stepsize_ub = 2;
@@ -675,7 +688,7 @@ double GaussianProcess::goodStepsize(Vec3d p, double targetCov, Vec3d rd) const
         else {
             stepsize_ub = stepsize_avg;
         }
-        cov = (*_cov)(Derivative::None, Derivative::None, p, p + rd * stepsize_avg, Vec3d(0.), Vec3d(0.));
+        cov = (*_cov)(Derivative::None, Derivative::None, p, p + rd * stepsize_avg, Vec3d(0.), Vec3d(0.)) / sigma;
     } 
 
     return stepsize_avg;

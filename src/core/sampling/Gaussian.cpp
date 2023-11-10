@@ -7,8 +7,12 @@
 namespace Tungsten {
     CovMatrix project_to_psd(const CovMatrix& in) {
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigs(in);
-        return eigs.eigenvectors()
-            * eigs.eigenvalues().array().max(1e-6).matrix() * eigs.eigenvectors();
+        auto eps = 1e6 * DBL_EPSILON * eigs.eigenvalues()[0];
+
+        CovMatrix result = eigs.eigenvectors()
+            * eigs.eigenvalues().array().max(eps).matrix() * eigs.eigenvectors();
+        //result.diagonal().array() += 1e-6;
+        return result;
     }
 
     // Box muller transform
