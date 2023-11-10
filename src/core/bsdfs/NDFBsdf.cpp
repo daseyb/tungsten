@@ -49,6 +49,7 @@ void NDFBsdf::fromJson(JsonPtr value, const Scene &scene)
     value.getField("ndf", _ndfType);
     value.getField("brdf", _brdfType);
     value.getField("roughness", _roughness);
+    value.getField("max_walk_length", _maxWalkLength);
 
     if (_brdfType == "conductor") {
         micro_brdf = std::make_shared<ConductorBRDF>(_eta.x(), _k.x());
@@ -67,7 +68,7 @@ void NDFBsdf::fromJson(JsonPtr value, const Scene &scene)
         ndf = std::make_shared<BeckmannNDF>(micro_brdf.get(), _roughness.x(), _roughness.y()); // and assign it to microfacets with a GGX distribution
     }
 
-    macro_brdf = Microsurface(ndf.get());
+    macro_brdf = Microsurface(ndf.get(), _maxWalkLength);
 }
 
 rapidjson::Value NDFBsdf::toJson(Allocator &allocator) const

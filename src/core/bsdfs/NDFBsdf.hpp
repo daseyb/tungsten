@@ -23,6 +23,8 @@ class NDFBsdf : public Bsdf
     std::shared_ptr<NDF> ndf;
     Microsurface macro_brdf;
 
+    size_t _maxWalkLength = MAX_WALK_LENGTH;
+
     bool lookupMaterial();
 
 public:
