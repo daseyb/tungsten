@@ -14,6 +14,7 @@ namespace Tungsten {
         case Function::Knob:  return "knob";
         case Function::KnobInner:  return "knob_inner";
         case Function::KnobOuter:  return "knob_outer";
+        case Function::TwoSpheres:  return "two_spheres";
         }
     }
 
@@ -25,6 +26,8 @@ namespace Tungsten {
             return Function::KnobInner;
         else if (name == "knob_outer")
             return Function::KnobOuter;
+        else if (name == "two_spheres")
+            return Function::TwoSpheres;
         FAIL("Invalid sdf function: '%s'", name);
     }
 
@@ -176,5 +179,9 @@ namespace Tungsten {
         const float scale = 0.8;
         p *= 1. / scale;
         return sdKnobOuter(p, mat) * scale;
+    }
+
+    float SdfFunctions::two_spheres(Vec3f p, int& mat) {
+        return min((p - Vec3f(0., 10., 0.f)).length() - 9.5f, (p - Vec3f(0.f, -10.f, 0.f)).length() - 9.5f);
     }
 }

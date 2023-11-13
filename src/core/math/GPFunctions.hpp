@@ -291,7 +291,8 @@ namespace Tungsten {
         }
 
         virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler) const override {
-            double rad = (sqrt(2) * sqrt(-log(sampler.next1D()))) / _l;
+            Vec3d normal = vec_conv<Vec3d>(sample_standard_normal(3, sampler));
+            double rad = sqrt(2) * 1 / _l * normal.length();
             return vec_conv<Vec3d>(SampleWarp::uniformSphere(sampler.next2D())) * rad;
         }
 
@@ -358,6 +359,13 @@ namespace Tungsten {
             double rad = 2 * sqrt(rand_gamma(_a, 0.5 / (_l * _l), sampler)) * sqrt(-log(sampler.next1D()));
             double angle = sampler.next1D() * 2 * PI;
             return Vec2d(sin(angle), cos(angle)) * rad;
+        }
+
+        virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler) const override {
+            double tau = 2 * sqrt(rand_gamma(_a, 0.5 / (_l * _l), sampler));
+            Vec3d normal = vec_conv<Vec3d>(sample_standard_normal(3, sampler));
+            double rad = sqrt(2) * 1/tau * normal.length();
+            return vec_conv<Vec3d>(SampleWarp::uniformSphere(sampler.next2D())) * rad;
         }
 
     private:

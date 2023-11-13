@@ -11,6 +11,7 @@ namespace Tungsten {
 			Knob,
 			KnobInner,
 			KnobOuter,
+			TwoSpheres
 		};
 
 		static std::string functionToString(Function val);
@@ -19,6 +20,7 @@ namespace Tungsten {
 		static float knob(Vec3f p, int& mat);
 		static float knob_inner(Vec3f p, int& mat);
 		static float knob_outer(Vec3f p, int& mat);
+		static float two_spheres(Vec3f p, int& mat);
 		
 		template<typename sdf>
 		static Vec3f grad(sdf func, Vec3f p) {
@@ -44,6 +46,7 @@ namespace Tungsten {
 			case Function::Knob: return knob(p, mat);
 			case Function::KnobInner: return knob_inner(p, mat);
 			case Function::KnobOuter: return knob_outer(p, mat);
+			case Function::TwoSpheres: return two_spheres(p, mat);
 			}
 		}
 
@@ -52,6 +55,7 @@ namespace Tungsten {
 			case Function::Knob: return grad(knob, p);
 			case Function::KnobInner: return grad(knob_inner, p);
 			case Function::KnobOuter: return grad(knob_outer, p);
+			case Function::TwoSpheres: return grad(two_spheres, p);
 			}
 		}
 

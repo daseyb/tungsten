@@ -221,6 +221,7 @@ void GaussianProcess::setConditioning(
         globalCondDerivDirs.data(), globalCondDerivDirs.data(),
         Vec3d(0.), globalCondPs.size(), globalCondPs.size());
 
+    //s11 = project_to_psd(s11);
 
     Eigen::Map<const Eigen::VectorXd> cond_values_view(globalCondValues.data(), globalCondValues.size());
     _globalCondPriorMean = cond_values_view - mean_prior(globalCondPs.data(), globalCondDerivs.data(), globalCondDerivDirs.data(), Vec3d(0.), globalCondPs.size());
@@ -239,7 +240,7 @@ void GaussianProcess::setConditioning(
         if (lltSolver.info() == Eigen::ComputationInfo::Success) {
             succesfullSolve = true;
             _globalCondSolver = lltSolver;
-            std::cout << "Using LLT solver for global conditioning.\n";
+            std::cout << "Using LDLT solver for global conditioning.\n";
         }
     }
 
@@ -667,6 +668,14 @@ double GaussianProcess::noIntersectBound(Vec3d p, double q) const
 {
     double stddev = sqrt((*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.)));
     return stddev * sqrt(2.) * boost::math::erf_inv(2 * q - 1);
+}
+
+double GaussianProcess::cdf(Vec3d p) const
+{
+    auto deriv = Derivative::None;
+    double stddev = sqrt(cov_sym(&p, &deriv, nullptr, Vec3d(), 1)(0,0));
+    double mu = mean(&p, &deriv, nullptr, Vec3d(), 1)(0);
+    return 0.5 * (1 + boost::math::erf(0 - mu / (stddev * sqrt(2))));
 }
 
 double GaussianProcess::goodStepsize(Vec3d p, double targetCov, Vec3d rd) const

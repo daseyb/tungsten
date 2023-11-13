@@ -9,7 +9,7 @@ double WeightSpaceRealization::evaluate(const Vec3d& p) const {
     Derivative d = Derivative::None;
     double c = (*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d());
     double scale = sqrt(c);
-    return scale * basis->evaluate(vec_conv<Eigen::Vector3d>(p), weights) + gp->mean(&p, &d, nullptr, Vec3d(0.), 1)(0);
+    return scale * basis->evaluate(vec_conv<Eigen::Vector3d>(p), weights) + gp->mean_prior(&p, &d, nullptr, Vec3d(0.), 1)(0);
 }
 
 Affine<1> WeightSpaceRealization::evaluate(const Affine<3>& p) const {
@@ -118,7 +118,7 @@ double WeightSpaceBasis::lipschitz(const Eigen::VectorXd& weights) const {
 WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> cov, int n, PathSampleGenerator& sampler) {
     WeightSpaceBasis b(n);
     b.weightNorm = 0;
-    TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame({0., 1., 0.});
+    TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame({0., 0., 1.});
 
     for (int i = 0; i < n; i++) {
         b.offsets(i) = sampler.next1D() * TWO_PI;
@@ -129,7 +129,7 @@ WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> co
         auto dir = SampleWarp::uniformCylinder(sampler.next2D());
         dir.z() = 0;
         b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir);
-#elif 0
+#elif 1
         auto dir2d = cov->sample_spectral_density_2d(sampler);
         auto dir = Vec3d(dir2d.x(), dir2d.y(), 0.);
 
@@ -140,7 +140,7 @@ WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> co
         if (!std::isfinite(b.freqs(i))) {
             std::cerr << "Sampling error!\n";
         }
-#elif 1
+#elif 0
         auto dir = cov->sample_spectral_density_3d(sampler) * vec_conv<Vec3d>(cov->_aniso);
 
         b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir.normalized());

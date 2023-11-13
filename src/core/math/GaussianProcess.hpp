@@ -299,6 +299,7 @@ namespace Tungsten {
 
         virtual double noIntersectBound(Vec3d p = Vec3d(0.), double q = 0.9999) const override;
         virtual double goodStepsize(Vec3d p = Vec3d(0.), double targetCov = 0.95, Vec3d rd = Vec3d(1., 0., 0.)) const override;
+        double cdf(Vec3d p) const;
 
     public:
 
