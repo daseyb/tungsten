@@ -179,6 +179,35 @@ namespace Tungsten {
         std::shared_ptr<MeanFunction> _mean;
     };
 
+    class ProceduralNonstationaryCovariance : public CovarianceFunction {
+    public:
+
+        ProceduralNonstationaryCovariance(
+            std::shared_ptr<StationaryCovariance> stationaryCov = nullptr,
+            std::function<float(Vec3d)> variance = nullptr,
+            std::function<float(Vec3d)> ls = nullptr,
+            std::function<Vec3d(Vec3d)> aniso = nullptr) : _stationaryCov(stationaryCov), _variance(variance), _aniso(aniso)
+        {
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override;
+        virtual rapidjson::Value toJson(Allocator& allocator) const override;
+        virtual void loadResources() override;
+
+        virtual std::string id() const {
+            return tinyformat::format("pns-%s", _stationaryCov->id());
+        }
+
+    private:
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override;
+        virtual FloatDD cov(Vec3DD a, Vec3DD b) const override;
+        virtual double cov(Vec3d a, Vec3d b) const override;
+
+        std::shared_ptr<StationaryCovariance> _stationaryCov;
+        std::function<float(Vec3d)> _variance, _ls;
+        std::function<Vec3d(Vec3d)> _aniso;
+    };
+
     class NonstationaryCovariance : public CovarianceFunction {
     public:
 

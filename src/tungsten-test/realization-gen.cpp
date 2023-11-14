@@ -8,6 +8,8 @@
 #include <thread/ThreadUtils.hpp>
 #include <io/Scene.hpp>
 #include <math/WeightSpaceGaussianProcess.hpp>
+#include <ccomplex>
+#include <fftw3.h>
 
 #ifdef OPENVDB_AVAILABLE
 #include <openvdb/openvdb.h>
@@ -495,6 +497,7 @@ void gen__mem_model_fig_reals() {
         xfile.write((char*)sample.data(), sizeof(sample[0]) * sample.size());
         xfile.close();
     }
+
     auto desired_intersect_pts = std::array<Vec3d, 5>{
         Vec3d(0.289, 0.5602, 0.),
             Vec3d(0.8164, 1.0627, 0.),
@@ -610,7 +613,7 @@ void gen__ws_limited_reals() {
             FileUtils::createDirectory(basePath);
         }
 
-        int dim = 64;
+        int dim = 512;
 
 
         auto gp = std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(0., 0., 0.), 0.2f), cov);
@@ -629,12 +632,14 @@ void gen__ws_limited_reals() {
             }
         }
 
-        for(int n : {10,100,1000})
+        UniformPathSampler sampler(0);
+        sampler.next2D();
+        const WeightSpaceRealization ws = WeightSpaceBasis::sample(gp->_cov, 10000, sampler, false).sampleRealization(gp, sampler);
+
+        for(int n : {10,100,1000,10000})
         {
-            UniformPathSampler sampler(0);
-            sampler.next2D();
-            const WeightSpaceRealization ws = WeightSpaceBasis::sample(gp->_cov, n, sampler).sampleRealization(gp, sampler);
-            auto sample = ws.evaluate(points.data(), points.size());
+            auto ws_trunc = ws.truncate(n);
+            auto sample = ws_trunc.evaluate(points.data(), points.size());
             {
                 std::ofstream xfile(basePath.asString() + tinyformat::format("/ws-real-%d.bin", n), std::ios::out | std::ios::binary);
                 xfile.write((char*)sample.data(), sizeof(sample[0]) * sample.size());
@@ -643,7 +648,7 @@ void gen__ws_limited_reals() {
         }
 
 
-        {
+        /* {
             UniformPathSampler real_samp(0);
             real_samp.next2D();
             auto [samples, gpIds] = gp->sample(
@@ -657,7 +662,7 @@ void gen__ws_limited_reals() {
                 xfile.close();
             }
 
-        }
+        }*/
         
     };
 
@@ -833,10 +838,10 @@ void gen__fs_algo_vis() {
         FileUtils::createDirectory(basePath);
     }
 
-    int dim = 64;
+    int dim = 500;
 
 
-    auto gp = std::make_shared<GaussianProcess>(std::make_shared<SphericalMean>(Vec3d(1., 0., 0.), 0.2f), cov);
+    auto gp = std::make_shared<GaussianProcess>(std::make_shared<LinearMean>(Vec3d(0., -0.8, 0.), Vec3d(0., 1., 0.)), cov);
 
     std::vector<Vec3d> points(dim * dim);
     std::vector<Derivative> derivs(dim * dim, Derivative::None);
@@ -852,6 +857,60 @@ void gen__fs_algo_vis() {
         }
     }
 
+    UniformPathSampler sampler(0);
+    sampler.next2D();
+    auto basis = WeightSpaceBasis::sample(gp->_cov, 400, sampler);
+    const WeightSpaceRealization ws = basis.sampleRealization(gp, sampler);
+    {
+        auto sample = ws.evaluate(points.data(), points.size());
+        std::ofstream xfile(basePath.asString() + tinyformat::format("/ws-real-%d.bin", 400), std::ios::out | std::ios::binary);
+        xfile.write((char*)sample.data(), sizeof(sample[0]) * sample.size());
+        xfile.close();
+    }
+
+    auto desired_intersect_pts = std::array<Vec3d, 5>{
+        Vec3d(0.8782, 1.0276, 0.),
+            Vec3d(1.5708, 1.6521, 0.),
+    };
+
+    for (auto& p : desired_intersect_pts) {
+        Vec3d np = Vec3d(0.);
+        np.x() = p.x() - 1;
+        np.y() = (p.y() - 1) * -1;
+        p = np;
+    }
+
+    std::vector<Vec3d> interp_points;
+    std::vector<double> interp_ts;
+    double startT = 0;
+
+    Vec3d pp = desired_intersect_pts[0];
+    Vec3d cp = desired_intersect_pts[1];
+
+    int path_res = 12;
+    for (int j = 0; j < path_res; j++) {
+        interp_points.push_back(lerp(pp, cp, double(j) / (path_res-1)));
+        interp_ts.push_back(startT + (interp_points.back() - pp).length());
+    }
+
+    auto interp_p_values = ws.evaluate(interp_points.data(), interp_points.size());
+    auto intersect_normal = ws.evaluateGradient(interp_points.back());
+    std::vector<Derivative> interp_derivs(interp_points.size(), Derivative::None);
+    std::vector<Vec3d> interp_deriv_dirs(interp_points.size(), Vec3d());
+    std::vector<double> interp_values(interp_p_values.data(), interp_p_values.data() + interp_p_values.size());
+
+    {
+        std::ofstream xfile(basePath.asString() + tinyformat::format("/ray-values.bin"), std::ios::out | std::ios::binary);
+        xfile.write((char*)interp_values.data(), sizeof(interp_values[0]) * interp_values.size());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(basePath.asString() + tinyformat::format("/ray-ts.bin"), std::ios::out | std::ios::binary);
+        xfile.write((char*)interp_ts.data(), sizeof(interp_ts[0]) * interp_ts.size());
+        xfile.close();
+    }
+
     {
         auto mean = gp->mean_prior(points.data(), derivs.data(), nullptr, Vec3d(0.), points.size());
         std::ofstream xfile(basePath.asString() + tinyformat::format("/fs-mean.bin"), std::ios::out | std::ios::binary);
@@ -860,23 +919,99 @@ void gen__fs_algo_vis() {
     }
 
 
-    std::vector<double> probIntersect;
-    
-    for(const auto& p : points)
     {
-        probIntersect.push_back(gp->cdf(p));
+        std::vector<double> probIntersect;
+        for (const auto& p : points) {
+            probIntersect.push_back(gp->cdf(p));
+        }
+
+        {
+            std::ofstream xfile(basePath.asString() + tinyformat::format("/cdf.bin"), std::ios::out | std::ios::binary);
+            xfile.write((char*)probIntersect.data(), sizeof(probIntersect[0]) * probIntersect.size());
+            xfile.close();
+        }
     }
-    
+
     {
-        std::ofstream xfile(basePath.asString() + tinyformat::format("/cdf.bin"), std::ios::out | std::ios::binary);
-        xfile.write((char*)probIntersect.data(), sizeof(probIntersect[0]) * probIntersect.size());
+        gp->setConditioning(interp_points, interp_derivs, interp_deriv_dirs, interp_values);
+        std::vector<double> probIntersect;
+        for (const auto& p : points) {
+            probIntersect.push_back(gp->cdf(p));
+        }
+
+        {
+            std::ofstream xfile(basePath.asString() + tinyformat::format("/cdf-cond.bin"), std::ios::out | std::ios::binary);
+            xfile.write((char*)probIntersect.data(), sizeof(probIntersect[0]) * probIntersect.size());
+            xfile.close();
+        }
+    }
+
+
+}
+
+void gen__spectral_density_est() {
+
+    auto cov = SquaredExponentialCovariance(1.0f, .25f);
+
+    Path basePath = Path("testing/spectral-density-est/" + cov.id());
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
+
+
+    double max_t = 10;
+    std::vector<double> covValues(pow(2, 12));
+    std::vector<double> specValues(pow(2, 12));
+
+    size_t i;
+    covValues[0] = cov(Derivative::None, Derivative::None, Vec3d(0.), Vec3d(0.), Vec3d(), Vec3d());
+    specValues[0] = cov.spectral_density(0);
+    for (i = 1; i < covValues.size(); i++) {
+        double t = double(i) / covValues.size() * max_t;
+        covValues[i] = cov(Derivative::None, Derivative::None, Vec3d(0.), Vec3d(t, 0., 0.), Vec3d(), Vec3d()) / covValues[0];
+        specValues[i] = cov.spectral_density(t*10);
+    }
+
+    auto dt = max_t / covValues.size();
+    auto n = covValues.size();
+    auto nfft = 2 * n - 2;
+    auto nf = nfft / 2;
+
+    // This is based on the pywafo tospecdata function: https://github.com/wafo-project/pywafo/blob/master/src/wafo/covariance/core.py#L163
+    std::vector<double> acf;
+    acf.insert(acf.end(), covValues.begin(), covValues.end());
+    acf.insert(acf.end(), nfft - 2 * n + 2, 0.);
+    acf.insert(acf.end(), covValues.rbegin() + 2, covValues.rend());
+
+    std::vector<std::complex<double>> spectrumValues(acf.size());
+    fftw_plan plan = fftw_plan_dft_r2c_1d(acf.size(), acf.data(), (fftw_complex*)spectrumValues.data(), FFTW_ESTIMATE);
+    fftw_execute(plan);
+    fftw_destroy_plan(plan);
+
+    std::vector<double> r_per;
+    std::transform(spectrumValues.begin(), spectrumValues.end(), std::back_inserter(r_per), [](auto spec) { return std::max(spec.real(), 0.); });
+
+    auto discreteSpectralDensity = std::vector<double>();
+    std::transform(r_per.begin(), r_per.begin() + nf + 1, std::back_inserter(discreteSpectralDensity), [dt](auto per) { return std::abs(per) * dt / PI; });
+
+    {
+        std::ofstream xfile(basePath.asString() + tinyformat::format("/discrete-spectral-density.bin"), std::ios::out | std::ios::binary);
+        xfile.write((char*)discreteSpectralDensity.data(), sizeof(discreteSpectralDensity[0]) * discreteSpectralDensity.size());
         xfile.close();
     }
+    {
+        std::ofstream xfile(basePath.asString() + tinyformat::format("/analytic-spectral-density.bin"), std::ios::out | std::ios::binary);
+        xfile.write((char*)specValues.data(), sizeof(specValues[0]) * specValues.size());
+        xfile.close();
+    }
+
 }
 
 int main(int argc, const char** argv) {
     //gen__mem_model_fig_reals();
     //gen__ws_algo_vis();
-
+    //gen__ws_limited_reals();
     gen__fs_algo_vis();
+
+    //gen__spectral_density_est();
 }

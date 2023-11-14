@@ -20,6 +20,8 @@ struct WeightSpaceRealization {
 
     RangeBound rangeBound(const Vec3d& c, const std::vector<Vec3d>& vs) const;
 
+    WeightSpaceRealization truncate(size_t n) const;
+
     double lipschitz() const;
 
     static WeightSpaceRealization sample(std::shared_ptr<WeightSpaceBasis> basis, std::shared_ptr<GaussianProcess> gp, PathSampleGenerator& sampler);
@@ -29,15 +31,15 @@ struct WeightSpaceBasis {
     Eigen::MatrixXd dirs;
     Eigen::VectorXd freqs;
     Eigen::VectorXd offsets;
-    Eigen::VectorXd freqWeights;
-    double weightNorm;
+
+    WeightSpaceBasis(Eigen::MatrixXd dirs, Eigen::VectorXd freqs, Eigen::VectorXd offsets) :
+        dirs(dirs), freqs(freqs), offsets(offsets) {
+    }
 
     WeightSpaceBasis(int n) {
         dirs.resize(n, 3);
         freqs.resize(n);
         offsets.resize(n);
-        freqWeights.resize(n);
-        weightNorm = 0.;
     }
 
     size_t size() const {
@@ -53,7 +55,10 @@ struct WeightSpaceBasis {
 
     WeightSpaceRealization sampleRealization(std::shared_ptr<GaussianProcess> gp, PathSampleGenerator& sampler) const;
 
-    static WeightSpaceBasis sample(std::shared_ptr<CovarianceFunction> cov, int n, PathSampleGenerator& sampler);
+    static WeightSpaceBasis sample(std::shared_ptr<CovarianceFunction> cov, int n, PathSampleGenerator& sampler, bool sort = false);
+
+    WeightSpaceBasis truncate(size_t n) const;
+
 };
 
 }
