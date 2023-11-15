@@ -810,6 +810,10 @@ namespace Tungsten {
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
         virtual void loadResources() override;
 
+        Box3d bounds() {
+            return _bounds;
+        }
+
     private:
         PathPtr _path;
         bool _signed;
@@ -823,6 +827,7 @@ namespace Tungsten {
         igl::FastWindingNumberBVH fwn_bvh;
         igl::AABB<Eigen::MatrixXd, 3> tree;
 
+        Box3d _bounds;
         Mat4f _configTransform;
         Mat4f _invConfigTransform;
 

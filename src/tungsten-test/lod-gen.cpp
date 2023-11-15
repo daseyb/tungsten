@@ -254,13 +254,106 @@ int gen3d(int argc, char** argv) {
 
 }
 
-int test2d(int argc, char** argv) {
-    return 0;
+int mesh_convert(int argc, char** argv) {
+
+    ThreadUtils::startThreads(1);
+
+    EmbreeUtil::initDevice();
+
+#ifdef OPENVDB_AVAILABLE
+    openvdb::initialize();
+#endif
+
+    MeshSdfMean mean(std::make_shared<Path>(argv[1]), true);
+    mean.loadResources();
+
+    int dim = std::stod(argv[2]);
+
+    auto scenePath = Path(argv[1]);
+    std::cout << scenePath.parent().asString() << "\n";
+
+    auto bounds = mean.bounds();
+    bounds.grow(bounds.diagonal().length() * 0.2);
+
+    Vec3d minp = bounds.min();
+    Vec3d maxp = bounds.max();
+
+    Vec3d extends = (maxp - minp);
+
+    double max_extend = extends.max();
+
+    std::cout << extends << ":" << max_extend << "\n";
+
+    Vec3d aspect = extends / max_extend;
+
+    Vec3i dims = vec_conv<Vec3i>(aspect * dim);
+
+    std::cout << aspect << ":" << dims << "\n";
+
+    auto cellSize = max_extend / dim;
+
+    auto gridTransform = openvdb::Mat4R::identity();
+    gridTransform.setToScale(vec_conv<openvdb::Vec3R>(Vec3d(cellSize)));
+    gridTransform.setTranslation(vec_conv<openvdb::Vec3R>(minp));
+
+    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(100.f);
+    meanGrid->setGridClass(openvdb::GRID_LEVEL_SET);
+    meanGrid->setName("mean");
+    meanGrid->setTransform(openvdb::math::Transform::createLinearTransform(gridTransform));
+    openvdb::FloatGrid::Accessor meanAccessor = meanGrid->getAccessor();
+
+    UniformPathSampler sampler(0);
+    sampler.next2D();
+
+    int num_samples = 1;
+
+    for (int i = 0; i < dims.x(); i++) {
+        std::cout << i << "\r";
+        for (int j = 0; j < dims.y(); j++) {
+#pragma omp parallel for
+            for (int k = 0; k < dims.z(); k++) {
+                auto p = lerp(minp, maxp, Vec3d((float)i, (float)j, (float)k) / vec_conv<Vec3d>(dims));
+
+                double m = 0;
+                
+                if (num_samples > 0) {
+                    for (int s = 0; s < num_samples; s++) {
+                        Vec2d s1 = rand_normal_2(sampler);
+                        Vec2d s2 = rand_normal_2(sampler);
+                        Vec3d offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
+                        Vec3d pt = p + offset * cellSize * 0.1;
+                        m += mean(Derivative::None, pt, Vec3d());
+                    }
+                    m /= num_samples;
+                }
+                else {
+                    m = mean(Derivative::None, p, Vec3d());
+                }
+
+#pragma omp critical
+                {
+                    meanAccessor.setValue({ i,j,k }, m);
+                }
+            }
+        }
+    }
+
+    {
+        openvdb::GridPtrVec grids;
+        grids.push_back(meanGrid);
+        openvdb::io::File file(scenePath.stripExtension().asString() + "-" + std::to_string(dim) + ".vdb");
+        file.write(grids);
+        file.close();
+    }
+
 }
+
+
 
 int main(int argc, char** argv) {
 
-    return gen3d(argc, argv);
+    mesh_convert(argc, argv);
+    //return gen3d(argc, argv);
     //return test2d(argc, argv);
 
 }

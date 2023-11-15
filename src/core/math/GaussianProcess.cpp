@@ -166,9 +166,8 @@ void GaussianProcess::fromJson(JsonPtr value, const Scene& scene) {
 }
 
 rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
-    return JsonObject{ GPSampleNode::toJson(allocator), allocator,
+    auto obj = JsonObject{ GPSampleNode::toJson(allocator), allocator,
         "type", "standard",
-        "conditioning_data",* _conditioningDataPath,
         "mean", *_mean,
         "covariance", *_cov,
         "max_num_eigenvalues", _maxEigenvaluesN,
@@ -176,6 +175,12 @@ rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
         "id", _id,
         "project_cov", _requireCovProjection
     };
+
+    if (_conditioningDataPath) {
+        obj.add("conditioning_data", *_conditioningDataPath);
+    }
+
+    return obj;
 }
 
 void GaussianProcess::loadResources() {

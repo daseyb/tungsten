@@ -237,22 +237,28 @@ if (EIGEN3_FOUND)
 endif()
 set(data_dirs example-scenes materialtest mc-loader)
 
+
 find_package(OpenGL)
-find_package(Qt5Widgets)
-find_package(Qt5OpenGL)
+find_package(Qt5 COMPONENTS Widgets OpenGL REQUIRED)
 option(BUILD_EDITOR "Build the editor" FALSE) 
 if (BUILD_EDITOR AND OPENGL_FOUND AND Qt5Widgets_FOUND)
+	set(CMAKE_AUTOMOC ON)
+	set(CMAKE_AUTORCC ON)
+	set(CMAKE_AUTOUIC ON)
+	set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
     include_directories(${OPENGL_INCLUDE_DIR})
     set(opengl_libs ${OPENGL_LIBRARIES})
-    
-    file(GLOB_RECURSE Editor_SOURCES "src/editor/*.cpp")
+	
+    file(GLOB_RECURSE Editor_SOURCES "src/editor/*.*pp")
     if (APPLE)
         list(APPEND Editor_SOURCES "src/editor/CoreProfileAttributes.mm")
     endif()
     add_executable(editor ${Editor_SOURCES} src/editor/resources/Tungsten.rc)
+
+
     set_target_properties(editor PROPERTIES AUTOMOC TRUE)
-    qt5_use_modules(editor Widgets OpenGL)
-    target_link_libraries(editor ${core_libs} ${opengl_libs} Qt5::Widgets Qt5::OpenGL)
+    target_link_libraries(editor ${core_libs} ${opengl_libs} Qt5::Core Qt5::Widgets Qt5::OpenGL)
     if (APPLE)
         find_library(APPKIT NAMES AppKit) 
         target_link_libraries(editor ${APPKIT})

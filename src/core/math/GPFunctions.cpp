@@ -619,6 +619,8 @@ namespace Tungsten {
         std::vector<Vertex> _verts;
         std::vector<TriangleI> _tris;
 
+        _bounds = Box3d();
+
         if (_path && MeshIO::load(*_path, _verts, _tris)) {
 
             V.resize(_verts.size(), 3);
@@ -629,7 +631,9 @@ namespace Tungsten {
                 V(i, 1) = tpos.y();
                 V(i, 2) = tpos.z();
 
-                Vec3f tnorm = _configTransform.transformVector(_verts[i].normal());
+                //Vec3f tnorm = _configTransform.transformVector(_verts[i].normal());
+             
+                _bounds.grow(vec_conv<Vec3d>(tpos));
             }
 
             F.resize(_tris.size(), 3);

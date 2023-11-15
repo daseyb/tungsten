@@ -116,6 +116,7 @@ namespace Tungsten {
         virtual double noIntersectBound(Vec3d p = Vec3d(0.), double q = 0.9999) const = 0;
         virtual double goodStepsize(Vec3d p = Vec3d(0.), double targetCov = 0.95, Vec3d rd = Vec3d(1., 0., 0.)) const = 0;
         virtual double compute_beckmann_roughness(Vec3d p) const = 0;
+        virtual double cdf(Vec3d p) const = 0;
 
         virtual Eigen::VectorXd mean(
             const Vec3d* points, const Derivative* derivative_types, const Vec3d* ddirs,
@@ -165,6 +166,11 @@ namespace Tungsten {
         virtual double goodStepsize(Vec3d p = Vec3d(0.), double targetCov = 0.95, Vec3d rd = Vec3d(1., 0., 0.)) const override {
             return min(_left->goodStepsize(p, targetCov, rd), _right->goodStepsize(p, targetCov, rd));
         }
+
+        virtual double cdf(Vec3d p) const override {
+            return _left->cdf(p) * _right->cdf(p);
+        }
+
 
         virtual Eigen::VectorXd mean(
             const Vec3d* points, const Derivative* derivative_types, const Vec3d* ddirs,
@@ -299,7 +305,7 @@ namespace Tungsten {
 
         virtual double noIntersectBound(Vec3d p = Vec3d(0.), double q = 0.9999) const override;
         virtual double goodStepsize(Vec3d p = Vec3d(0.), double targetCov = 0.95, Vec3d rd = Vec3d(1., 0., 0.)) const override;
-        double cdf(Vec3d p) const;
+        virtual double cdf(Vec3d p) const override;
 
     public:
 

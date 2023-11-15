@@ -23,7 +23,8 @@ namespace Tungsten {
             0.f, 0.f, 1.f, GPCorrelationContext::Goldfish, GPIntersectMethod::GPDiscrete, GPNormalSamplingMethod::ConditionedGaussian),
             _samplePoints(32),
             _stepSizeCov(0.),
-        _stepSize(0.)
+        _stepSize(0.),
+        _skipSpace(0.)
     {
     }
 
@@ -33,6 +34,7 @@ namespace Tungsten {
         value.getField("sample_points", _samplePoints);
         value.getField("step_size_cov", _stepSizeCov);
         value.getField("step_size", _stepSize);
+        value.getField("skip_space", _skipSpace);
     }
 
     rapidjson::Value FunctionSpaceGaussianProcessMedium::toJson(Allocator& allocator) const
@@ -42,6 +44,7 @@ namespace Tungsten {
             "sample_points", _samplePoints,
             "step_size_cov", _stepSizeCov,
             "step_size", _stepSize,
+            "skip_space", _skipSpace,
         };
     }
 
@@ -54,8 +57,32 @@ namespace Tungsten {
         auto ro = vec_conv<Vec3d>(ray.pos());
         auto rd = vec_conv<Vec3d>(ray.dir()).normalized();
 
-        double maxRayDist = ray.farT() - ray.nearT();
 
+        double nearT = ray.nearT();
+        double farT = ray.farT();
+        if (_skipSpace > 0) {
+            double emptySpaceStepSize = _stepSize > 0 ? _stepSize : 0.01;
+            while (_gp->cdf(ro + (nearT + emptySpaceStepSize) * rd) < _skipSpace && nearT < farT) {
+                nearT += emptySpaceStepSize;
+            }
+
+            if (farT - nearT < emptySpaceStepSize) {
+                t = ray.farT();
+                return false;
+            }
+
+            while (_gp->cdf(ro + (farT - emptySpaceStepSize) * rd) < _skipSpace && nearT < farT) {
+                farT -= emptySpaceStepSize;
+            }
+
+            if (farT - nearT < emptySpaceStepSize) {
+                t = ray.farT();
+                return false;
+            }
+        }
+
+
+        double maxRayDist = farT - nearT;
         double determinedStepSize = maxRayDist / _samplePoints;
 
         if (_stepSizeCov > 0) {
@@ -69,17 +96,17 @@ namespace Tungsten {
             determinedStepSize = _stepSize;
         }
 
+
         maxRayDist = determinedStepSize * _samplePoints;
 
-
-        double maxT = ray.nearT() + maxRayDist;
+        double maxT = nearT + maxRayDist;
 
         for (int i = 0; i < _samplePoints; i++) {
             double rt = lerp((double)ray.nearT()+determinedStepSize*0.1, ray.nearT() + maxRayDist, clamp((i - tOffset) / (_samplePoints-1), 0., 1.));
             if (i == 0)
-                rt = (double)ray.nearT() + determinedStepSize * 0.1;
+                rt = nearT + determinedStepSize * 0.1;
             else if (i == _samplePoints - 1)
-                rt = ray.nearT() + maxRayDist;
+                rt = nearT + maxRayDist;
 
             ts[i] =  rt;
             points[i] = ro + rt * rd;
