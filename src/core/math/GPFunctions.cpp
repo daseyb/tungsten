@@ -110,7 +110,7 @@ namespace Tungsten {
         case NoiseType::BottomTop:
             return lerp(_max, _min, clamp(p.y() * 2, 0., 1.));
         case NoiseType::LeftRight:
-            return lerp(_max, _min, clamp((p.x() + 1) * 2., 0., 1.));
+            return lerp(_max, _min, clamp(p.x()*2 + 1, 0., 1.));
         }
     }
 
