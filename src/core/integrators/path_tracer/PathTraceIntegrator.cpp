@@ -192,8 +192,8 @@ void PathTraceIntegrator::prepareForRender(TraceableScene &scene, uint32 seed)
         _tracers.emplace_back(new PathTracer(&scene, _settings, i));
 
     _rect = scene.cam().rect();
-    _varianceW = (scene.cam().rect().diagonal().x() + VarianceTileSize - 1)/VarianceTileSize;
-    _varianceH = (scene.cam().rect().diagonal().y() + VarianceTileSize - 1)/VarianceTileSize;
+    _varianceW = (scene.cam().resolution().x() + VarianceTileSize - 1)/VarianceTileSize;
+    _varianceH = (scene.cam().resolution().y() + VarianceTileSize - 1)/VarianceTileSize;
     diceTiles();
     _samples.resize(_varianceW*_varianceH);
 }
