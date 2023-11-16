@@ -286,7 +286,7 @@ void VdbGrid::loadResources()
 
     if (_densityName != "density" && _requestSDF && _densityGrid) {
         std::cout << "Converting density grid to SDF...\n";
-        int downsample = 4;
+        int downsample = 1;
 
         auto sdf_path = Path(_path->absolute().stripExtension().asString() + "-sdf.vdb");
 
@@ -308,7 +308,7 @@ void VdbGrid::loadResources()
         if (!loadedFiles) {
             openvdb::tools::MultiResGrid<openvdb::FloatTree> mgrid(downsample + 1, _densityGrid);
 
-            auto dilatedSdfGrid = openvdb::tools::dilateSdf(*mgrid.grid(downsample), 100, openvdb::tools::NearestNeighbors::NN_FACE_EDGE_VERTEX, 20);
+            auto dilatedSdfGrid = openvdb::tools::dilateSdf(*mgrid.grid(downsample), 100, openvdb::tools::NearestNeighbors::NN_FACE_EDGE_VERTEX, 40);
             dilatedSdfGrid = openvdb::tools::sdfToSdf(*dilatedSdfGrid, 0, 10);
             dilatedSdfGrid->setName("sdf");
 
@@ -375,7 +375,7 @@ float VdbGrid::density(Vec3f p) const
     auto grid = _densityGrid;
 
     if (_detailGrid) {
-        float scaleFac = (1 << 4);
+        float scaleFac = (1 << 2);
         auto coordI = vec_conv<openvdb::Coord>(vec_conv<openvdb::Vec3R>(p * scaleFac));
         if (_detailGrid->tree().isValueOn(coordI)) {
             p *= scaleFac;
