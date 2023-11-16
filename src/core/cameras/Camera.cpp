@@ -83,6 +83,15 @@ rapidjson::Value Camera::toJson(Allocator &allocator) const
             "up", _up
         }
     };
+
+    if (_rect.min() != Vec2u(0.)) {
+        result.add("sub_rect_min", _rect.min());
+    }
+
+    if (_rect.max() != _res) {
+        result.add("sub_rect_max", _rect.max());
+    }
+
     if (_medium)
         result.add("medium", *_medium);
 
