@@ -108,7 +108,7 @@ namespace Tungsten {
     double ProceduralNoise::operator()(Vec3d p) const {
         switch (type) {
         case NoiseType::BottomTop:
-            return exp(lerp(log(_max),  log(_min), clamp(p.y() * 2, 0., 1.)));
+            return exp(lerp(log(_max),  log(_min), clamp(p.y() * .75, 0., 1.)));
         case NoiseType::LeftRight:
             return exp(lerp(log(_max), log(_min), clamp(p.x()*2 + 1, 0., 1.)));
         }
