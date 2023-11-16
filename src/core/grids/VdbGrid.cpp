@@ -306,6 +306,14 @@ void VdbGrid::loadResources()
         _invTransform = Mat4f::scale(Vec3f(1.0f / (scale * scaleFac))) * Mat4f::translate(center);
 
         _densityGrid = dilatedSdfGrid;
+
+        {
+            openvdb::GridPtrVec grids;
+            grids.push_back(_densityGrid);
+            openvdb::io::File file(_path->absolute().stripExtension().asString() + "-sdf.vdb");
+            file.write(grids);
+            file.close();
+        }
     }
 
     if (_requestGradient && _densityGrid) {

@@ -31,7 +31,16 @@ DEFINE_STRINGABLE_ENUM(CovarianceFunctionFactory, "covariance", ({
     {"mg-nonstationary", std::make_shared<MeanGradNonstationaryCovariance>},
     {"thin_plate", std::make_shared<ThinPlateCovariance>},
     {"neural", std::make_shared<NeuralNonstationaryCovariance>},
+    {"proc_nonstationary", std::make_shared<ProceduralNonstationaryCovariance>},
 }))
 
+
+DEFINE_STRINGABLE_ENUM(ProceduralScalarFactory, "procedural_scalar", ({
+    {"sdf", std::make_shared<ProceduralSdf>},
+    {"noise", std::make_shared<ProceduralNoise>},
+}))
+
+DEFINE_STRINGABLE_ENUM(ProceduralVectorFactory, "procedural_vector", ({
+}))
 
 }

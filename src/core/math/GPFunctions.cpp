@@ -105,6 +105,14 @@ namespace Tungsten {
         return res;
     }
 
+    double ProceduralNoise::operator()(Vec3d p) const {
+        switch (type) {
+        case NoiseType::BottomTop:
+            return lerp(_max, _min, clamp(p.y() * 2, 0., 1.));
+        case NoiseType::LeftRight:
+            return lerp(_max, _min, clamp((p.x() + 1) * 2., 0., 1.));
+        }
+    }
 
     void NonstationaryCovariance::fromJson(JsonPtr value, const Scene& scene) {
         CovarianceFunction::fromJson(value, scene);

@@ -680,7 +680,7 @@ double GaussianProcess::cdf(Vec3d p) const
     auto deriv = Derivative::None;
     double stddev = sqrt(cov_sym(&p, &deriv, nullptr, Vec3d(), 1)(0,0));
     double mu = mean(&p, &deriv, nullptr, Vec3d(), 1)(0);
-    return 0.5 * (1 + boost::math::erf(0 - mu / (stddev * sqrt(2))));
+    return 0.5 * (1 + boost::math::erf( (0 - mu) / (stddev * sqrt(2))));
 }
 
 double GaussianProcess::goodStepsize(Vec3d p, double targetCov, Vec3d rd) const

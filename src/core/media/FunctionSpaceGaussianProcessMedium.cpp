@@ -71,14 +71,14 @@ namespace Tungsten {
                 return false;
             }
 
-            while (_gp->cdf(ro + (farT - emptySpaceStepSize) * rd) < _skipSpace && nearT < farT) {
+            /*while (_gp->cdf(ro + (farT - emptySpaceStepSize) * rd) < _skipSpace && nearT < farT) {
                 farT -= emptySpaceStepSize;
             }
 
             if (farT - nearT < emptySpaceStepSize) {
                 t = ray.farT();
                 return false;
-            }
+            }*/
         }
 
 

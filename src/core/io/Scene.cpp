@@ -115,6 +115,19 @@ std::shared_ptr<Grid> Scene::fetchGrid(JsonPtr value) const
     return fetchObject(_grids, *this, value);
 }
 
+std::shared_ptr<ProceduralScalar> Scene::fetchProceduralScalar(JsonPtr value) const
+{
+    return instantiate<ProceduralScalar>(value, *this);
+}
+
+
+std::shared_ptr<ProceduralVector> Scene::fetchProceduralVector(JsonPtr value) const
+{
+    return instantiate<ProceduralVector>(value, *this);
+}
+
+
+
 std::shared_ptr<Primitive> Scene::fetchPrimitive(JsonPtr value) const
 {
     return instantiate<Primitive>(value, *this);

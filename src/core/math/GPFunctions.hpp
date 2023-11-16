@@ -149,6 +149,7 @@ namespace Tungsten {
 
         friend class NonstationaryCovariance;
         friend class MeanGradNonstationaryCovariance;
+        friend class ProceduralNonstationaryCovariance;
     };
 
     class MeanGradNonstationaryCovariance : public CovarianceFunction {
@@ -179,33 +180,241 @@ namespace Tungsten {
         std::shared_ptr<MeanFunction> _mean;
     };
 
+    class ProceduralScalar : public JsonSerializable {
+    public:
+        virtual double operator()(Vec3d p) const = 0;
+    };
+
+    class ProceduralVector : public JsonSerializable {
+    public:
+        virtual Vec3d operator()(Vec3d p) const = 0;
+    };
+
+    class ProceduralScalarCode : public ProceduralScalar {
+        std::function<double(Vec3d)> _fn;
+    public:
+        ProceduralScalarCode(std::function<double(Vec3d)> fn = nullptr) : _fn(fn) {}
+      
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ ProceduralScalar::toJson(allocator), allocator,
+                "type", "code"
+            };
+        }
+
+        virtual double operator()(Vec3d p) const override {
+            return _fn(p);
+        }
+    };
+
+    class ProceduralVectorCode : public ProceduralVector {
+        std::function<Vec3d(Vec3d)> _fn;
+    public:
+        ProceduralVectorCode(std::function<Vec3d(Vec3d)> fn = nullptr) : _fn(fn) {}
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ ProceduralVector::toJson(allocator), allocator,
+                "type", "code"
+            };
+        }
+
+        virtual Vec3d operator()(Vec3d p) const override {
+            return _fn(p);
+        }
+    };
+
+    class ProceduralSdf : public ProceduralScalar {
+        SdfFunctions::Function _fn;
+    public:
+        ProceduralSdf(SdfFunctions::Function fn = SdfFunctions::Function::Knob) : _fn(fn) {}
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ ProceduralScalar::toJson(allocator), allocator,
+                "type", "sdf",
+                "function", SdfFunctions::functionToString(_fn)
+            };
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            ProceduralScalar::fromJson(value, scene);
+            std::string fnString;
+            value.getField("function", fnString);
+            _fn = SdfFunctions::stringToFunction(fnString);
+        }
+
+        virtual double operator()(Vec3d p) const override {
+            int mat;
+            return SdfFunctions::eval(_fn, vec_conv<Vec3f>(p), mat);
+        }
+    };
+
+    class ProceduralNoise: public ProceduralScalar {
+        double _min = 1., _max = 500.;
+        enum class NoiseType {
+            BottomTop,
+            LeftRight
+        };
+
+        NoiseType type = NoiseType::BottomTop;
+
+        static std::string noiseTypeToString(NoiseType v) {
+            switch (v) {
+            case NoiseType::BottomTop: return "bottom_top";
+            case NoiseType::LeftRight: return "left_right";
+            }
+        }
+
+        static NoiseType stringToNoiseType(std::string v) {
+            if (v == "bottom_top")
+                return NoiseType::BottomTop;
+            else if (v == "left_right")
+                return NoiseType::LeftRight;
+
+            FAIL("Invalid noise typ function: '%s'", v);
+        }
+
+    public:
+        ProceduralNoise() {}
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ ProceduralScalar::toJson(allocator), allocator,
+                "type", "noise",
+                "noise", noiseTypeToString(type)
+            };
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            ProceduralScalar::fromJson(value, scene);
+            std::string noiseString = noiseTypeToString(type);
+            value.getField("noise", noiseString);
+            type = stringToNoiseType(noiseString);
+
+            value.getField("min", _min);
+            value.getField("max", _max);
+        }
+
+        virtual double operator()(Vec3d p) const override;
+    };
+
+
     class ProceduralNonstationaryCovariance : public CovarianceFunction {
     public:
 
         ProceduralNonstationaryCovariance(
             std::shared_ptr<StationaryCovariance> stationaryCov = nullptr,
-            std::function<float(Vec3d)> variance = nullptr,
-            std::function<float(Vec3d)> ls = nullptr,
-            std::function<Vec3d(Vec3d)> aniso = nullptr) : _stationaryCov(stationaryCov), _variance(variance), _aniso(aniso)
-        {
+            std::shared_ptr<ProceduralScalar>  variance = nullptr,
+            std::shared_ptr<ProceduralScalar>  ls = nullptr,
+            std::shared_ptr<ProceduralVector>  aniso = nullptr) : _stationaryCov(stationaryCov), _variance(variance), _ls(ls), _aniso(aniso) { }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            CovarianceFunction::fromJson(value, scene);
+
+            if (auto cov = value["cov"]) {
+                _stationaryCov = std::dynamic_pointer_cast<StationaryCovariance>(scene.fetchCovarianceFunction(cov));
+            }
+
+            if (auto variance = value["var"]) {
+                _variance = scene.fetchProceduralScalar(variance);
+            }
+
+            if (auto variance = value["ls"]) {
+                _ls = scene.fetchProceduralScalar(variance);
+            }
+
+            if (auto aniso = value["aniso"]) {
+                _aniso = scene.fetchProceduralVector(aniso);
+            }
         }
 
-        virtual void fromJson(JsonPtr value, const Scene& scene) override;
-        virtual rapidjson::Value toJson(Allocator& allocator) const override;
-        virtual void loadResources() override;
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            auto obj = JsonObject{ CovarianceFunction::toJson(allocator), allocator,
+                "type", "proc_nonstationary",
+                "cov", *_stationaryCov,
+            };
+
+            if (_variance) {
+                obj.add("var", *_variance);
+            }
+
+            if (_ls) {
+                obj.add("ls", *_ls);
+            }
+
+            if (_aniso) {
+                obj.add("aniso", *_aniso);
+            }
+
+            return obj;
+        }
+
+        virtual void loadResources() override {
+            if (_variance) _variance->loadResources();
+            if (_ls) _ls->loadResources();
+            if (_aniso) _aniso->loadResources();
+        }
 
         virtual std::string id() const {
             return tinyformat::format("pns-%s", _stationaryCov->id());
         }
 
     private:
-        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override;
-        virtual FloatDD cov(Vec3DD a, Vec3DD b) const override;
-        virtual double cov(Vec3d a, Vec3d b) const override;
+
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
+            auto sigmaA = (*_variance)(from_diff(a));
+            auto sigmaB = (*_variance)(from_diff(b));
+
+            if (!_ls) {
+                return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+            }
+
+            if (!_aniso) {
+                auto lsA = (*_ls)(from_diff(a));
+                auto lsB = (*_ls)(from_diff(b));
+                double ansioFac = sqrt((2 * lsA * lsB) / (lsA * lsA + lsB * lsB));
+                auto d = (b - a);
+                FloatD dsq = d.squaredNorm() / (lsA * lsA + lsB * lsB);
+                return sqrt(sigmaA) * sqrt(sigmaB) * ansioFac * _stationaryCov->cov(dsq);
+            }
+        }
+
+        virtual FloatDD cov(Vec3DD a, Vec3DD b) const override {
+            auto sigmaA = (*_variance)(from_diff(a));
+            auto sigmaB = (*_variance)(from_diff(b));
+
+            if (!_ls) {
+                return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+            }
+
+            if (!_aniso) {
+                auto lsA = (*_ls)(from_diff(a));
+                auto lsB = (*_ls)(from_diff(b));
+                double ansioFac = sqrt((2 * lsA * lsB) / (lsA * lsA + lsB * lsB));
+                auto d = (b - a);
+                FloatDD dsq = d.squaredNorm() / (lsA * lsA + lsB * lsB);
+                return sqrt(sigmaA)* sqrt(sigmaB)* ansioFac* _stationaryCov->cov(dsq);
+            }
+        }
+
+        virtual double cov(Vec3d a, Vec3d b) const override {
+            auto sigmaA = (*_variance)((a));
+            auto sigmaB = (*_variance)((b));
+
+            if (!_ls) {
+                return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+            }
+
+            if (!_aniso) {
+                auto lsA = (*_ls)((a));
+                auto lsB = (*_ls)((b));
+                double ansioFac = sqrt((2 * lsA * lsB) / (lsA * lsA + lsB * lsB));
+                auto d = vec_conv<Eigen::Vector3d>(b - a);
+                double dsq = d.squaredNorm() / (lsA * lsA + lsB * lsB);
+                return sqrt(sigmaA) * sqrt(sigmaB) * ansioFac * _stationaryCov->cov(dsq);
+            }
+        }
 
         std::shared_ptr<StationaryCovariance> _stationaryCov;
-        std::function<float(Vec3d)> _variance, _ls;
-        std::function<Vec3d(Vec3d)> _aniso;
+        std::shared_ptr<ProceduralScalar> _variance, _ls;
+        std::shared_ptr<ProceduralVector> _aniso;
     };
 
     class NonstationaryCovariance : public CovarianceFunction {
