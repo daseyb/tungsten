@@ -16,7 +16,6 @@
 #include <openvdb/tools/Interpolation.h>
 #include <openvdb/tools/GridOperators.h>
 #include <openvdb/tools/FastSweeping.h>
-#include <openvdb/tools/MultiResGrid.h>
 namespace Tungsten {
 
 std::string VdbGrid::sampleMethodToString(SampleMethod method)
@@ -287,33 +286,47 @@ void VdbGrid::loadResources()
 
     if (_densityName != "density" && _requestSDF && _densityGrid) {
         std::cout << "Converting density grid to SDF...\n";
-        /*auto sdfGrid = openvdb::tools::fogToSdf(*_densityGrid, 0.0f);
-        for (openvdb::FloatGrid::ValueOnIter iter = sdfGrid->beginValueOn(); iter.test(); ++iter) {
-            iter.setValue((*iter) * -1);
-        }*/
-        
-        int downsample = 2;
-        openvdb::tools::MultiResGrid<openvdb::FloatTree> mgrid(downsample+1, _densityGrid);
-       
+        int downsample = 4;
 
-        auto dilatedSdfGrid = openvdb::tools::dilateSdf(*mgrid.grid(downsample), 100, openvdb::tools::NearestNeighbors::NN_FACE_EDGE_VERTEX, 20);
+        auto sdf_path = Path(_path->absolute().stripExtension().asString() + "-sdf.vdb");
 
-        dilatedSdfGrid = openvdb::tools::sdfToSdf(*dilatedSdfGrid, 0, 10);
+        bool loadedFiles = false;
+        try {
+            if (sdf_path.exists()) {
+                openvdb::io::File file(sdf_path.absolute().asString());
+                file.open();
+                _detailGrid = _densityGrid;
+                _densityGrid = openvdb::gridPtrCast<openvdb::FloatGrid>(file.readGrid("sdf"));
+                file.close();
+                loadedFiles = _detailGrid && _densityGrid;
+            }
+        }
+        catch (std::exception& e) {
+            std::cerr << e.what() << "\n";
+        }
+
+        if (!loadedFiles) {
+            openvdb::tools::MultiResGrid<openvdb::FloatTree> mgrid(downsample + 1, _densityGrid);
+
+            auto dilatedSdfGrid = openvdb::tools::dilateSdf(*mgrid.grid(downsample), 100, openvdb::tools::NearestNeighbors::NN_FACE_EDGE_VERTEX, 20);
+            dilatedSdfGrid = openvdb::tools::sdfToSdf(*dilatedSdfGrid, 0, 10);
+            dilatedSdfGrid->setName("sdf");
+
+            {
+                openvdb::GridPtrVec grids;
+                grids.push_back(dilatedSdfGrid);
+                openvdb::io::File file(sdf_path.asString());
+                file.write(grids);
+                file.close();
+            }
+
+            _detailGrid = _densityGrid;
+            _densityGrid = dilatedSdfGrid;
+        }
 
         float scaleFac = (1 << downsample);
-
         _transform = Mat4f::translate(-center) * Mat4f::scale(Vec3f(scale * scaleFac));
         _invTransform = Mat4f::scale(Vec3f(1.0f / (scale * scaleFac))) * Mat4f::translate(center);
-
-        _densityGrid = dilatedSdfGrid;
-
-        {
-            openvdb::GridPtrVec grids;
-            grids.push_back(_densityGrid);
-            openvdb::io::File file(_path->absolute().stripExtension().asString() + "-sdf.vdb");
-            file.write(grids);
-            file.close();
-        }
     }
 
     if (_requestGradient && _densityGrid) {
@@ -358,13 +371,26 @@ static inline float gridAt(TreeT &acc, Vec3f p)
 float VdbGrid::density(Vec3f p) const
 {
     p = clamp(p, bounds().min()+2, bounds().max()-3);
+
+    auto grid = _densityGrid;
+
+    if (_detailGrid) {
+        float scaleFac = (1 << 4);
+        auto coordI = vec_conv<openvdb::Coord>(vec_conv<openvdb::Vec3R>(p * scaleFac));
+        if (_detailGrid->tree().isValueOn(coordI)) {
+            p *= scaleFac;
+            grid = _detailGrid;
+        }
+    }
+    
+
     switch (_interpolateMethod) {
     case InterpolateMethod::Point:
-        return openvdb::tools::PointSampler::sample(_densityGrid->tree(), vec_conv<openvdb::Vec3R>(p));
+        return openvdb::tools::PointSampler::sample(grid->tree(), vec_conv<openvdb::Vec3R>(p));
     case InterpolateMethod::Linear:
-        return openvdb::tools::BoxSampler::sample(_densityGrid->tree(), vec_conv<openvdb::Vec3R>(p));
+        return openvdb::tools::BoxSampler::sample(grid->tree(), vec_conv<openvdb::Vec3R>(p));
     case InterpolateMethod::Quadratic:
-        return openvdb::tools::QuadraticSampler::sample(_densityGrid->tree(), vec_conv<openvdb::Vec3R>(p));
+        return openvdb::tools::QuadraticSampler::sample(grid->tree(), vec_conv<openvdb::Vec3R>(p));
     }
 }
 

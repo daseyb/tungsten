@@ -46,6 +46,10 @@ void Camera::fromJson(JsonPtr value, const Scene &scene)
     _tonemapOp = value["tonemap"];
     value.getField("resolution", _res);
 
+    _rect = Box2u({ 0,0 }, _res);
+    value.getField("sub_rect_min", _rect.min());
+    value.getField("sub_rect_max", _rect.max());
+
     if (auto medium = value["medium"])
         _medium = scene.fetchMedium(medium);
 

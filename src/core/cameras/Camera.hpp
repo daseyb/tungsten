@@ -42,6 +42,7 @@ protected:
     Vec3f _up;
 
     Vec2u _res;
+    Box2u _rect;
     float _ratio;
     Vec2f _pixelSize;
 
@@ -214,6 +215,11 @@ public:
     const Vec2u &resolution() const
     {
         return _res;
+    }
+
+    const Box2u& rect() const
+    {
+        return _rect;
     }
 
     void setResolution(Vec2u res)

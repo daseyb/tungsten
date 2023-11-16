@@ -73,7 +73,7 @@ int gen3d(int argc, char** argv) {
 
     openvdb::FloatGrid::Accessor meanAccessor = meanGrid->getAccessor();
 
-    int numEstSamples = 10000;
+    int numEstSamples = 1;
     {
         for (int i = 0; i < NUM_SAMPLE_POINTS; i++) {
             std::cout << i << "\r";
@@ -87,10 +87,10 @@ int gen3d(int argc, char** argv) {
 
                     Eigen::VectorXd samples(numEstSamples);
                     for (int s = 0; s < numEstSamples; s++) {
-                        Vec3d offset = (Vec3d(sampler.next1D(), sampler.next1D(), sampler.next1D()) - 0.5) * 0.05;
+                        Vec3d offset = (Vec3d(sampler.next1D(), sampler.next1D(), sampler.next1D()) - 0.5) * 0.;
                         Vec3d p = lerp(min, max, (Vec3d((float)i, (float)j, (float)k) + offset) / (NUM_SAMPLE_POINTS));
                         auto [samp, gpidx] = gp->sample(&p, &derivs[idx], 1, nullptr, nullptr, 0, Vec3d(), 1, sampler)->flatten();
-                        samples[s] = samp[0];
+                        samples[s] = samp(0, 0);
                     }
 
                     mean[idx] = samples.mean();

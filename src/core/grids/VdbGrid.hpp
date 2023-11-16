@@ -8,6 +8,7 @@
 #include "io/FileUtils.hpp"
 
 #include <openvdb/openvdb.h>
+#include <openvdb/tools/MultiResGrid.h>
 
 namespace Tungsten {
 
@@ -50,7 +51,9 @@ class VdbGrid : public Grid
 
     IntegrationMethod _integrationMethod;
     SampleMethod _sampleMethod;
-    openvdb::FloatGrid::Ptr _densityGrid;
+    openvdb::FloatGrid::Ptr _densityGrid, _detailGrid;
+    openvdb::tools::MultiResGrid<openvdb::FloatTree>::Ptr _mResSDF;
+
     openvdb::Vec3fGrid::Ptr _emissionGrid;
     openvdb::Vec3fGrid::Ptr _gradientGrid;
     Vec2fGrid::Ptr _superGrid;
