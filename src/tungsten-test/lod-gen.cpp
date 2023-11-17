@@ -382,7 +382,7 @@ std::vector<double> compute_acf_direct(const double* signal, size_t n, double me
     return acf;
 }
 
-std::vector<double> compute_acf_fftw(const double* signal, size_t n, double dt, double mean) {
+std::vector<double> compute_acf_fftw_1D(const double* signal, size_t n, double mean) {
     // Allocate memory for the FFTW input and output arrays
     double* in = (double*)fftw_malloc(sizeof(double) * n);
     fftw_complex* out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * (n / 2 + 1));
@@ -429,23 +429,102 @@ std::vector<double> compute_acf_fftw(const double* signal, size_t n, double dt, 
     return result;
 }
 
+void fftshift(double* array, int width, int height) {
+    int half_width = width / 2;
+    int half_height = height / 2;
+    int stride = half_width;
+
+    double temp;
+
+    // Shift the top-left quadrant to the center
+    for (int y = 0; y < half_height; ++y) {
+        for (int x = 0; x < half_width; ++x) {
+            int from_index = y * width + x;
+            int to_index = (y + half_height) * width + (x + half_width);
+            temp = array[from_index];
+            array[from_index] = array[to_index];
+            array[to_index] = temp;
+        }
+    }
+
+    // Shift the bottom-left quadrant to the center
+    for (int y = half_height; y < height; ++y) {
+        for (int x = 0; x < half_width; ++x) {
+            int from_index = y * width + x;
+            int to_index = (y - half_height) * width + (x + half_width);
+            temp = array[from_index];
+            array[from_index] = array[to_index];
+            array[to_index] = temp;
+        }
+    }
+}
+
+
+std::vector<double> compute_acf_fftw_2D(const double* signal, size_t n1, size_t n2, double mean) {
+    // Allocate memory for the FFTW input and output arrays
+    double* in = (double*)fftw_malloc(sizeof(double) * n1 * n2);
+    fftw_complex* out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * n1 * (n2 / 2 + 1));
+
+    // Create a plan for the forward FFT
+    fftw_plan forward_plan = fftw_plan_dft_r2c_2d(n1, n2, in, out, FFTW_ESTIMATE);
+    // Create a plan for the backward FFT
+    fftw_plan backward_plan = fftw_plan_dft_c2r_2d(n1, n2, out, in, FFTW_ESTIMATE);
+
+    // Initialize the input array with the signal
+    for (int i = 0; i < n1 * n2; ++i) {
+        in[i] = signal[i] - mean;
+    }
+
+    // Execute the forward FFT
+    fftw_execute(forward_plan);
+
+    // Compute the power spectrum by squaring the magnitude of the FFT
+    for (int i = 0; i < n1 * (n2 / 2 + 1); ++i) {
+        double magnitude = out[i][0] * out[i][0] + out[i][1] * out[i][1];
+        out[i][0] = magnitude / (n1 * n2);
+        out[i][1] = 0.0;
+    }
+
+
+
+    // Execute the backward FFT
+    fftw_execute(backward_plan);
+
+    // Normalize the result by the size of the signal
+    for (int i = 0; i < n1 * n2; ++i) {
+        in[i] /= n1 * n2;
+    }
+
+    // Clean up
+    fftw_destroy_plan(forward_plan);
+    fftw_destroy_plan(backward_plan);
+    
+    fftshift(in, n1, n2);
+    auto result = std::vector(in, in + n1 * n2);
+
+    fftw_free(in);
+    fftw_free(out);
+
+    return result;
+}
+
 struct CovResidual {
-    CovResidual(double x, double y, const CovarianceFunction* cov) : x_(x), y_(y), cov_(cov) {}
+    CovResidual(Vec3d x, double y, const CovarianceFunction* cov) : x_(x), y_(y), cov_(cov) {}
 
     bool operator()(const double* const sigma, const double* const ls, double* residual) const {
         residual[0] = y_ - sigma[0] * sigma[0] *(*cov_)(
             Derivative::None, Derivative::None, 
-            Vec3d(0.), Vec3d(x_, 0., 0.) / ls[0],
+            Vec3d(0.), x_ / ls[0],
             Vec3d(), Vec3d());
         return true;
     }
 private:
     const CovarianceFunction* cov_;
-    const double x_;
+    const Vec3d x_;
     const double y_;
 };
 
-std::tuple<double, double> fit_cov(const double* t, const double* acf, int n, const CovarianceFunction* cov) {
+std::tuple<double, double> fit_cov(const Vec3d* ps, const double* acf, int n, const CovarianceFunction* cov) {
     const double initial_sigma = 1.0;
     const double initial_ls = 1.0;
     double sigma = initial_sigma;
@@ -454,7 +533,7 @@ std::tuple<double, double> fit_cov(const double* t, const double* acf, int n, co
     for (int i = 0; i < n; ++i) {
         problem.AddResidualBlock(
             new ceres::NumericDiffCostFunction<CovResidual, ceres::CENTRAL, 1, 1, 1>(
-                new CovResidual(t[i], acf[i], cov)),
+                new CovResidual(ps[i], acf[i], cov)),
             nullptr,
             &sigma,
             &ls);
@@ -483,22 +562,21 @@ int estimate_acf(int argc, char** argv) {
     openvdb::initialize();
 #endif
 
+    auto cov = std::make_shared<SquaredExponentialCovariance>(0.5, 2.f);
 
-    auto cov = std::make_shared<SquaredExponentialCovariance>(1.0, 1.0f);
-
-    Path basePath = Path("testing/est-acf/1D");
+    Path basePath = Path("testing/est-acf/2D");
     if (!basePath.exists()) {
         FileUtils::createDirectory(basePath);
     }
 
-    int dim = 2048;
+    int dim = 512;
     double scale = 200;
 
     auto gp = std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), cov);
 
-#if 0
     std::vector<Vec3d> points(dim * dim);
     std::vector<Derivative> derivs(dim * dim, Derivative::None);
+    std::vector<double> acf_gt(dim * dim);
 
     {
         int idx = 0;
@@ -506,56 +584,33 @@ int estimate_acf(int argc, char** argv) {
             for (int j = 0; j < dim; j++) {
                 points[idx] = scale * (Vec3d((float)i, (float)j, 0.f) / (dim - 1) - 0.5f);
                 points[idx][2] = 0.f;
+                acf_gt[idx] = (*cov)(Derivative::None, Derivative::None, Vec3d(0.), points[idx], Vec3d(), Vec3d());
                 idx++;
             }
         }
     }
-#else
-    std::vector<Vec3d> points(dim);
-    std::vector<Derivative> derivs(dim, Derivative::None);
-    std::vector<double> acf_gt(dim);
-    std::vector<double> acf_t(dim);
-
-    {
-        int idx = 0;
-        for (int i = 0; i < dim; i++) {
-            points[idx] = scale * (Vec3d((float)i, 0.f, 0.f) / (dim - 1) - 0.5f);
-            acf_gt[idx] = (*cov)(Derivative::None, Derivative::None, points[0], points[idx], Vec3d(), Vec3d());
-            acf_t[idx] = (points[0] - points[idx]).length();
-            idx++;
-        }
-    }
-#endif
-
-
+   
     UniformPathSampler sampler(0);
     sampler.next2D();
     auto basis = WeightSpaceBasis::sample(gp->_cov, 3000, sampler);
     const WeightSpaceRealization ws = basis.sampleRealization(gp, sampler);
     auto sample = ws.evaluate(points.data(), points.size());
+    
+    //auto [sample, id] = gp->sample(points.data(), derivs.data(), points.size(), nullptr, nullptr, 0, Vec3d(), 1, sampler)->flatten(); 
 
     double mean = sample.mean();
-
     {
         std::ofstream xfile(basePath.asString() + tinyformat::format("/ws-real-%d.bin", basis.size()), std::ios::out | std::ios::binary);
         xfile.write((char*)sample.data(), sizeof(sample[0]) * sample.size());
         xfile.close();
     }
 
-    {
-        auto acf = compute_acf_direct(sample.data(), sample.size(), mean);
-        std::ofstream xfile(basePath.asString() + "/acf-direct.bin", std::ios::out | std::ios::binary);
-        xfile.write((char*)acf.data(), sizeof(acf[0]) * acf.size());
-        xfile.close();
-    }
-
-    auto acf_fftw = compute_acf_fftw(sample.data(), sample.size(), acf_t[1], mean);
+    auto acf_fftw = compute_acf_fftw_2D(sample.data(), dim, dim, mean);
     {
         std::ofstream xfile(basePath.asString() + "/acf-fftw.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)acf_fftw.data(), sizeof(acf_fftw[0]) * acf_fftw.size());
         xfile.close();
     }
-
 
     {
         std::ofstream xfile(basePath.asString() + "/acf-gt.bin", std::ios::out | std::ios::binary);
@@ -563,21 +618,14 @@ int estimate_acf(int argc, char** argv) {
         xfile.close();
     }
 
-    {
-        std::ofstream xfile(basePath.asString() + "/acf-t.bin", std::ios::out | std::ios::binary);
-        xfile.write((char*)acf_t.data(), sizeof(acf_t[0]) * acf_t.size());
-        xfile.close();
-    }
-
-
 
     {
         auto standard_cov = std::make_shared<SquaredExponentialCovariance>();
-        auto [sigma, ls] = fit_cov(acf_t.data(), acf_fftw.data(), acf_fftw.size(), standard_cov.get());
+        auto [sigma, ls] = fit_cov(points.data(), acf_fftw.data(), acf_fftw.size(), standard_cov.get());
 
         std::vector<double> acf_fit(points.size());
         for (int i = 0; i < points.size(); i++) {
-            acf_fit[i] = sqr(sigma) * (*standard_cov)(Derivative::None, Derivative::None, points[0], points[i] / ls , Vec3d(), Vec3d());
+            acf_fit[i] = sqr(sigma) * (*standard_cov)(Derivative::None, Derivative::None, Vec3d(0.), points[i] / ls , Vec3d(), Vec3d());
         }
 
         std::ofstream xfile(basePath.asString() + "/acf-fit.bin", std::ios::out | std::ios::binary);
@@ -585,27 +633,6 @@ int estimate_acf(int argc, char** argv) {
         xfile.close();
     }
     
-
-#if 0
-    auto n = sample.size();
-
-    std::vector<std::complex<double>> spectrumValues(sample.size());
-    fftw_plan plan = fftw_plan_dft_r2c_1d(sample.size(), sample.data(), (fftw_complex*)spectrumValues.data(), FFTW_ESTIMATE);
-
-    fftw_execute(plan);
-    fftw_destroy_plan(plan);
-
-    std::vector<std::complex<double>> raw_periodogram;
-    std::transform(spectrumValues.begin(), spectrumValues.end(), std::back_inserter(raw_periodogram), [n](auto spec) { return sqr(std::abs(spec)) / n; });
-
-    std::vector<double> auto_cov(sample.size());
-    plan = fftw_plan_dft_c2r_1d(raw_periodogram.size(), (fftw_complex*)raw_periodogram.data(), (double*)auto_cov.data(), FFTW_ESTIMATE);
-    fftw_execute(plan);
-    fftw_destroy_plan(plan);
-#endif
-
-
-
     /*std::cout << scenePath.parent().asString() << "\n";
 
     auto bounds = mean.bounds();
