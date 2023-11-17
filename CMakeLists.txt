@@ -178,6 +178,14 @@ if(FFTW3_FOUND)
 	add_definitions(-DFFTW_AVAILABLE)
 endif()
 
+find_package(Ceres CONFIG)
+
+if(Ceres_FOUND)
+    message(STATUS "Ceres detected. Building with covariance fitting support.")
+	include_directories(${Ceres_INCLUDE_DIRS})
+	set(core_libs ${core_libs} Ceres::ceres)
+	add_definitions(-DCERES_AVAILABLE)
+endif()
 
 file(GLOB_RECURSE Core_SOURCES "src/core/*.cpp")
 add_library(core STATIC ${Core_SOURCES})

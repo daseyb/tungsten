@@ -205,7 +205,7 @@ void GaussianProcess::loadResources() {
             _globalCondPs.push_back(vec_conv<Vec3d>(v.pos()));
             _globalCondDerivs.push_back(Derivative::First);
             _globalCondDerivDirs.push_back(vec_conv<Vec3d>(v.normal()));
-            _globalCondValues.push_back(10);
+            _globalCondValues.push_back(1);
         }
 
         setConditioning(_globalCondPs, _globalCondDerivs, _globalCondDerivDirs, _globalCondValues);
