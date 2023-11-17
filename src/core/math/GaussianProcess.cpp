@@ -205,7 +205,7 @@ void GaussianProcess::loadResources() {
             _globalCondPs.push_back(vec_conv<Vec3d>(v.pos()));
             _globalCondDerivs.push_back(Derivative::First);
             _globalCondDerivDirs.push_back(vec_conv<Vec3d>(v.normal()));
-            _globalCondValues.push_back(1);
+            _globalCondValues.push_back(10);
         }
 
         setConditioning(_globalCondPs, _globalCondDerivs, _globalCondDerivDirs, _globalCondValues);
@@ -225,6 +225,8 @@ void GaussianProcess::setConditioning(
         globalCondDerivs.data(), globalCondDerivs.data(),
         globalCondDerivDirs.data(), globalCondDerivDirs.data(),
         Vec3d(0.), globalCondPs.size(), globalCondPs.size());
+
+    //s11.diagonal().array() += 0.001;
 
     //s11 = project_to_psd(s11);
 
@@ -599,9 +601,9 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         cond_ddirs, ddirs,
         deriv_dir, numCondPts, numPts);
 
-    CovMatrix solved = (pseudo_inverse(s11) * s12).transpose();
-
-    /*
+    //CovMatrix solved = (pseudo_inverse(s11) * s12).transpose();
+    
+    CovMatrix solved;
     bool succesfullSolve = false;
     if (true || s11.rows() <= 64) {
 #ifdef SPARSE_COV
@@ -638,7 +640,7 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         if (solver.info() != Eigen::ComputationInfo::Success) {
             std::cerr << "Conditioning solving failed (BDCSVD)!\n";
         }
-    }*/
+    }
 
     Eigen::Map<const Eigen::VectorXd> cond_values_view(cond_values, numCondPts);
     Eigen::VectorXd m2 = mean(points, derivative_types, ddirs, deriv_dir, numPts) + (solved * (cond_values_view - mean(cond_points, cond_derivative_types, cond_ddirs, deriv_dir, numCondPts)));
