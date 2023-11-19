@@ -55,7 +55,7 @@ struct WeightSpaceBasis {
 
     WeightSpaceRealization sampleRealization(std::shared_ptr<GaussianProcess> gp, PathSampleGenerator& sampler) const;
 
-    static WeightSpaceBasis sample(std::shared_ptr<CovarianceFunction> cov, int n, PathSampleGenerator& sampler, bool sort = false);
+    static WeightSpaceBasis sample(std::shared_ptr<CovarianceFunction> cov, int n, PathSampleGenerator& sampler, Vec3d spectralLoc = Vec3d(0.), bool sort = false);
 
     WeightSpaceBasis truncate(size_t n) const;
 

@@ -24,7 +24,7 @@ WeightSpaceRealization WeightSpaceRealization::truncate(size_t n) const {
 
 double WeightSpaceRealization::evaluate(const Vec3d& p) const {
     Derivative d = Derivative::None;
-    double c = (*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d());
+    double c = (*gp->_cov)(Derivative::None, Derivative::None, p, p, Vec3d(), Vec3d());
     double scale = sqrt(c);
     return scale * basis->evaluate(vec_conv<Eigen::Vector3d>(p), weights) + gp->mean_prior(&p, &d, nullptr, Vec3d(0.), 1)(0);
 }
@@ -33,7 +33,7 @@ Affine<1> WeightSpaceRealization::evaluate(const Affine<3>& p) const {
     Derivative d = Derivative::None;
     
     // Assume constant variance
-    double scale = sqrt((*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d()));
+    double scale = sqrt((*gp->_cov)(Derivative::None, Derivative::None, vec_conv<Vec3d>(p.base), vec_conv<Vec3d>(p.base), Vec3d(), Vec3d()));
     auto basisRes = basis->evaluate(p, weights) * scale; 
     auto np = p;
     np.aff.resize(Eigen::NoChange, std::max(basisRes.aff.cols(), p.aff.cols()));
@@ -46,7 +46,7 @@ Affine<1> WeightSpaceRealization::evaluate(const Affine<3>& p) const {
 
 Vec3d WeightSpaceRealization::evaluateGradient(const Vec3d& p) const {
     Derivative d = Derivative::None;
-    double scale = sqrt((*gp->_cov)(Derivative::None, Derivative::None, Vec3d(), Vec3d(), Vec3d(), Vec3d()));
+    double scale = sqrt((*gp->_cov)(Derivative::None, Derivative::None, p, p, Vec3d(), Vec3d()));
     return scale * basis->evaluateGradient(vec_conv<Eigen::Vector3d>(p), weights) + gp->_mean->dmean_da(p);
 }
 
@@ -132,30 +132,35 @@ double WeightSpaceBasis::lipschitz(const Eigen::VectorXd& weights) const {
 }
 
 
-WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> cov, int n, PathSampleGenerator& sampler, bool sort) {
+WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> cov, int n, PathSampleGenerator& sampler, Vec3d spectralLoc, bool sort) {
     WeightSpaceBasis b(n);
     TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame({0., 0., 1.});
+
+    auto aniso = vec_conv<Vec3d>(cov->_aniso);
+    aniso.x() = sqrt(aniso.x());
+    aniso.y() = sqrt(aniso.y());
+    aniso.z() = sqrt(aniso.z());
 
     for (int i = 0; i < n; i++) {
         b.offsets(i) = sampler.next1D() * TWO_PI;
         
 #if 0
-        b.freqs(i) = cov->sample_spectral_density(sampler);
+        b.freqs(i) = cov->sample_spectral_density(sampler, spectralLoc);
         auto dir = SampleWarp::uniformCylinder(sampler.next2D());
         dir.z() = 0;
         b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir);
 #elif 1
-        auto dir2d = cov->sample_spectral_density_2d(sampler);
-        auto dir = Vec3d(dir2d.x(), dir2d.y(), 0.);
+        auto dir2d = cov->sample_spectral_density_2d(sampler, spectralLoc) ;
+        auto dir = Vec3d(dir2d.x(), dir2d.y(), 0.) ;
 
-        b.dirs.row(i) = frame.toGlobal(vec_conv<Eigen::Vector3d>(dir.normalized()));
+        b.dirs.row(i) = frame.toGlobal(vec_conv<Eigen::Vector3d>(dir.normalized() * aniso));
         b.freqs(i) = dir.length();
 
         if (!std::isfinite(b.freqs(i))) {
             std::cerr << "Sampling error!\n";
         }
 #elif 0
-        auto dir = cov->sample_spectral_density_3d(sampler) * vec_conv<Vec3d>(cov->_aniso);
+        auto dir = cov->sample_spectral_density_3d(sampler, spectralLoc) * vec_conv<Vec3d>(cov->_aniso);
 
         b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir.normalized());
         b.freqs(i) = dir.length();

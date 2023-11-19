@@ -91,9 +91,9 @@ namespace Tungsten {
         virtual bool hasAnalyticSpectralDensity() const { return false; }
         virtual bool requireProjection() const { return false; }
         virtual double spectral_density(double s) const;
-        virtual double sample_spectral_density(PathSampleGenerator& sampler) const;
-        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler) const;
-        virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler) const;
+        virtual double sample_spectral_density(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const;
+        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const;
+        virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const;
 
         virtual void loadResources() override;
 
@@ -185,9 +185,41 @@ namespace Tungsten {
         virtual double operator()(Vec3d p) const = 0;
     };
 
+    class ConstantScalar : public ProceduralScalar {
+        double _v;
+    public:
+        ConstantScalar(double v = 0) : _v(v) { }
+        virtual double operator()(Vec3d p) const override {
+            return _v;
+        }
+    };
+
+    class LinearRampScalar : public ProceduralScalar {
+        Vec2d _minMax;
+        Vec3d _dir;
+        Vec2d _range;
+    public:
+        LinearRampScalar(Vec2d minMax, Vec3d dir, Vec2d range) : _minMax(minMax), _dir(dir), _range(range) { }
+
+        virtual double operator()(Vec3d p) const override {
+            double i = p.dot(_dir);
+            i = clamp((i - _range.x()) / (_range.y() - _range.x()), 0., 1.);
+            return lerp(_minMax.x(), _minMax.y(), i);
+        }
+    };
+
     class ProceduralVector : public JsonSerializable {
     public:
         virtual Vec3d operator()(Vec3d p) const = 0;
+    };
+
+    class ConstantVector : public ProceduralVector {
+        Vec3d _v;
+    public:
+        ConstantVector(Vec3d v = Vec3d(0.)) : _v(v) { }
+        virtual Vec3d operator()(Vec3d p) const override {
+            return _v;
+        }
     };
 
     class ProceduralScalarCode : public ProceduralScalar {
@@ -305,6 +337,34 @@ namespace Tungsten {
             std::shared_ptr<ProceduralScalar>  ls = nullptr,
             std::shared_ptr<ProceduralVector>  aniso = nullptr) : _stationaryCov(stationaryCov), _variance(variance), _ls(ls), _aniso(aniso) { }
 
+        virtual double sample_spectral_density(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
+            if (!_ls) {
+                return _stationaryCov->sample_spectral_density(sampler, p);
+            }
+            else if (!_aniso) {
+                return _stationaryCov->sample_spectral_density(sampler, p) / (*_ls)(p);
+            }
+        }
+
+        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
+            if (!_ls) {
+                return _stationaryCov->sample_spectral_density_2d(sampler, p);
+            }
+            else if (!_aniso) {
+                return _stationaryCov->sample_spectral_density_2d(sampler, p) / (*_ls)(p);
+            }
+        }
+
+        virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
+            if (!_ls) {
+                return _stationaryCov->sample_spectral_density_3d(sampler, p);
+            }
+            else if (!_aniso) {
+                return _stationaryCov->sample_spectral_density_3d(sampler, p) / (*_ls)(p);
+            }
+        }
+
+
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             CovarianceFunction::fromJson(value, scene);
 
@@ -363,7 +423,7 @@ namespace Tungsten {
             auto sigmaB = (*_variance)(from_diff(b));
 
             if (!_ls) {
-                return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+                return sigmaA * sigmaB * _stationaryCov->cov(a, b);
             }
 
             if (!_aniso) {
@@ -371,8 +431,8 @@ namespace Tungsten {
                 auto lsB = (*_ls)(from_diff(b));
                 double ansioFac = sqrt((2 * lsA * lsB) / (lsA * lsA + lsB * lsB));
                 auto d = (b - a);
-                FloatD dsq = d.squaredNorm() / (lsA * lsA + lsB * lsB);
-                return sqrt(sigmaA) * sqrt(sigmaB) * ansioFac * _stationaryCov->cov(dsq);
+                FloatD dsq = d.squaredNorm() / (0.5 * (lsA * lsA + lsB * lsB));
+                return sigmaA * sigmaB * ansioFac * _stationaryCov->cov(dsq);
             }
         }
 
@@ -381,7 +441,7 @@ namespace Tungsten {
             auto sigmaB = (*_variance)(from_diff(b));
 
             if (!_ls) {
-                return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+                return sigmaA * sigmaB * _stationaryCov->cov(a, b);
             }
 
             if (!_aniso) {
@@ -389,8 +449,8 @@ namespace Tungsten {
                 auto lsB = (*_ls)(from_diff(b));
                 double ansioFac = sqrt((2 * lsA * lsB) / (lsA * lsA + lsB * lsB));
                 auto d = (b - a);
-                FloatDD dsq = d.squaredNorm() / (lsA * lsA + lsB * lsB);
-                return sqrt(sigmaA)* sqrt(sigmaB)* ansioFac* _stationaryCov->cov(dsq);
+                FloatDD dsq = d.squaredNorm() / (0.5 * (lsA * lsA + lsB * lsB));
+                return sigmaA* sigmaB* ansioFac* _stationaryCov->cov(dsq);
             }
         }
 
@@ -399,7 +459,7 @@ namespace Tungsten {
             auto sigmaB = (*_variance)((b));
 
             if (!_ls) {
-                return sqrt(sigmaA) * sqrt(sigmaB) * _stationaryCov->cov(a, b);
+                return sigmaA * sigmaB * _stationaryCov->cov(a, b);
             }
 
             if (!_aniso) {
@@ -407,8 +467,8 @@ namespace Tungsten {
                 auto lsB = (*_ls)((b));
                 double ansioFac = sqrt((2 * lsA * lsB) / (lsA * lsA + lsB * lsB));
                 auto d = vec_conv<Eigen::Vector3d>(b - a);
-                double dsq = d.squaredNorm() / (lsA * lsA + lsB * lsB);
-                return sqrt(sigmaA) * sqrt(sigmaB) * ansioFac * _stationaryCov->cov(dsq);
+                double dsq = d.squaredNorm() / (0.5 * (lsA * lsA + lsB * lsB));
+                return sigmaA * sigmaB * ansioFac * _stationaryCov->cov(dsq);
             }
         }
 
@@ -518,17 +578,17 @@ namespace Tungsten {
             return norm * (exp(-0.5 * _l * _l * s * s) * _sigma * _sigma) / sqrt(1. / (_l * _l));
         }
 
-        virtual double sample_spectral_density(PathSampleGenerator& sampler) const override {
+        virtual double sample_spectral_density(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             return abs(rand_normal_2(sampler).x() / _l);
         }
 
-        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler) const override {
+        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             double rad = (sqrt(2) * sqrt(-log(sampler.next1D()))) / _l;
             double angle = sampler.next1D() * 2 * PI;
             return Vec2d(sin(angle), cos(angle)) * rad;
         }
 
-        virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler) const override {
+        virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             Vec3d normal = vec_conv<Vec3d>(sample_standard_normal(3, sampler));
             double rad = sqrt(2) * 1 / _l * normal.length();
             return vec_conv<Vec3d>(SampleWarp::uniformSphere(sampler.next2D())) * rad;
@@ -587,19 +647,19 @@ namespace Tungsten {
                 std::cyl_bessel_k(0.5 - _a, (sqrt(2) * abs(s)) / sqrt(1. / (_a * _l * _l)))) / std::tgamma(_a);
         }
 
-        virtual double sample_spectral_density(PathSampleGenerator& sampler) const override {
+        virtual double sample_spectral_density(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             double tau = rand_gamma(_a, 1 / (_l * _l), sampler);
             double l = 1 / sqrt(tau);
             return abs(rand_normal_2(sampler).x() / l);
         }
 
-        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler) const override {
+        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             double rad = 2 * sqrt(rand_gamma(_a, 0.5 / (_l * _l), sampler)) * sqrt(-log(sampler.next1D()));
             double angle = sampler.next1D() * 2 * PI;
             return Vec2d(sin(angle), cos(angle)) * rad;
         }
 
-        virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler) const override {
+        virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             double tau = 2 * sqrt(rand_gamma(_a, 0.5 / (_l * _l), sampler));
             Vec3d normal = vec_conv<Vec3d>(sample_standard_normal(3, sampler));
             double rad = sqrt(2) * 1/tau * normal.length();
@@ -658,11 +718,11 @@ namespace Tungsten {
                 pow(2 * _v, _v) / (std::lgamma(_v) * pow(_l, 2 * _v)) * pow(2 * _v / sqr(_l) + 4 * sqr(PI) * sqr(s), -(_v + D / 2.));
         }
 
-        virtual double sample_spectral_density(PathSampleGenerator& sampler) const override {
+        virtual double sample_spectral_density(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             return sqrt(-_v + _v * pow(1 - sampler.next1D(), -1. / _v)) / (sqrt(2) * _l * PI) * sin(PI * sampler.next1D());
         }
 
-        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler) const override {
+        virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             double r = sqrt(-_v + _v * pow(1 - sampler.next1D(), -1. / _v)) / (sqrt(2) * _l * PI);
             double angle = sampler.next1D() * 2 * PI;
             return Vec2d(sin(angle), cos(angle)) * r;

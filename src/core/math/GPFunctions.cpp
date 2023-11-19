@@ -76,15 +76,15 @@ namespace Tungsten {
     }
 
 
-    double CovarianceFunction::sample_spectral_density(PathSampleGenerator& sampler) const {
+    double CovarianceFunction::sample_spectral_density(PathSampleGenerator& sampler, Vec3d p) const {
         return 0;
     }
 
-    Vec2d CovarianceFunction::sample_spectral_density_2d(PathSampleGenerator& sampler) const {
+    Vec2d CovarianceFunction::sample_spectral_density_2d(PathSampleGenerator& sampler, Vec3d p) const {
         return Vec2d(0.);
     }
 
-    Vec3d CovarianceFunction::sample_spectral_density_3d(PathSampleGenerator& sampler) const {
+    Vec3d CovarianceFunction::sample_spectral_density_3d(PathSampleGenerator& sampler, Vec3d p) const {
         return Vec3d(0.);
     }
 

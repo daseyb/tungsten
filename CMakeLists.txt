@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED On)
 set(CMAKE_CXX_EXTENSIONS Off)
 
+# Disable annoying boost warning
+set(Boost_NO_WARN_NEW_VERSIONS 1)
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 # AVX does not do much benefit at the moment, but breaks compilation on some platforms.
