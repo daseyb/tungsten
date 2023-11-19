@@ -576,7 +576,7 @@ std::tuple<double, Vec3d> fit_cov(const Vec3d* ps, const double* acf, Vec3d wc, 
     return { sigma, ls };
 }
 
-Eigen::VectorXd gen_weight_space_nonstationary(
+std::tuple<Eigen::VectorXd, std::vector<Vec3d>> gen_weight_space_nonstationary(
     std::shared_ptr<GaussianProcess> gp,
     Box3d range,
     size_t res,
@@ -606,7 +606,7 @@ Eigen::VectorXd gen_weight_space_nonstationary(
                 cellCenter[2] = 0;
 
                 {
-                    auto basis = WeightSpaceBasis::sample(gp->_cov, 3000, sampler, cellCenter);
+                    auto basis = WeightSpaceBasis::sample(gp->_cov, 300, sampler, cellCenter);
                     realizations[idx] = basis.sampleRealization(gp, sampler);
                 }
 
@@ -655,7 +655,56 @@ Eigen::VectorXd gen_weight_space_nonstationary(
         }
     }
 
-    return result;
+    return { result, points };
+}
+
+std::tuple<std::vector<double>, std::vector<double>, std::vector<double>> compute_acf_nonstationary(
+    std::shared_ptr<GaussianProcess> gp,
+    const Eigen::VectorXd& signal,
+    const std::vector<Vec3d>& points,
+    Box3d range,
+    size_t res,
+    size_t subres) {
+
+    double mean = signal.mean();
+
+    auto base_cov = std::make_shared<SquaredExponentialCovariance>();
+
+    std::vector<double> acf_fit(res * res);
+    std::vector<double> acf_gt(res * res);
+    std::vector<double> acf_fftw(res* res);
+
+    {
+        for (int i = 0; i < subres; i++) {
+            for (int j = 0; j < subres; j++) {
+                Vec3d cellCenter = lerp(range.min(), range.max(), (Vec3d((double)i + 0.5, (double)j + 0.5, 0.) / subres));
+                cellCenter[2] = 0;
+
+
+                int ww = (res / subres);
+                int wh = (res / subres);
+                int wx = i * ww;
+                int wy = j * wh;
+
+
+                auto acf = compute_acf_fftw_2D(signal.data(), wx, wy, ww, wh, res, res, mean);
+
+                auto [sigma, ls] = fit_cov(points.data(), acf.data(), cellCenter, wx, wy, ww, wh, res, res, base_cov.get());
+
+                int idx = 0;
+                for (int x = wx; x < wx + ww; x++) {
+                    for (int y = wy; y < wy + wh; y++) {
+                        acf_fit[x * res + y] = sqr(sigma) * (*base_cov)(Derivative::None, Derivative::None, Vec3d(), (points[x * res + y] - cellCenter) / ls, Vec3d(), Vec3d());
+                        acf_gt[x * res + y] = (*gp->_cov)(Derivative::None, Derivative::None, cellCenter, points[x * res + y], Vec3d(), Vec3d());
+                        acf_fftw[x * res + y] = acf[idx];
+                        idx++;
+                    }
+                }
+            }
+        }
+    }
+
+    return { acf_fit, acf_gt, acf_fftw };
 }
 
 
@@ -676,7 +725,6 @@ int estimate_acf(int argc, char** argv) {
         std::make_shared<LinearRampScalar>(Vec2d(0.5, 2.0), Vec3d(1., 0., 0.), Vec2d(-50, 50))
     );
 
-    //auto cov = std::make_shared<SquaredExponentialCovariance>(0.5, 1.f);
 
     Path basePath = Path("testing/est-acf/2D");
     if (!basePath.exists()) {
@@ -691,42 +739,20 @@ int estimate_acf(int argc, char** argv) {
     );
 
     auto gp = std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), cov);
-
-    std::vector<Vec3d> points(dim * dim);
-    std::vector<Derivative> derivs(dim * dim, Derivative::None);
-    std::vector<double> acf_gt(dim * dim);
-
-    {
-        int idx = 0;
-        for (int i = 0; i < dim; i++) {
-            for (int j = 0; j < dim; j++) {
-                points[idx] = lerp(range.min(), range.max(), (Vec3d((double)i, (double)j, 0.) / (dim - 1)));
-                points[idx][2] = 0.f;
-                acf_gt[idx] = (*cov)(Derivative::None, Derivative::None, Vec3d(0.), points[idx], Vec3d(), Vec3d());
-                idx++;
-            }
-        }
-    }
    
-    auto sample = gen_weight_space_nonstationary(gp, range, dim, 8);
-    //auto [sample, id] = gp->sample(points.data(), derivs.data(), points.size(), nullptr, nullptr, 0, Vec3d(), 1, sampler)->flatten(); 
-
+    auto [sample, points] = gen_weight_space_nonstationary(gp, range, dim, 8);
     double mean = sample.mean();
+
     {
         std::ofstream xfile(basePath.asString() + "/ws-real.bin", std::ios::out | std::ios::binary);
         xfile.write((char*)sample.data(), sizeof(sample[0]) * sample.size());
         xfile.close();
     }
 
-    auto acf_fftw = compute_acf_fftw_2D(
-        sample.data(), 
-        0, 0, dim, dim, 
-        dim, dim, 
-        mean);
-
+    auto [acf_fit, acf_gt, acf_fftw] = compute_acf_nonstationary(gp, sample, points, range, dim, 4);
     {
-        std::ofstream xfile(basePath.asString() + "/acf-fftw.bin", std::ios::out | std::ios::binary);
-        xfile.write((char*)acf_fftw.data(), sizeof(acf_fftw[0]) * acf_fftw.size());
+        std::ofstream xfile(basePath.asString() + "/acf-fit.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)acf_fit.data(), sizeof(acf_fit[0]) * acf_fit.size());
         xfile.close();
     }
 
@@ -736,28 +762,12 @@ int estimate_acf(int argc, char** argv) {
         xfile.close();
     }
 
-
     {
-        auto standard_cov = std::make_shared<SquaredExponentialCovariance>();
-        auto [sigma, ls] = fit_cov(points.data(), acf_fftw.data(), Vec3d(0.), 
-            0, 0, dim, dim,
-            dim, dim, 
-            standard_cov.get());
-
-        auto [sigma_gt, ls_gt] = fit_cov(points.data(), acf_gt.data(), Vec3d(0.),
-            0, 0, dim, dim,
-            dim, dim, 
-            standard_cov.get());
-
-        std::vector<double> acf_fit(points.size());
-        for (int i = 0; i < points.size(); i++) {
-            acf_fit[i] = sqr(sigma) * (*standard_cov)(Derivative::None, Derivative::None, Vec3d(0.), points[i] / ls , Vec3d(), Vec3d());
-        }
-
-        std::ofstream xfile(basePath.asString() + "/acf-fit.bin", std::ios::out | std::ios::binary);
-        xfile.write((char*)acf_fit.data(), sizeof(acf_fit[0]) * acf_fit.size());
+        std::ofstream xfile(basePath.asString() + "/acf-fftw.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)acf_fftw.data(), sizeof(acf_fftw[0]) * acf_fftw.size());
         xfile.close();
     }
+
     
     return 0;
     /*std::cout << scenePath.parent().asString() << "\n";
