@@ -55,6 +55,46 @@ namespace Tungsten {
         return d.dot(Vec{ aniso.x(), aniso.y(), aniso.z() }.cwiseProduct(d));
     }
 
+    template <typename Mat, typename Vec>
+    static inline Mat compute_ansio(const Vec& grad, const Vec& aniso) {
+        TangentFrameD<Mat, Vec> tf(grad);
+
+        auto vmat = tf.toMatrix();
+        Mat smat = Mat::Identity();
+        smat.diagonal() = aniso;
+
+        return vmat * smat * vmat.transpose();
+    }
+
+    template<typename Vec>
+    static inline Vec mult(const Eigen::Matrix2d& a, const Vec& b)
+    {
+        return Vec(
+            a(0, 0) * b.x() + a(0, 1) * b.y(),
+            a(1, 0) * b.x() + a(1, 1) * b.y()
+        );
+    }
+
+    template<typename Vec>
+    static inline Vec mult(const Eigen::Matrix3d& a, const Vec& b)
+    {
+        return Vec(
+            a(0, 0) * b.x() + a(0, 1) * b.y() + a(0, 2) * b.z(),
+            a(1, 0) * b.x() + a(1, 1) * b.y() + a(1, 2) * b.z(),
+            a(2, 0) * b.x() + a(2, 1) * b.y() + a(2, 2) * b.z()
+        );
+    }
+
+    template<typename Vec>
+    static inline Vec mult(const Mat4f& a, const Vec& b)
+    {
+        return Vec(
+            a(0, 0) * b.x() + a(0, 1) * b.y() + a(0, 2) * b.z() + a(0, 3),
+            a(1, 0) * b.x() + a(1, 1) * b.y() + a(1, 2) * b.z() + a(1, 3),
+            a(2, 0) * b.x() + a(2, 1) * b.y() + a(2, 2) * b.z() + a(2, 3)
+        );
+    }
+
     class Grid;
     class MeanFunction;
 
@@ -213,6 +253,21 @@ namespace Tungsten {
         virtual Vec3d operator()(Vec3d p) const = 0;
     };
 
+    class LinearRampVector : public ProceduralVector {
+        Vec3d _min;
+        Vec3d _max;
+        Vec3d _dir;
+        Vec2d _range;
+    public:
+        LinearRampVector(Vec3d min, Vec3d max, Vec3d dir, Vec2d range) : _min(min), _max(max), _dir(dir), _range(range) { }
+
+        virtual Vec3d operator()(Vec3d p) const override {
+            double i = p.dot(_dir);
+            i = clamp((i - _range.x()) / (_range.y() - _range.x()), 0., 1.);
+            return lerp(_min, _max, i);
+        }
+    };
+
     class ConstantVector : public ProceduralVector {
         Vec3d _v;
     public:
@@ -332,17 +387,17 @@ namespace Tungsten {
     public:
 
         ProceduralNonstationaryCovariance(
-            std::shared_ptr<StationaryCovariance> stationaryCov = nullptr,
-            std::shared_ptr<ProceduralScalar>  variance = nullptr,
-            std::shared_ptr<ProceduralScalar>  ls = nullptr,
-            std::shared_ptr<ProceduralVector>  aniso = nullptr) : _stationaryCov(stationaryCov), _variance(variance), _ls(ls), _aniso(aniso) { }
+            const std::shared_ptr<StationaryCovariance> stationaryCov = nullptr,
+            const std::shared_ptr<ProceduralScalar>  variance = nullptr,
+            const std::shared_ptr<ProceduralVector>  ls = nullptr,
+            const std::shared_ptr<ProceduralVector>  aniso = nullptr) : _stationaryCov(stationaryCov), _variance(variance), _ls(ls), _anisoField(aniso) { }
 
         virtual double sample_spectral_density(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             if (!_ls) {
                 return _stationaryCov->sample_spectral_density(sampler, p);
             }
-            else if (!_aniso) {
-                return _stationaryCov->sample_spectral_density(sampler, p) / (*_ls)(p);
+            else {
+                return _stationaryCov->sample_spectral_density(sampler, p) / ((*_ls)(p)[0]);
             }
         }
 
@@ -350,8 +405,16 @@ namespace Tungsten {
             if (!_ls) {
                 return _stationaryCov->sample_spectral_density_2d(sampler, p);
             }
-            else if (!_aniso) {
-                return _stationaryCov->sample_spectral_density_2d(sampler, p) / (*_ls)(p);
+            else if (!_anisoField) {
+                auto spec = _stationaryCov->sample_spectral_density_2d(sampler, p);
+                spec = spec.length() * spec.normalized() / ((*_ls)(p)).xy();
+                return spec;
+            }
+            else {
+                Eigen::Matrix3d anisoMat = getAnisoRoot(p).inverse();
+                auto spec = _stationaryCov->sample_spectral_density_2d(sampler, p);
+                spec = spec.length() * mult((Eigen::Matrix2d)anisoMat.block(0,0,2,2), spec.normalized());
+                return spec;
             }
         }
 
@@ -359,11 +422,18 @@ namespace Tungsten {
             if (!_ls) {
                 return _stationaryCov->sample_spectral_density_3d(sampler, p);
             }
-            else if (!_aniso) {
-                return _stationaryCov->sample_spectral_density_3d(sampler, p) / (*_ls)(p);
+            else if (!_anisoField) {
+                auto spec = _stationaryCov->sample_spectral_density_3d(sampler, p);
+                spec = spec.length() * spec.normalized() / ((*_ls)(p));
+                return spec;
+            }
+            else {
+                Eigen::Matrix3d anisoMat = getAnisoRoot(p).inverse();
+                auto spec = _stationaryCov->sample_spectral_density_3d(sampler, p);
+                spec = spec.length() * mult(anisoMat, spec.normalized());
+                return spec;
             }
         }
-
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             CovarianceFunction::fromJson(value, scene);
@@ -377,11 +447,11 @@ namespace Tungsten {
             }
 
             if (auto variance = value["ls"]) {
-                _ls = scene.fetchProceduralScalar(variance);
+                _ls = scene.fetchProceduralVector(variance);
             }
 
             if (auto aniso = value["aniso"]) {
-                _aniso = scene.fetchProceduralVector(aniso);
+                _anisoField = scene.fetchProceduralVector(aniso);
             }
         }
 
@@ -399,8 +469,8 @@ namespace Tungsten {
                 obj.add("ls", *_ls);
             }
 
-            if (_aniso) {
-                obj.add("aniso", *_aniso);
+            if (_anisoField) {
+                obj.add("aniso", *_anisoField);
             }
 
             return obj;
@@ -409,72 +479,129 @@ namespace Tungsten {
         virtual void loadResources() override {
             if (_variance) _variance->loadResources();
             if (_ls) _ls->loadResources();
-            if (_aniso) _aniso->loadResources();
+            if (_anisoField) _anisoField->loadResources();
         }
 
         virtual std::string id() const {
             return tinyformat::format("pns-%s", _stationaryCov->id());
         }
 
+        double getVariance(Vec3d p) const {
+            if (_variance) return (*_variance)(p);
+            return 1;
+        }
+
+        Eigen::Matrix3d getAnisoRoot(Vec3d p) const {
+            if (_anisoField && _ls) {
+                Vec3d dir = (*_anisoField)(p).normalized();
+                Vec3d ls = (*_ls)(p);
+                return compute_ansio<Eigen::Matrix3d>(vec_conv<Eigen::Vector3d>(dir), vec_conv<Eigen::Vector3d>(ls));
+            }
+            else if (_ls) {
+                Vec3d ls = (*_ls)(p);
+                Eigen::Matrix3d anisoA = Eigen::Matrix3d::Identity();
+                anisoA.diagonal().array() *= vec_conv<Eigen::Array3d>(ls);
+                return anisoA;
+            }
+
+            return Eigen::Matrix3d::Identity();
+        }
+
+        Eigen::Matrix3d getAniso(Vec3d p) const {
+            if (_anisoField && _ls) {
+                Vec3d dir = (*_anisoField)(p).normalized();
+                Vec3d ls = (*_ls)(p);
+                return compute_ansio<Eigen::Matrix3d>(vec_conv<Eigen::Vector3d>(dir), vec_conv<Eigen::Vector3d>(ls*ls));
+            }
+            else if(_ls) {
+                Vec3d ls = (*_ls)(p);
+                Eigen::Matrix3d anisoA = Eigen::Matrix3d::Identity();
+                anisoA.diagonal().array() *= vec_conv<Eigen::Array3d>(ls*ls);
+                return anisoA;
+            }
+
+            return Eigen::Matrix3d::Identity();
+        }
+
     private:
 
         virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
-            auto sigmaA = (*_variance)(from_diff(a));
-            auto sigmaB = (*_variance)(from_diff(b));
+            auto sigmaA = getVariance(from_diff(a));
+            auto sigmaB = getVariance(from_diff(b));
 
             if (!_ls) {
                 return sigmaA * sigmaB * _stationaryCov->cov(a, b);
             }
 
-            if (!_aniso) {
-                auto lsA = (*_ls)(from_diff(a));
-                auto lsB = (*_ls)(from_diff(b));
-                double ansioFac = sqrt((2 * lsA * lsB) / (lsA * lsA + lsB * lsB));
-                auto d = (b - a);
-                FloatD dsq = d.squaredNorm() / (0.5 * (lsA * lsA + lsB * lsB));
-                return sigmaA * sigmaB * ansioFac * _stationaryCov->cov(dsq);
-            }
+            auto anisoA = getAniso(from_diff(a));
+            auto anisoB = getAniso(from_diff(b));
+
+            auto detAnisoA = anisoA.determinant();
+            auto detAnisoB = anisoB.determinant();
+
+            auto anisoABavg = 0.5 * (anisoA + anisoB);
+            auto detAnisoABavg = (anisoABavg).determinant();
+
+            auto ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
+
+            auto d = vec_conv<Vec3Diff>(b - a);
+            FloatD dsq = d.transpose() * anisoABavg.inverse() * d;
+            return sigmaA * sigmaB * ansioFac * _stationaryCov->cov(dsq);
         }
 
         virtual FloatDD cov(Vec3DD a, Vec3DD b) const override {
-            auto sigmaA = (*_variance)(from_diff(a));
-            auto sigmaB = (*_variance)(from_diff(b));
+            auto sigmaA = getVariance(from_diff(a));
+            auto sigmaB = getVariance(from_diff(b));
 
             if (!_ls) {
                 return sigmaA * sigmaB * _stationaryCov->cov(a, b);
             }
 
-            if (!_aniso) {
-                auto lsA = (*_ls)(from_diff(a));
-                auto lsB = (*_ls)(from_diff(b));
-                double ansioFac = sqrt((2 * lsA * lsB) / (lsA * lsA + lsB * lsB));
-                auto d = (b - a);
-                FloatDD dsq = d.squaredNorm() / (0.5 * (lsA * lsA + lsB * lsB));
-                return sigmaA* sigmaB* ansioFac* _stationaryCov->cov(dsq);
-            }
+            auto anisoA = getAniso(from_diff(a));
+            auto anisoB = getAniso(from_diff(b));
+
+            auto detAnisoA = anisoA.determinant();
+            auto detAnisoB = anisoB.determinant();
+
+            auto anisoABavg = 0.5 * (anisoA + anisoB);
+            auto detAnisoABavg = (anisoABavg).determinant();
+
+            auto ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
+
+            auto d = vec_conv<Vec3DD>(b - a);
+            FloatDD dsq = d.transpose() * anisoABavg.inverse() * d;
+            return sigmaA * sigmaB * ansioFac * _stationaryCov->cov(dsq);
         }
 
         virtual double cov(Vec3d a, Vec3d b) const override {
-            auto sigmaA = (*_variance)((a));
-            auto sigmaB = (*_variance)((b));
+            auto sigmaA = getVariance(a);
+            auto sigmaB = getVariance(b);
 
             if (!_ls) {
                 return sigmaA * sigmaB * _stationaryCov->cov(a, b);
             }
 
-            if (!_aniso) {
-                auto lsA = (*_ls)((a));
-                auto lsB = (*_ls)((b));
-                double ansioFac = sqrt((2 * lsA * lsB) / (lsA * lsA + lsB * lsB));
-                auto d = vec_conv<Eigen::Vector3d>(b - a);
-                double dsq = d.squaredNorm() / (0.5 * (lsA * lsA + lsB * lsB));
-                return sigmaA * sigmaB * ansioFac * _stationaryCov->cov(dsq);
-            }
+            auto anisoA = getAniso(a);
+            auto anisoB = getAniso(b);
+
+            auto detAnisoA = anisoA.determinant();
+            auto detAnisoB = anisoB.determinant();
+
+            auto anisoABavg = 0.5 * (anisoA + anisoB);
+            auto detAnisoABavg = (anisoABavg).determinant();
+
+            auto ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
+
+            auto d = vec_conv<Eigen::Vector3d>(b - a);
+            auto dsq = d.transpose() * anisoABavg.inverse() * d;
+            return sigmaA * sigmaB * ansioFac * _stationaryCov->cov(dsq);
+
         }
 
         std::shared_ptr<StationaryCovariance> _stationaryCov;
-        std::shared_ptr<ProceduralScalar> _variance, _ls;
-        std::shared_ptr<ProceduralVector> _aniso;
+        std::shared_ptr<ProceduralScalar> _variance;
+        std::shared_ptr<ProceduralVector> _ls;
+        std::shared_ptr<ProceduralVector> _anisoField;
     };
 
     class NonstationaryCovariance : public CovarianceFunction {
@@ -585,7 +712,7 @@ namespace Tungsten {
         virtual Vec2d sample_spectral_density_2d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             double rad = (sqrt(2) * sqrt(-log(sampler.next1D()))) / _l;
             double angle = sampler.next1D() * 2 * PI;
-            return Vec2d(sin(angle), cos(angle)) * rad;
+            return Vec2d(sin(angle), cos(angle)) *  rad;
         }
 
         virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {

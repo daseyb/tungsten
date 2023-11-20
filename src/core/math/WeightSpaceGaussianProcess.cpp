@@ -136,11 +136,6 @@ WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> co
     WeightSpaceBasis b(n);
     TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame({0., 0., 1.});
 
-    auto aniso = vec_conv<Vec3d>(cov->_aniso);
-    aniso.x() = sqrt(aniso.x());
-    aniso.y() = sqrt(aniso.y());
-    aniso.z() = sqrt(aniso.z());
-
     for (int i = 0; i < n; i++) {
         b.offsets(i) = sampler.next1D() * TWO_PI;
         
@@ -153,14 +148,14 @@ WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> co
         auto dir2d = cov->sample_spectral_density_2d(sampler, spectralLoc) ;
         auto dir = Vec3d(dir2d.x(), dir2d.y(), 0.) ;
 
-        b.dirs.row(i) = frame.toGlobal(vec_conv<Eigen::Vector3d>(dir.normalized() * aniso));
+        b.dirs.row(i) = frame.toGlobal(vec_conv<Eigen::Vector3d>(dir.normalized()));
         b.freqs(i) = dir.length();
 
         if (!std::isfinite(b.freqs(i))) {
             std::cerr << "Sampling error!\n";
         }
 #elif 0
-        auto dir = cov->sample_spectral_density_3d(sampler, spectralLoc) * vec_conv<Vec3d>(cov->_aniso);
+        auto dir = cov->sample_spectral_density_3d(sampler, spectralLoc);
 
         b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir.normalized());
         b.freqs(i) = dir.length();

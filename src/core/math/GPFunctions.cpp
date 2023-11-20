@@ -203,15 +203,7 @@ namespace Tungsten {
         return result;
     }
 
-    template<typename Vec>
-    static inline Vec mult(const Mat4f& a, const Vec& b)
-    {
-        return Vec(
-            a(0, 0) * b.x() + a(0, 1) * b.y() + a(0, 2) * b.z() + a(0, 3),
-            a(1, 0) * b.x() + a(1, 1) * b.y() + a(1, 2) * b.z() + a(1, 3),
-            a(2, 0) * b.x() + a(2, 1) * b.y() + a(2, 2) * b.z() + a(2, 3)
-        );
-    }
+   
 
     FloatD NonstationaryCovariance::cov(Vec3Diff a, Vec3Diff b) const {
 
@@ -355,16 +347,6 @@ namespace Tungsten {
     }
 
 
-    template <typename Mat, typename Vec>
-    static inline Mat compute_ansio(const Vec& grad, const Vec& aniso) {
-        TangentFrameD<Mat, Vec> tf(grad);
-
-        auto vmat = tf.toMatrix();
-        Mat smat = Mat::Identity();
-        smat.diagonal() = aniso;
-
-        return vmat * smat * vmat.transpose();
-    }
 
     Eigen::Matrix3d MeanGradNonstationaryCovariance::localAniso(Vec3d p) const {
         return compute_ansio<Eigen::Matrix3d>(
