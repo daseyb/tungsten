@@ -220,6 +220,99 @@ namespace Tungsten {
         std::shared_ptr<MeanFunction> _mean;
     };
 
+
+    template<typename ElemType>
+    static ElemType trilinearInterpolation(const Vec2d& uv, ElemType(&data)[2][2]) {
+        return lerp(
+            lerp(data[0][0], data[1][0], uv.x()),
+            lerp(data[0][1], data[1][1], uv.x()),
+            uv.y()
+        );
+    };
+
+    template<typename ElemType>
+    struct RegularGrid : JsonSerializable {
+
+        RegularGrid(Box3d bounds = Box3d(), size_t res = 0, std::vector<ElemType> values = {}) : bounds(bounds), res(res), values(values) {}
+
+        Box3d bounds;
+        size_t res;
+        std::vector<ElemType> values;
+
+        PathPtr path;
+
+        ElemType getValue(Vec2i coord) const {
+            coord = clamp(coord, Vec2i(0), Vec2i(res - 1));
+            return values[coord.x() * res + coord.y()];
+        };
+
+        void getValues(const Vec2i& coord, ElemType(&data)[2][2]) const {
+            data[0][0] = getValue(coord + Vec2i(0, 0));
+            data[1][0] = getValue(coord + Vec2i(1, 0));
+            data[0][1] = getValue(coord + Vec2i(0, 1));
+            data[1][1] = getValue(coord + Vec2i(1, 1));
+        };
+
+        ElemType getValue(Vec3d p) const {
+            Vec3d p_grid = (double(res) * (p - bounds.min()) / bounds.diagonal()) - 0.5;
+            ElemType data[2][2];
+            getValues(Vec2i((int)floor(p_grid.x()), (int)floor(p_grid.y())), data);
+            return trilinearInterpolation(Vec2d(p_grid.x() - floor(p_grid.x()), p_grid.y() - floor(p_grid.y())), data);
+        }
+
+        std::vector<Vec3d> makePoints() const {
+            std::vector<Vec3d> points(res * res);
+            int idx = 0;
+            for (int i = 0; i < res; i++) {
+                for (int j = 0; j < res; j++) {
+                    points[idx] = lerp(bounds.min(), bounds.max(), (Vec3d((double)i, (double)j, 0.) / (res - 1)));
+                    points[idx][2] = 0.f;
+                    idx++;
+                }
+            }
+            return points;
+        }
+
+        virtual void saveResources() override {
+            if (path) {
+                std::ofstream xfile(path->absolute().asString(), std::ios::out | std::ios::binary);
+                xfile.write((char*)values.data(), sizeof(values[0]) * values.size());
+                xfile.close();
+            }
+        }
+
+
+        virtual void loadResources() override {
+            if (path) {
+                std::ifstream xfile(path->absolute().asString(), std::ios::in | std::ios::binary);
+                ElemType value;
+                while (xfile.read(reinterpret_cast<char*>(&value), sizeof(ElemType))) {
+                    values.push_back(value);
+                }
+                xfile.close();
+            }
+        }
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+                "type", "regular_grid",
+                "bounds_min", bounds.min(),
+                "bounds_max", bounds.max(),
+                "res", res,
+                "path", *path
+            };
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            JsonSerializable::fromJson(value, scene);
+            value.getField("bounds_min", bounds.min());
+            value.getField("bounds_max", bounds.max());
+            value.getField("res", res);
+
+            if (auto f = value["path"]) path = scene.fetchResource(f);
+        }
+    };
+
     class ProceduralScalar : public JsonSerializable {
     public:
         virtual double operator()(Vec3d p) const = 0;
@@ -233,6 +326,18 @@ namespace Tungsten {
             return _v;
         }
     };
+
+    class RegularGridScalar : public ProceduralScalar {
+        std::shared_ptr<RegularGrid<double>> _grid;
+    public:
+        RegularGridScalar(std::shared_ptr<RegularGrid<double>> grid) : _grid(grid) {}
+
+        virtual double operator()(Vec3d p) const override {
+            return _grid->getValue(p);
+        }
+    };
+
+
 
     class LinearRampScalar : public ProceduralScalar {
         Vec2d _minMax;
@@ -253,6 +358,26 @@ namespace Tungsten {
         virtual Vec3d operator()(Vec3d p) const = 0;
     };
 
+
+    class ConstantVector : public ProceduralVector {
+        Vec3d _v;
+    public:
+        ConstantVector(Vec3d v = Vec3d(0.)) : _v(v) { }
+        virtual Vec3d operator()(Vec3d p) const override {
+            return _v;
+        }
+    };
+
+    class RegularGridVector : public ProceduralVector {
+        std::shared_ptr<RegularGrid<Vec3d>> _grid;
+    public:
+        RegularGridVector(std::shared_ptr<RegularGrid<Vec3d>> grid) : _grid(grid) {}
+
+        virtual Vec3d operator()(Vec3d p) const override {
+            return _grid->getValue(p);
+        }
+    };
+
     class LinearRampVector : public ProceduralVector {
         Vec3d _min;
         Vec3d _max;
@@ -265,15 +390,6 @@ namespace Tungsten {
             double i = p.dot(_dir);
             i = clamp((i - _range.x()) / (_range.y() - _range.x()), 0., 1.);
             return lerp(_min, _max, i);
-        }
-    };
-
-    class ConstantVector : public ProceduralVector {
-        Vec3d _v;
-    public:
-        ConstantVector(Vec3d v = Vec3d(0.)) : _v(v) { }
-        virtual Vec3d operator()(Vec3d p) const override {
-            return _v;
         }
     };
 
@@ -1179,13 +1295,16 @@ namespace Tungsten {
     class ProceduralMean : public MeanFunction {
     public:
 
-        ProceduralMean(SdfFunctions::Function fn = SdfFunctions::Function::Knob) : _fn(fn) {}
+        ProceduralMean(std::shared_ptr<ProceduralScalar> f) : _f(f) {}
+        ProceduralMean(SdfFunctions::Function fn = SdfFunctions::Function::Knob) {
+            _f = std::make_shared<ProceduralSdf>(fn);
+        }
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override;
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
 
     private:
-        SdfFunctions::Function _fn;
+        std::shared_ptr<ProceduralScalar> _f;
 
         float _min = -FLT_MAX;
         float _scale = 1.f;

@@ -354,6 +354,98 @@ int mesh_convert(int argc, char** argv) {
     }
 }
 
+int mesh_convert_2d(int argc, char** argv) {
+
+    ThreadUtils::startThreads(1);
+
+    EmbreeUtil::initDevice();
+
+#ifdef OPENVDB_AVAILABLE
+    openvdb::initialize();
+#endif
+
+    MeshSdfMean mean(std::make_shared<Path>(argv[1]), true);
+    mean.loadResources();
+
+    int dim = std::stod(argv[2]);
+
+    auto scenePath = Path(argv[1]);
+    std::cout << scenePath.parent().asString() << "\n";
+
+    auto bounds = mean.bounds();
+    bounds.grow(bounds.diagonal().length() * 0.2);
+
+    Vec3d minp = bounds.min();
+    Vec3d maxp = bounds.max();
+
+    Vec3d extends = (maxp - minp);
+
+    double max_extend = extends.max();
+
+    std::cout << extends << ":" << max_extend << "\n";
+
+    Vec3d aspect = extends / max_extend;
+
+    Vec3i dims = vec_conv<Vec3i>(aspect * dim);
+
+    std::cout << aspect << ":" << dims << "\n";
+
+    auto cellSize = max_extend / dim;
+
+    auto gridTransform = openvdb::Mat4R::identity();
+    gridTransform.setToScale(vec_conv<openvdb::Vec3R>(Vec3d(cellSize)));
+    gridTransform.setTranslation(vec_conv<openvdb::Vec3R>(minp));
+
+    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(100.f);
+    meanGrid->setGridClass(openvdb::GRID_LEVEL_SET);
+    meanGrid->setName("mean");
+    meanGrid->setTransform(openvdb::math::Transform::createLinearTransform(gridTransform));
+    openvdb::FloatGrid::Accessor meanAccessor = meanGrid->getAccessor();
+
+    UniformPathSampler sampler(0);
+    sampler.next2D();
+
+    int num_samples = 1;
+
+    for (int i = 0; i < dims.x(); i++) {
+        std::cout << i << "\r";
+#pragma omp parallel for
+        for (int j = 0; j < dims.y(); j++) {
+            auto p = lerp(minp, maxp, Vec3d((float)i, (float)j, (float)dims.z()/2) / vec_conv<Vec3d>(dims));
+
+            double m = 0;
+
+            if (num_samples > 0) {
+                for (int s = 0; s < num_samples; s++) {
+                    Vec2d s1 = rand_normal_2(sampler);
+                    Vec2d s2 = rand_normal_2(sampler);
+                    Vec3d offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
+                    Vec3d pt = p + offset * cellSize * 0.1;
+                    m += mean(Derivative::None, pt, Vec3d());
+                }
+                m /= num_samples;
+            }
+            else {
+                m = mean(Derivative::None, p, Vec3d());
+            }
+
+#pragma omp critical
+            {
+                meanAccessor.setValue({ i,j, dims.z() / 2 }, m);
+            }
+        }
+    }
+
+    {
+        openvdb::GridPtrVec grids;
+        grids.push_back(meanGrid);
+        openvdb::io::File file(scenePath.stripExtension().asString() + "-" + std::to_string(dim) + "-2d.vdb");
+        file.write(grids);
+        file.close();
+    }
+}
+
+
 std::vector<double> compute_acf_direct(const double* signal, size_t n, double mean) {
 
     std::vector<double> acf(n / 2);
@@ -472,60 +564,13 @@ double apply_2d_hamming_window(double* signal, int width, int height) {
     return norm;
 }
 
-double trilinearInterpolation(const Vec2d& uv, double(&data)[2][2]) {
-    return lerp(
-        lerp(data[0][0], data[1][0], uv.x()),
-        lerp(data[0][1], data[1][1], uv.x()),
-        uv.y()
-    );
-};
-
-
-struct RegularGrid {
-    Box3d bounds;
-    int res;
-
-    std::vector<double> values;
-
-    double getValue(Vec2i coord) const {
-        coord = clamp(coord, Vec2i(0), Vec2i(res - 1));
-        return values[coord.x() * res + coord.y()];
+template<typename ElemType>
+RegularGrid<ElemType> eval_grid(std::function<ElemType(Vec3d)> f, Box3d range, size_t res, size_t num_samples = 1) {
+    RegularGrid<ElemType> result = {
+        range, res, std::vector<ElemType>(res * res)
     };
 
-    void getValues(const Vec2i& coord, double(&data)[2][2]) const {
-        data[0][0] = getValue(coord + Vec2i(0, 0));
-        data[1][0] = getValue(coord + Vec2i(1, 0));
-        data[0][1] = getValue(coord + Vec2i(0, 1));
-        data[1][1] = getValue(coord + Vec2i(1, 1));
-    };
-
-    double getValue(Vec3d p) const {
-        Vec3d p_grid = (double(res) * (p - bounds.min()) / bounds.diagonal()) - 0.5;
-        double data[2][2];
-        getValues(Vec2i((int)floor(p_grid.x()), (int)floor(p_grid.y())), data);
-        return trilinearInterpolation(Vec2d(p_grid.x() - floor(p_grid.x()), p_grid.y() - floor(p_grid.y())), data);
-    }
-
-    std::vector<Vec3d> makePoints() const {
-        std::vector<Vec3d> points(res * res);
-        int idx = 0;
-        for (int i = 0; i < res; i++) {
-            for (int j = 0; j < res; j++) {
-                points[idx] = lerp(bounds.min(), bounds.max(), (Vec3d((double)i, (double)j, 0.) / (res - 1)));
-                points[idx][2] = 0.f;
-                idx++;
-            }
-        }
-        return points;
-    }
-};
-
-RegularGrid eval_grid(std::function<double(Vec3d)> f, Box3d range, size_t res) {
-    RegularGrid result = {
-        range, res, std::vector<double>(res * res)
-    };
-
-    int idx = 0;
+#pragma omp parallel for
     for (int i = 0; i < res; i++) {
         for (int j = 0; j < res; j++) {
             Vec3d cellMin = lerp(range.min(), range.max(), (Vec3d((double)i, (double)j, 0.) / res));
@@ -536,12 +581,15 @@ RegularGrid eval_grid(std::function<double(Vec3d)> f, Box3d range, size_t res) {
             UniformPathSampler sampler(0);
             sampler.next2D();
 
-            for (int s = 0; s < 1000; s++) {
-                result.values[idx] += f(lerp(cellMin, cellMax, Vec3d(sampler.next1D(), sampler.next1D(), sampler.next1D())));
+            if (num_samples > 1) {
+                for (int s = 0; s < num_samples; s++) {
+                    result.values[i * res + j] += f(lerp(cellMin, cellMax, Vec3d(sampler.next1D(), sampler.next1D(), sampler.next1D())));
+                }
+                result.values[i * res + j] /= num_samples;
             }
-            result.values[idx] /= 1000;
-
-            idx++;
+            else {
+                result.values[i * res + j] = f(lerp(cellMin, cellMax, Vec3d(0.5)));
+            }
         }
     }
 
@@ -637,7 +685,7 @@ private:
 // acf is ww x wh array corresponding to the window
 // ps is wxh array
 // wc is center of the window to use for covariance calculations
-ProceduralNonstationaryCovariance fit_cov(const Vec3d* ps, const double* acf, Vec3d wc, size_t wx, size_t wy, size_t ww, size_t wh, size_t w, size_t h, std::shared_ptr<StationaryCovariance> cov) {
+std::tuple<ProceduralNonstationaryCovariance, double, Vec3d, Vec3d> fit_cov(const Vec3d* ps, const double* acf, Vec3d wc, size_t wx, size_t wy, size_t ww, size_t wh, size_t w, size_t h, std::shared_ptr<StationaryCovariance> cov) {
     const double initial_sigma = 1.0;
     const Vec3d initial_ls = Vec3d(1.0);
     const Vec3d initial_dir = Vec3d(1.0).normalized();
@@ -648,37 +696,38 @@ ProceduralNonstationaryCovariance fit_cov(const Vec3d* ps, const double* acf, Ve
 
     ceres::Problem problem;
 
-    int idx = 0;
-    for (int x = wx; x < wx + ww; x++) {
-        for (int y = wy; y < wy + wh; y++) {
+    for (int lx = ww/2 - ww/8; lx < ww/2 + ww/8; lx++) {
+        for (int ly = wh/2 - wh/8; ly < wh/2 + wh/8; ly++) {
+
+            int lidx = lx * ww + ly;
+            int gidx = (wx + lx) * w + (wy + ly);
+
             problem.AddResidualBlock(
                 new ceres::NumericDiffCostFunction<CovResidual, ceres::CENTRAL, 1, 1, 1, 1, 1, 1, 1, 1>(
-                    new CovResidual(ps[x * w + y] - wc, acf[idx], cov)),
+                    new CovResidual(ps[gidx] - wc, acf[lidx], cov)),
                 nullptr,
                 &sigma,
                 &ls.x(), &ls.y(), &ls.z(),
                 &dir.x(), &dir.y(), &dir.z());
-
-            idx++;
         }
     }
 
     ceres::Solver::Options options;
     options.max_num_iterations = 100;
     options.linear_solver_type = ceres::DENSE_QR;
-    options.minimizer_progress_to_stdout = true;
+    options.minimizer_progress_to_stdout = false;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
     std::cout << summary.BriefReport() << "\n";
     std::cout << "Initial s: " << initial_sigma << " ls: " << initial_ls << " dir: " << initial_dir << "\n";
-    std::cout << "Final   s: " << sigma << " ls: " << ls << " dir: " << dir << "\n";
+    std::cout << "Final   s: " << sigma << " ls: " << ls << " dir: " << dir.normalized() << "\n";
 
-    return ProceduralNonstationaryCovariance(
+    return { ProceduralNonstationaryCovariance(
         cov,
         std::make_shared<ConstantScalar>(sigma),
         std::make_shared<ConstantVector>(ls),
         std::make_shared<ConstantVector>(dir.normalized())
-    );
+    ), sigma, ls, dir.normalized() };
 }
 
 
@@ -773,12 +822,12 @@ std::tuple<std::vector<double>, std::vector<double>, std::vector<double>, std::v
     std::vector<double> residual(res * res);
     std::vector<double> mean(res * res);
 
-    RegularGrid signalGrid = eval_grid(signal, bounds, res);
+    RegularGrid<double> signalGrid = eval_grid(signal, bounds, res);
 
     auto meanBounds = bounds;
     //meanBounds.grow(bounds.diagonal().length() / (subres * 2 + 1));
 
-    RegularGrid meanGrid = eval_grid([&](Vec3d p) {
+    RegularGrid<double> meanGrid = eval_grid<double>([&](Vec3d p) {
         return signalGrid.getValue(p);
     }, meanBounds, subres*2+1);
 
@@ -805,7 +854,7 @@ std::tuple<std::vector<double>, std::vector<double>, std::vector<double>, std::v
 
 
                 auto acf = compute_acf_fftw_2D(signalGrid.values.data(), points.data(), wx, wy, ww, wh, res, res, mean_f);
-                auto fitc = fit_cov(points.data(), acf.data(), cellCenter, wx, wy, ww, wh, res, res, base_cov);
+                auto [fitc, var, ls, aniso] = fit_cov(points.data(), acf.data(), cellCenter, wx, wy, ww, wh, res, res, base_cov);
 
                 int idx = 0;
                 for (int x = wx; x < wx + ww; x++) {
@@ -826,6 +875,7 @@ std::tuple<std::vector<double>, std::vector<double>, std::vector<double>, std::v
 }
 
 
+
 int estimate_acf(int argc, char** argv) {
 
     ThreadUtils::startThreads(1);
@@ -837,7 +887,7 @@ int estimate_acf(int argc, char** argv) {
 #endif
     
     auto cov = std::make_shared<ProceduralNonstationaryCovariance>(
-        std::make_shared<SquaredExponentialCovariance>(1.0, 1.f),
+        std::make_shared<SquaredExponentialCovariance>(1.0f, 1.f),
         std::make_shared<ConstantScalar>(1.0),
         std::make_shared<ConstantVector>(Vec3d(1., 0.25, 1.0)),
         std::make_shared<LinearRampVector>(Vec3d(-1.,-1., 0.), Vec3d(1., 1., 0.), Vec3d(1., 0., 0.), Vec2d(-25., 25.))
@@ -855,7 +905,7 @@ int estimate_acf(int argc, char** argv) {
         FileUtils::createDirectory(basePath);
     }
 
-    int dim = 512;
+    size_t dim = 128;
     double scale = 50;
 
     Box3d range(
@@ -872,7 +922,7 @@ int estimate_acf(int argc, char** argv) {
         xfile.close();
     }
 
-    RegularGrid signal{
+    RegularGrid<double> signal{
         range,
         dim,
         std::vector(sample.data(), sample.data() + dim*dim)
@@ -913,96 +963,255 @@ int estimate_acf(int argc, char** argv) {
         xfile.close();
     }
 
-
-    
     return 0;
-    /*std::cout << scenePath.parent().asString() << "\n";
+}
 
-    auto bounds = mean.bounds();
-    bounds.grow(bounds.diagonal().length() * 0.2);
 
-    Vec3d minp = bounds.min();
-    Vec3d maxp = bounds.max();
+std::tuple<
+    std::vector<double>, std::vector<double>, std::vector<double>, std::vector<double>,
+    RegularGrid<double>, RegularGrid<double>, RegularGrid<Vec3d>, RegularGrid<Vec3d>> compute_acf_nonstationary_real(
+    std::function<double(Vec3d)> signal,
+    Box3d bounds,
+    size_t res,
+    size_t meanRes,
+    size_t covRes) {
 
-    Vec3d extends = (maxp - minp);
 
-    double max_extend = extends.max();
+    std::shared_ptr<StationaryCovariance> base_cov = std::make_shared<SquaredExponentialCovariance>();
 
-    std::cout << extends << ":" << max_extend << "\n";
+    std::vector<double> acf_fit(res * res);
+    std::vector<double> acf_fftw(res * res);
+    std::vector<double> residual(res * res);
+    std::vector<double> mean(res * res);
 
-    Vec3d aspect = extends / max_extend;
+    RegularGrid signalGrid = eval_grid(signal, bounds, res);
 
-    Vec3i dims = vec_conv<Vec3i>(aspect * dim);
+    auto cellSize = bounds.diagonal() / meanRes;
+    auto meanBounds = bounds;
 
-    std::cout << aspect << ":" << dims << "\n";
+    RegularGrid meanGrid = eval_grid<double>([&](Vec3d p) {
+        return signalGrid.getValue(p);
+    }, meanBounds, meanRes, 1000);
 
-    auto cellSize = max_extend / dim;
+    auto mean_f = [&](Vec3d p) {
+        return meanGrid.getValue(p);
+    };
 
-    auto gridTransform = openvdb::Mat4R::identity();
-    gridTransform.setToScale(vec_conv<openvdb::Vec3R>(Vec3d(cellSize)));
-    gridTransform.setTranslation(vec_conv<openvdb::Vec3R>(minp));
+    auto points = signalGrid.makePoints();
 
-    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(100.f);
-    meanGrid->setGridClass(openvdb::GRID_LEVEL_SET);
-    meanGrid->setName("mean");
-    meanGrid->setTransform(openvdb::math::Transform::createLinearTransform(gridTransform));
-    openvdb::FloatGrid::Accessor meanAccessor = meanGrid->getAccessor();
+    RegularGrid<double> varGrid{
+        bounds, covRes, std::vector<double>(covRes * covRes)
+    };
 
-    UniformPathSampler sampler(0);
-    sampler.next2D();
+    RegularGrid<Vec3d> lsGrid{
+        bounds, covRes, std::vector<Vec3d>(covRes * covRes)
+    };
 
-    int num_samples = 1;
+    RegularGrid<Vec3d> anisoGrid{
+        bounds, covRes, std::vector<Vec3d>(covRes * covRes)
+    };
 
-    for (int i = 0; i < dims.x(); i++) {
-        std::cout << i << "\r";
-        for (int j = 0; j < dims.y(); j++) {
-#pragma omp parallel for
-            for (int k = 0; k < dims.z(); k++) {
-                auto p = lerp(minp, maxp, Vec3d((float)i, (float)j, (float)k) / vec_conv<Vec3d>(dims));
 
-                double m = 0;
+    {
+        for (int i = 1; i < covRes-1; i++) {
+            std::cout << i << "\r";
+            for (int j = 1; j < covRes-1; j++) {
+                Vec3d cellCenter = lerp(bounds.min(), bounds.max(), (Vec3d((double)i + 0.5, (double)j + 0.5, 0.) / covRes));
+                cellCenter[2] = 0;
 
-                if (num_samples > 0) {
-                    for (int s = 0; s < num_samples; s++) {
-                        Vec2d s1 = rand_normal_2(sampler);
-                        Vec2d s2 = rand_normal_2(sampler);
-                        Vec3d offset = { (float)s1.x(), (float)s1.y(), (float)s2.x() };
-                        Vec3d pt = p + offset * cellSize * 0.1;
-                        m += mean(Derivative::None, pt, Vec3d());
+                int ww = (res / covRes)*2;
+                int wh = (res / covRes)*2;
+                int wx = (i) * (res / covRes) - (res / covRes) / 2;
+                int wy = (j) * (res / covRes) - (res / covRes) / 2;
+
+
+                auto acf = compute_acf_fftw_2D(signalGrid.values.data(), points.data(), wx, wy, ww, wh, res, res, mean_f);
+                auto [fitc, var, ls, aniso] = fit_cov(points.data(), acf.data(), cellCenter, wx, wy, ww, wh, res, res, base_cov);
+
+                varGrid.values[i * covRes + j] = var;
+                lsGrid.values[i * covRes + j] = ls;
+                anisoGrid.values[i * covRes + j] = aniso;
+
+                for (int lx = (res / covRes)/2; lx < 3*(res / covRes)/2; lx++) {
+                    for (int ly = (res / covRes)/2; ly < 3*(res / covRes)/2; ly++) {
+                        int x = wx + lx;
+                        int y = wy + ly;
+
+                        acf_fit[x * res + y] = fitc(Derivative::None, Derivative::None, Vec3d(), points[x * res + y] - cellCenter, Vec3d(), Vec3d());
+                        acf_fftw[x * res + y] = acf[lx * ww + ly];
+                        residual[x * res + y] = signal(points[x * res + y]) - mean_f(points[x * res + y]);
+                        mean[x * res + y] = mean_f(points[x * res + y]);
                     }
-                    m /= num_samples;
-                }
-                else {
-                    m = mean(Derivative::None, p, Vec3d());
-                }
-
-#pragma omp critical
-                {
-                    meanAccessor.setValue({ i,j,k }, m);
                 }
             }
         }
     }
 
-    {
-        openvdb::GridPtrVec grids;
-        grids.push_back(meanGrid);
-        openvdb::io::File file(scenePath.stripExtension().asString() + "-" + std::to_string(dim) + ".vdb");
-        file.write(grids);
-        file.close();
-    }*/
-
+    return { acf_fit, acf_fftw, residual, mean, meanGrid, varGrid, lsGrid, anisoGrid };
 }
 
+template<typename Elem>
+void save_grid(RegularGrid<Elem>& grid, Path path) {
 
+    DirectoryChange context(path.parent());
 
+    grid.path = std::make_shared<Path>(path.stripParent().stripExtension() + "-values.bin");
+    grid.saveResources();
+
+    rapidjson::Document document;
+    document.SetObject();
+    *(static_cast<rapidjson::Value*>(&document)) = grid.toJson(document.GetAllocator());
+    FileUtils::writeJson(document, path.stripParent());
+}
+
+template<typename Elem>
+RegularGrid<Elem> load_grid(Path path) {
+    JsonDocument document(path);
+
+    DirectoryChange context(path.parent());
+
+    Scene scene(path.parent(), nullptr);
+    scene.setPath(path);
+
+    RegularGrid<Elem> grid;
+    grid.fromJson(document, scene);
+    grid.loadResources();
+
+    return grid;
+}
+
+int estimate_acf_mesh(int argc, char** argv) {
+
+    ThreadUtils::startThreads(1);
+
+    EmbreeUtil::initDevice();
+
+#ifdef OPENVDB_AVAILABLE
+    openvdb::initialize();
+#endif
+
+    auto scenePath = Path(argv[1]);
+    std::cout << scenePath.parent().asString() << "\n";
+
+    Path basePath = Path("testing/est-acf/mesh") / scenePath.stripExtension().baseName();
+    if (!basePath.exists()) {
+        FileUtils::createDirectory(basePath);
+    }
+
+    size_t dim = 2048;
+
+    RegularGrid<double> signal;
+
+    auto sdfPath = basePath / Path(tinyformat::format("sdf-%d.json", dim));
+    if (sdfPath.exists()) {
+        std::cout << "Loading precomputed SDF\n";
+        signal = load_grid<double>(sdfPath);
+    }
+    else {
+        std::cout << "Loading mesh\n";
+        MeshSdfMean mean(std::make_shared<Path>(argv[1]), true);
+        mean.loadResources();
+
+        auto bounds = mean.bounds();
+        bounds.grow(bounds.diagonal().length() * 0.2);
+
+        std::cout << "Evaluating high-res mean\n";
+        signal = eval_grid<double>([&](Vec3d p) {
+            return mean(Derivative::None, p, Vec3d()) - 0.01;
+        }, bounds, dim);
+
+        save_grid(signal, sdfPath);
+    }
+
+    auto signal_f = [&](Vec3d p) {
+        return signal.getValue(p);
+    };
+
+    std::cout << "Computing ACF\n";
+    auto [acf_fit, acf_fftw, residual, downsampled_mean, mean, variance, ls, aniso] = compute_acf_nonstationary_real(signal_f, signal.bounds, dim, 128, 16);
+
+    save_grid(mean, basePath / "mean.json");
+    save_grid(variance, basePath / "var.json");
+    save_grid(ls, basePath / "ls.json");
+    save_grid(aniso, basePath / "aniso.json");
+
+    {
+        std::ofstream xfile(basePath.asString() + "/acf-fit.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)acf_fit.data(), sizeof(acf_fit[0]) * acf_fit.size());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(basePath.asString() + "/acf-fftw.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)acf_fftw.data(), sizeof(acf_fftw[0]) * acf_fftw.size());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(basePath.asString() + "/downsampled-mean.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)downsampled_mean.data(), sizeof(downsampled_mean[0]) * downsampled_mean.size());
+        xfile.close();
+    }
+
+    {
+        std::ofstream xfile(basePath.asString() + "/residual.bin", std::ios::out | std::ios::binary);
+        xfile.write((char*)residual.data(), sizeof(residual[0]) * residual.size());
+        xfile.close();
+    }
+
+    return 0;
+}
+
+int inspect_acf_gp(int argc, char** argv) {
+    ThreadUtils::startThreads(1);
+
+    EmbreeUtil::initDevice();
+
+#ifdef OPENVDB_AVAILABLE
+    openvdb::initialize();
+#endif
+
+    auto scenePath = Path(argv[1]);
+    std::cout << scenePath.parent().asString() << "\n";
+
+    Path basePath = Path("testing/est-acf/mesh") / scenePath.stripExtension().baseName();
+    if (!basePath.exists()) {
+        return 0;
+    }
+
+    size_t dim = 2048;
+
+    auto mean = load_grid<double>(basePath / "mean.json");
+    auto var = load_grid<double>(basePath / "var.json");
+    auto ls = load_grid<Vec3d>(basePath / "ls.json");
+    auto aniso = load_grid<Vec3d>(basePath / "aniso.json");
+
+    auto gp = std::make_shared<GaussianProcess>(
+        std::make_shared<ProceduralMean>(std::make_shared<RegularGridScalar>(std::make_shared<RegularGrid<double>>(mean))),
+        std::make_shared<ProceduralNonstationaryCovariance>(
+            std::make_shared<SquaredExponentialCovariance>(),
+            std::make_shared<RegularGridScalar>(std::make_shared<RegularGrid<double>>(var)),
+            std::make_shared<RegularGridVector>(std::make_shared<RegularGrid<Vec3d>>(ls)),
+            std::make_shared<RegularGridVector>(std::make_shared<RegularGrid<Vec3d>>(aniso))
+        )
+    );
+
+    auto occupancyGrid = eval_grid<double>([&](Vec3d p) {
+        return gp->cdf(p);
+    }, var.bounds, dim, 1);
+
+    save_grid(occupancyGrid, basePath / "occupancy.json");
+
+    return 0;
+}
 
 int main(int argc, char** argv) {
-
-    //mesh_convert(argc, argv);
+    //return mesh_convert_2d(argc, argv);
+    //return mesh_convert(argc, argv);
     //return gen3d(argc, argv);
     //return test2d(argc, argv);
 
-    return estimate_acf(argc, argv);
-
+    //return estimate_acf(argc, argv);
+    estimate_acf_mesh(argc, argv);
+    return inspect_acf_gp(argc, argv);
 }

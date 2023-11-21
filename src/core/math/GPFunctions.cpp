@@ -522,8 +522,12 @@ namespace Tungsten {
         _invConfigTransform = _configTransform.invert();
 
         std::string fnString = "knob";
-        value.getField("func", fnString);
-        _fn = SdfFunctions::stringToFunction(fnString);
+        if (value.getField("func", fnString)) {
+            _f = std::make_shared<ProceduralSdf>(SdfFunctions::stringToFunction(fnString));
+        }
+        else if(auto f = value["f"]) {
+            _f = scene.fetchProceduralScalar(f);
+        }
 
         value.getField("min", _min);
         value.getField("scale", _scale);
@@ -532,7 +536,7 @@ namespace Tungsten {
     rapidjson::Value ProceduralMean::toJson(Allocator& allocator) const {
         return JsonObject{ JsonSerializable::toJson(allocator), allocator,
             "type", "procedural",
-            "func", SdfFunctions::functionToString(_fn),
+            "f", *_f,
             "transform", _configTransform,
             "min", _min,
             "scale", _scale,
@@ -542,8 +546,7 @@ namespace Tungsten {
     double ProceduralMean::mean(Vec3d a) const {
         auto p = vec_conv<Vec3f>(a);
         p = _invConfigTransform.transformPoint(p);
-        int matId;
-        float m = SdfFunctions::eval(_fn, p, matId);
+        float m = (*_f)(a);
         m *= _scale;
         return max(_min, m);
     }
