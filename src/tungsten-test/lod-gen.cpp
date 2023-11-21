@@ -9,6 +9,7 @@
 #include <math/WeightSpaceGaussianProcess.hpp>
 #include <ccomplex>
 #include <fftw3.h>
+#include <core/media/FunctionSpaceGaussianProcessMedium.hpp>
 
 #ifdef OPENVDB_AVAILABLE
 #include <openvdb/openvdb.h>
@@ -735,7 +736,7 @@ std::tuple<Eigen::VectorXd, std::vector<Vec3d>> gen_weight_space_nonstationary(
     std::shared_ptr<GaussianProcess> gp,
     Box3d range,
     size_t res,
-    size_t subres) {
+    size_t subres, int seed = 0) {
 
     std::vector<Vec3d> points(res * res);
     {
@@ -751,7 +752,7 @@ std::tuple<Eigen::VectorXd, std::vector<Vec3d>> gen_weight_space_nonstationary(
 
     std::vector<WeightSpaceRealization> realizations(subres * subres);
     {
-        UniformPathSampler sampler(0);
+        UniformPathSampler sampler(seed);
         sampler.next2D();
 
         int idx = 0;
@@ -786,18 +787,18 @@ std::tuple<Eigen::VectorXd, std::vector<Vec3d>> gen_weight_space_nonstationary(
 
     Eigen::VectorXd result(res * res);
     {
-        int idx = 0;
         for (int i = 0; i < res; i++) {
+            std::cout << i << "\r";
+#pragma omp parallel for
             for (int j = 0; j < res; j++) {
                 double subres_i = double(i) / (res / subres) - 0.5;
                 double subres_j = double(j) / (res / subres) - 0.5;
 
                 double data[2][2];
-                getValues(Vec2i((int)floor(subres_i), (int)floor(subres_j)), points[idx], data);
+                getValues(Vec2i((int)floor(subres_i), (int)floor(subres_j)), points[i * res + j], data);
 
-                result[idx] = trilinearInterpolation(Vec2d(subres_i - floor(subres_i), subres_j - floor(subres_j)), data);
+                result[i * res + j] = trilinearInterpolation(Vec2d(subres_i - floor(subres_i), subres_j - floor(subres_j)), data);
 
-                idx++;
             }
         }
     }
@@ -1123,12 +1124,26 @@ int estimate_acf_mesh(int argc, char** argv) {
         save_grid(signal, sdfPath);
     }
 
+    int mean_res = 64;
+    int cov_res = 16;
+
     auto signal_f = [&](Vec3d p) {
         return signal.getValue(p);
     };
 
+    auto occupancy_highres = eval_grid<double>([&](Vec3d p) {
+        return signal_f(p) < 0 ? 1. : 0.;
+    }, signal.bounds, dim, 1);
+    save_grid(occupancy_highres, basePath / "occupancy-high.json");
+
+    auto occupancy_avg = eval_grid<double>([&](Vec3d p) {
+        return signal_f(p) < 0 ? 1. : 0.;
+    }, signal.bounds, mean_res, 1000);
+    save_grid(occupancy_avg, basePath / "occupancy-avg.json");
+
+
     std::cout << "Computing ACF\n";
-    auto [acf_fit, acf_fftw, residual, downsampled_mean, mean, variance, ls, aniso] = compute_acf_nonstationary_real(signal_f, signal.bounds, dim, 128, 16);
+    auto [acf_fit, acf_fftw, residual, downsampled_mean, mean, variance, ls, aniso] = compute_acf_nonstationary_real(signal_f, signal.bounds, dim, mean_res, mean_res);
 
     save_grid(mean, basePath / "mean.json");
     save_grid(variance, basePath / "var.json");
@@ -1196,14 +1211,35 @@ int inspect_acf_gp(int argc, char** argv) {
         )
     );
 
+    /*auto gp = std::make_shared<GaussianProcess>(
+        std::make_shared<ProceduralMean>(std::make_shared<RegularGridScalar>(std::make_shared<RegularGrid<double>>(mean))),
+        std::make_shared<ProceduralNonstationaryCovariance>(
+            std::make_shared<SquaredExponentialCovariance>(),
+            std::make_shared<RegularGridScalar>(std::make_shared<RegularGrid<double>>(var)),
+            std::make_shared<ConstantVector>(Vec3d(0.5)),
+            nullptr
+        )
+    );*/
+
     auto occupancyGrid = eval_grid<double>([&](Vec3d p) {
         return gp->cdf(p);
     }, var.bounds, dim, 1);
 
     save_grid(occupancyGrid, basePath / "occupancy.json");
 
+    auto gp_med = std::make_shared<FunctionSpaceGaussianProcessMedium>(gp);
+
+    /*for (int i = 0; i < 10; i++) {
+        auto [samples, points] = gen_weight_space_nonstationary(gp, var.bounds, dim, 8, i);
+
+        save_grid(
+            RegularGrid<double>(var.bounds, dim, std::vector(samples.data(), samples.data() + samples.size())), 
+            basePath / tinyformat::format("sample-%d.json", i));
+    }*/
+
     return 0;
 }
+
 
 int main(int argc, char** argv) {
     //return mesh_convert_2d(argc, argv);

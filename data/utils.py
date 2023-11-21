@@ -20,21 +20,29 @@ def ray_points(o, d, tmin, tmax, n):
     ps = np.array(o)[None, ...] + ts[..., None] * np.array(d)[None, ...]
     return ps, ts
 
-def plot_realization(realization, ax, xx, yy, clw=3, alpha=1, zorder=-10, level_set=True, levels=11):
+def plot_realization(realization, ax, xx, yy, clw=3, alpha=1, zorder=-10, level_set=True, levels=11, max_range=None):
     with plt.style.context("default", True):
         realization = -realization
         max_v = np.max(realization)
         min_v = np.min(realization)
 
         abs_range = np.maximum(np.abs(max_v), np.abs(min_v))
-        levels = np.linspace(-abs_range, abs_range, levels if level_set else 10)
 
-        cs = ax.contour(xx, yy, realization, alpha=0.5*alpha, levels = levels, cmap="coolwarm", zorder=zorder)
+        if max_range is not None:
+            abs_range = np.minimum(abs_range, max_range)
+
+        if levels is not None:
+            levels = np.linspace(-abs_range, abs_range, levels if level_set else 10)
+            cs = ax.contour(xx, yy, realization, alpha=0.5*alpha, levels = levels, cmap="coolwarm", zorder=zorder)
+            if(len(cs.collections) > 5):
+                ax.contourf(xx, yy, realization, alpha=0.5*alpha,  levels = levels, cmap="coolwarm", zorder=zorder)
+        else:
+            ax.pcolormesh(xx,yy,realization,vmin=-abs_range, vmax=abs_range, cmap="coolwarm", zorder=zorder)
+
         if(level_set):
             ax.contour(xx, yy, realization, alpha=1*alpha, levels = [0], linewidths=clw, colors="black", zorder=zorder)
-        if(len(cs.collections) > 5):
-            ax.contourf(xx, yy, realization, alpha=0.5*alpha,  levels = levels, cmap="coolwarm", zorder=zorder)
-            ax.set_aspect("equal")
+
+        ax.set_aspect("equal")
         return abs_range
 
 
@@ -103,14 +111,16 @@ def plot_posterior(file, ax_occupancy, ax_surface_density=None, num_reals=200, s
                     cond_ns[is_so, 0] * cond_vs[is_so, 0], cond_ns[is_so, 1] * cond_vs[is_so, 0], 
                     color="green", zorder=10, alpha=1)
                 
-def plot_prior(file, ax_real, num_reals=1, level_set=True, levels=11):
+def plot_prior(file, ax_real, num_reals=1, level_set=True, levels=11, max_range=None):
     realizations = np.fromfile(file, dtype=np.float64)
     res = int(np.sqrt(realizations.shape[0]/num_reals))
     realizations= np.reshape(realizations, (num_reals, res, res))
     realizations = realizations.transpose(0, 2, 1)
     val_range = 0
     for real in realizations:
-        val_range = max(val_range, plot_realization(real, ax_real, np.linspace(-1,1,res), np.linspace(-1,1,res), alpha=1/num_reals, zorder=-10, level_set=level_set, levels=levels))
+        val_range = max(val_range, plot_realization(real, ax_real, np.linspace(-1,1,res), np.linspace(-1,1,res), 
+                                                    alpha=1/num_reals, zorder=-10, 
+                                                    level_set=level_set, levels=levels, max_range=max_range))
     ax_real.set_xticks([])
     ax_real.set_yticks([])
     return val_range

@@ -151,8 +151,10 @@ WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> co
         b.dirs.row(i) = frame.toGlobal(vec_conv<Eigen::Vector3d>(dir.normalized()));
         b.freqs(i) = dir.length();
 
-        if (!std::isfinite(b.freqs(i))) {
+        if (!std::isfinite(b.freqs(i)) || dir.length() < 0.000001) {
             std::cerr << "Sampling error!\n";
+            i--;
+            continue;
         }
 #elif 0
         auto dir = cov->sample_spectral_density_3d(sampler, spectralLoc);
