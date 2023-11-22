@@ -222,7 +222,7 @@ namespace Tungsten {
 
 
     template<typename ElemType>
-    static ElemType trilinearInterpolation(const Vec3d& uv, ElemType(&data)[2][2][2]) {
+    ElemType trilinearInterpolation(const Vec3d& uv, ElemType(&data)[2][2][2]) {
         return lerp(
             lerp(
                 lerp(data[0][0][0], data[1][0][0], uv.x()),
@@ -238,6 +238,47 @@ namespace Tungsten {
         );
     };
 
+    template<class ElemType, size_t N>
+    ElemType triquadraticInterpolation(const Vec3d& uvw, ElemType(&data)[N][N][N])
+    {
+        auto _interpolate = [](const ElemType* value, double weight)
+        {
+            const ElemType
+                a = static_cast<ElemType>(0.5 * (value[0] + value[2]) - value[1]),
+                b = static_cast<ElemType>(0.5 * (value[2] - value[0])),
+                c = static_cast<ElemType>(value[1]);
+            const auto temp = weight * (weight * a + b) + c;
+            return static_cast<ElemType>(temp);
+        };
+    
+        /// @todo For vector types, interpolate over each component independently.
+        ElemType vx[3];
+        for (int dx = 0; dx < 3; ++dx) {
+            ElemType vy[3];
+            for (int dy = 0; dy < 3; ++dy) {
+                // Fit a parabola to three contiguous samples in z
+                // (at z=-1, z=0 and z=1), then evaluate the parabola at z',
+                // where z' is the fractional part of inCoord.z, i.e.,
+                // inCoord.z - inIdx.z.  The coefficients come from solving
+                //
+                // | (-1)^2  -1   1 || a |   | v0 |
+                // |    0     0   1 || b | = | v1 |
+                // |   1^2    1   1 || c |   | v2 |
+                //
+                // for a, b and c.
+                const ElemType* vz = &data[dx][dy][0];
+                vy[dy] = _interpolate(vz, uvw.z());
+            }//loop over y
+            // Fit a parabola to three interpolated samples in y, then
+            // evaluate the parabola at y', where y' is the fractional
+            // part of inCoord.y.
+            vx[dx] = _interpolate(vy, uvw.y());
+        }//loop over x
+        // Fit a parabola to three interpolated samples in x, then
+        // evaluate the parabola at the fractional part of inCoord.x.
+        return _interpolate(vx, uvw.x());
+    }
+
     template<typename ElemType>
     static ElemType bilinearInterpolation(const Vec2d& uv, ElemType(&data)[2][2]) {
         return lerp(
@@ -250,7 +291,7 @@ namespace Tungsten {
     template<typename ElemType>
     struct RegularGrid : JsonSerializable {
 
-        RegularGrid(const RegularGrid& o) = default;
+        InterpolateMethod interp = InterpolateMethod::Linear;
 
         RegularGrid(Box3d bounds = Box3d(), size_t res = 0, std::vector<ElemType> values = {}) : bounds(bounds), res(res), values(values) {}
 
@@ -277,13 +318,41 @@ namespace Tungsten {
             data[1][1][1] = getValue(coord + Vec3i(1, 1, 1));
         };
 
+        void getValues(const Vec3i& coord, ElemType(&data)[3][3][3]) const {
+            Vec3i inLoIdx = coord - 1;
+            // Retrieve the values of the 27 voxels surrounding the
+            // fractional source coordinates.
+            for (int dx = 0, ix = inLoIdx.x(); dx < 3; ++dx, ++ix) {
+                for (int dy = 0, iy = inLoIdx.y(); dy < 3; ++dy, ++iy) {
+                    for (int dz = 0, iz = inLoIdx.z(); dz < 3; ++dz, ++iz) {
+                        data[dx][dy][dz] = getValue(Vec3i{ ix, iy, iz });
+                    }
+                }
+            }
+        }
+
         ElemType getValue(Vec3d p) const {
             Vec3d p_grid = (double(res) * (p - bounds.min()) / bounds.diagonal()) - 0.5;
-            ElemType data[2][2][2];
-            getValues(Vec3i((int)floor(p_grid.x()), (int)floor(p_grid.y()), (int)floor(p_grid.z())), data);
-            return trilinearInterpolation(
-                Vec3d(p_grid.x() - floor(p_grid.x()), p_grid.y() - floor(p_grid.y()), p_grid.z() - floor(p_grid.z())), 
-                data);
+
+            Vec3i coord = Vec3i(std::floor(p_grid));
+            Vec3d uvw = p_grid - Vec3d(coord);
+            
+            switch (interp) {
+            case InterpolateMethod::Point:
+                return getValue(coord);
+            case InterpolateMethod::Linear:
+            {
+                ElemType data[2][2][2];
+                getValues(coord, data);
+                return trilinearInterpolation(uvw, data);
+            }
+            case InterpolateMethod::Quadratic:
+            {
+                ElemType data[3][3][3];
+                getValues(coord, data);
+                return triquadraticInterpolation(uvw, data);
+            }
+            }
         }
 
         std::vector<Vec3d> makePoints(bool centered = false) const {
@@ -331,7 +400,8 @@ namespace Tungsten {
                 "bounds_min", bounds.min(),
                 "bounds_max", bounds.max(),
                 "res", res,
-                "path", *path
+                "path", *path,
+                "interpolate", interpolateMethodToString(interp)
             };
         }
 
@@ -340,6 +410,10 @@ namespace Tungsten {
             value.getField("bounds_min", bounds.min());
             value.getField("bounds_max", bounds.max());
             value.getField("res", res);
+
+            std::string interpString = interpolateMethodToString(interp);
+            value.getField("interpolate", interpString);
+            interp = stringToInterpolateMethod(interpString);
 
             if (auto f = value["path"]) path = scene.fetchResource(f);
         }

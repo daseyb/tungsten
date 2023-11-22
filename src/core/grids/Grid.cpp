@@ -3,7 +3,7 @@
 
 namespace Tungsten {
 
-std::string Grid::interpolateMethodToString(InterpolateMethod method)
+std::string interpolateMethodToString(InterpolateMethod method)
 {
     switch (method) {
     default:
@@ -14,7 +14,7 @@ std::string Grid::interpolateMethodToString(InterpolateMethod method)
 }
 
 
-Grid::InterpolateMethod Grid::stringToInterpolateMethod(const std::string& name)
+InterpolateMethod stringToInterpolateMethod(const std::string& name)
 {
     if (name == "point")
         return InterpolateMethod::Point;
