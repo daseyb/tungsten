@@ -222,7 +222,24 @@ namespace Tungsten {
 
 
     template<typename ElemType>
-    static ElemType trilinearInterpolation(const Vec2d& uv, ElemType(&data)[2][2]) {
+    static ElemType trilinearInterpolation(const Vec3d& uv, ElemType(&data)[2][2][2]) {
+        return lerp(
+            lerp(
+                lerp(data[0][0][0], data[1][0][0], uv.x()),
+                lerp(data[0][1][0], data[1][1][0], uv.x()),
+                uv.y()
+            ),
+            lerp(
+                lerp(data[0][0][1], data[1][0][1], uv.x()),
+                lerp(data[0][1][1], data[1][1][1], uv.x()),
+                uv.y()
+            ),
+            uv.z()
+        );
+    };
+
+    template<typename ElemType>
+    static ElemType bilinearInterpolation(const Vec2d& uv, ElemType(&data)[2][2]) {
         return lerp(
             lerp(data[0][0], data[1][0], uv.x()),
             lerp(data[0][1], data[1][1], uv.x()),
@@ -241,33 +258,46 @@ namespace Tungsten {
 
         PathPtr path;
 
-        ElemType getValue(Vec2i coord) const {
-            coord = clamp(coord, Vec2i(0), Vec2i(res - 1));
-            return values[coord.x() * res + coord.y()];
+        ElemType getValue(Vec3i coord) const {
+            coord = clamp(coord, Vec3i(0), Vec3i(res - 1));
+            return values[ (coord.x() * res + coord.y()) * res + coord.z()];
         };
 
-        void getValues(const Vec2i& coord, ElemType(&data)[2][2]) const {
-            data[0][0] = getValue(coord + Vec2i(0, 0));
-            data[1][0] = getValue(coord + Vec2i(1, 0));
-            data[0][1] = getValue(coord + Vec2i(0, 1));
-            data[1][1] = getValue(coord + Vec2i(1, 1));
+        void getValues(const Vec3i& coord, ElemType(&data)[2][2][2]) const {
+            data[0][0][0] = getValue(coord + Vec3i(0, 0, 0));
+            data[1][0][0] = getValue(coord + Vec3i(1, 0, 0));
+            data[0][1][0] = getValue(coord + Vec3i(0, 1, 0));
+            data[1][1][0] = getValue(coord + Vec3i(1, 1, 0));
+
+            data[0][0][1] = getValue(coord + Vec3i(0, 0, 1));
+            data[1][0][1] = getValue(coord + Vec3i(1, 0, 1));
+            data[0][1][1] = getValue(coord + Vec3i(0, 1, 1));
+            data[1][1][1] = getValue(coord + Vec3i(1, 1, 1));
         };
 
         ElemType getValue(Vec3d p) const {
             Vec3d p_grid = (double(res) * (p - bounds.min()) / bounds.diagonal()) - 0.5;
-            ElemType data[2][2];
-            getValues(Vec2i((int)floor(p_grid.x()), (int)floor(p_grid.y())), data);
-            return trilinearInterpolation(Vec2d(p_grid.x() - floor(p_grid.x()), p_grid.y() - floor(p_grid.y())), data);
+            ElemType data[2][2][2];
+            getValues(Vec3i((int)floor(p_grid.x()), (int)floor(p_grid.y()), (int)floor(p_grid.z())), data);
+            return trilinearInterpolation(
+                Vec3d(p_grid.x() - floor(p_grid.x()), p_grid.y() - floor(p_grid.y()), p_grid.z() - floor(p_grid.z())), 
+                data);
         }
 
-        std::vector<Vec3d> makePoints() const {
-            std::vector<Vec3d> points(res * res);
+        std::vector<Vec3d> makePoints(bool centered = false) const {
+            std::vector<Vec3d> points(res * res * res);
             int idx = 0;
             for (int i = 0; i < res; i++) {
                 for (int j = 0; j < res; j++) {
-                    points[idx] = lerp(bounds.min(), bounds.max(), (Vec3d((double)i, (double)j, 0.) / (res - 1)));
-                    points[idx][2] = 0.f;
-                    idx++;
+                    for (int k = 0; k < res; k++) {
+                        if (centered) {
+                            points[idx] = lerp(bounds.min(), bounds.max(), (Vec3d((double)i + 0.5, (double)j + 0.5, (double)k + 0.5) / res));
+                        }
+                        else {
+                            points[idx] = lerp(bounds.min(), bounds.max(), (Vec3d((double)i, (double)j, (double)k) / (res - 1)));
+                        }
+                        idx++;
+                    }
                 }
             }
             return points;
@@ -312,6 +342,36 @@ namespace Tungsten {
             if (auto f = value["path"]) path = scene.fetchResource(f);
         }
     };
+
+    template<typename Elem>
+    void save_grid(RegularGrid<Elem>& grid, Path path) {
+
+        DirectoryChange context(path.parent());
+
+        grid.path = std::make_shared<Path>(path.stripParent().stripExtension() + "-values.bin");
+        grid.saveResources();
+
+        rapidjson::Document document;
+        document.SetObject();
+        *(static_cast<rapidjson::Value*>(&document)) = grid.toJson(document.GetAllocator());
+        FileUtils::writeJson(document, path.stripParent());
+    }
+
+    template<typename Elem>
+    RegularGrid<Elem> load_grid(Path path) {
+        JsonDocument document(path);
+
+        DirectoryChange context(path.parent());
+
+        Scene scene(path.parent(), nullptr);
+        scene.setPath(path);
+
+        RegularGrid<Elem> grid;
+        grid.fromJson(document, scene);
+        grid.loadResources();
+
+        return grid;
+    }
 
     class ProceduralScalar : public JsonSerializable {
     public:

@@ -114,9 +114,60 @@ int gen3d(int argc, char** argv) {
 
 }
 
+int grid_to_vdb(int argc, char** argv) {
+
+    ThreadUtils::startThreads(1);
+
+    EmbreeUtil::initDevice();
+
+#ifdef OPENVDB_AVAILABLE
+    openvdb::initialize();
+#endif
+
+    auto base_path = Path(argv[1]);
+
+    auto grid = load_grid<double>(base_path);
+
+
+    Vec3d minp = grid.bounds.min();
+    Vec3d maxp = grid.bounds.max();
+
+    size_t dim = grid.res;
+
+    auto gridTransform = openvdb::Mat4R::identity();
+    gridTransform.setToScale(vec_conv<openvdb::Vec3R>((maxp - minp) / dim));
+    gridTransform.setTranslation(vec_conv<openvdb::Vec3R>(minp));
+
+    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(100.f);
+    meanGrid->setGridClass(openvdb::GRID_LEVEL_SET);
+    meanGrid->setName("values");
+    meanGrid->setTransform(openvdb::math::Transform::createLinearTransform(gridTransform));
+    openvdb::FloatGrid::Accessor meanAccessor = meanGrid->getAccessor();
+
+    auto points = grid.makePoints(true);
+    
+    for (int i = 0; i < points.size(); i++) {
+        auto localP = meanGrid->transform().worldToIndexNodeCentered(vec_conv<openvdb::Vec3d>(points[i]));
+        meanAccessor.setValue({ localP.y(), localP.x(), localP.z() }, grid.values[i]);
+    }
+
+    {
+        openvdb::GridPtrVec grids;
+        grids.push_back(meanGrid);
+        openvdb::io::File file(base_path.stripExtension().asString() + ".vdb");
+        file.write(grids);
+        file.close();
+    }
+
+    return 0;
+}
+
 int main(int argc, char** argv) {
 
-    return gen3d(argc, argv);
-    //return test2d(argc, argv);
-
+    if (Path(argv[1]).extension() == ".json") {
+        return grid_to_vdb(argc, argv);
+    }
+    else {
+        return gen3d(argc, argv);
+    }
 }
