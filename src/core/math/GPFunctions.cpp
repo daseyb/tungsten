@@ -24,42 +24,7 @@
 
 namespace Tungsten {
 
-    void CovarianceFunction::loadResources() {
-        if (hasAnalyticSpectralDensity()) return;
-
-        /*
-        double max_t = 10;
-        std::vector<double> covValues(pow(2, 12));
-
-        size_t i;
-        covValues[0] = cov(Vec3d(0.), Vec3d(0.));
-        for (i = 1; i < covValues.size(); i++) {
-            double t = double(i) / covValues.size() * max_t;
-            covValues[i] = cov(Vec3d(0.), Vec3d(t, 0., 0.)) / covValues[0];
-        }
-
-        auto dt = max_t / covValues.size();
-        auto n = covValues.size();
-        auto nfft = 2 * n - 2;
-        auto nf = nfft / 2;
-
-        // This is based on the pywafo tospecdata function: https://github.com/wafo-project/pywafo/blob/master/src/wafo/covariance/core.py#L163
-        std::vector<double> acf;
-        acf.insert(acf.end(), covValues.begin(), covValues.end());
-        acf.insert(acf.end(), nfft - 2 * n + 2, 0.);
-        acf.insert(acf.end(), covValues.rbegin() + 2, covValues.rend());
-
-        std::vector<std::complex<double>> spectrumValues(acf.size());
-        fftw_plan plan = fftw_plan_dft_r2c_1d(acf.size(), acf.data(), (fftw_complex*)spectrumValues.data(), FFTW_ESTIMATE);
-        fftw_execute(plan);
-        fftw_destroy_plan(plan);
-
-        std::vector<double> r_per;
-        std::transform(spectrumValues.begin(), spectrumValues.end(), std::back_inserter(r_per), [](auto spec) { return std::max(spec.real(), 0.); });
-
-        discreteSpectralDensity = std::vector<double>();
-        std::transform(r_per.begin(), r_per.begin() + nf + 1, std::back_inserter(discreteSpectralDensity), [dt](auto per) { return std::abs(per) * dt / PI; });*/
-    }
+    void CovarianceFunction::loadResources() {}
 
     double CovarianceFunction::spectral_density(double s) const {
         double max_t = 10;

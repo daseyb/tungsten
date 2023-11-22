@@ -38,9 +38,11 @@ DEFINE_STRINGABLE_ENUM(CovarianceFunctionFactory, "covariance", ({
 DEFINE_STRINGABLE_ENUM(ProceduralScalarFactory, "procedural_scalar", ({
     {"sdf", std::make_shared<ProceduralSdf>},
     {"noise", std::make_shared<ProceduralNoise>},
+    {"regular_grid", std::make_shared<RegularGridScalar>},
 }))
 
 DEFINE_STRINGABLE_ENUM(ProceduralVectorFactory, "procedural_vector", ({
+    {"regular_grid", std::make_shared<RegularGridVector>},
 }))
 
 }

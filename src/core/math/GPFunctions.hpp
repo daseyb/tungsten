@@ -250,6 +250,8 @@ namespace Tungsten {
     template<typename ElemType>
     struct RegularGrid : JsonSerializable {
 
+        RegularGrid(const RegularGrid& o) = default;
+
         RegularGrid(Box3d bounds = Box3d(), size_t res = 0, std::vector<ElemType> values = {}) : bounds(bounds), res(res), values(values) {}
 
         Box3d bounds;
@@ -389,11 +391,29 @@ namespace Tungsten {
 
     class RegularGridScalar : public ProceduralScalar {
         std::shared_ptr<RegularGrid<double>> _grid;
+        PathPtr _file;
     public:
-        RegularGridScalar(std::shared_ptr<RegularGrid<double>> grid) : _grid(grid) {}
+        RegularGridScalar(std::shared_ptr<RegularGrid<double>> grid = nullptr) : _grid(grid) {}
 
         virtual double operator()(Vec3d p) const override {
             return _grid->getValue(p);
+        }
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ ProceduralScalar::toJson(allocator), allocator,
+                "type", "regular_grid",
+                "file", *_file
+            };
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            ProceduralScalar::fromJson(value, scene);
+            if (auto f = value["file"]) _file = scene.fetchResource(f);
+        }
+
+        virtual void loadResources() override {
+            _grid = std::make_shared<RegularGrid<double>>();
+            *_grid = load_grid<double>(*_file);
         }
     };
 
@@ -430,13 +450,32 @@ namespace Tungsten {
 
     class RegularGridVector : public ProceduralVector {
         std::shared_ptr<RegularGrid<Vec3d>> _grid;
+        PathPtr _file;
     public:
-        RegularGridVector(std::shared_ptr<RegularGrid<Vec3d>> grid) : _grid(grid) {}
+        RegularGridVector(std::shared_ptr<RegularGrid<Vec3d>> grid = nullptr) : _grid(grid) {}
 
         virtual Vec3d operator()(Vec3d p) const override {
             return _grid->getValue(p);
         }
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ ProceduralVector::toJson(allocator), allocator,
+                "type", "regular_grid",
+                "file", *_file
+            };
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            ProceduralVector::fromJson(value, scene);
+            if (auto f = value["file"]) _file = scene.fetchResource(f);
+        }
+
+        virtual void loadResources() override {
+            _grid = std::make_shared<RegularGrid<Vec3d>>();
+            *_grid = load_grid<Vec3d>(*_file);
+        }
     };
+
 
     class LinearRampVector : public ProceduralVector {
         Vec3d _min;
@@ -1355,13 +1394,17 @@ namespace Tungsten {
     class ProceduralMean : public MeanFunction {
     public:
 
-        ProceduralMean(std::shared_ptr<ProceduralScalar> f) : _f(f) {}
-        ProceduralMean(SdfFunctions::Function fn = SdfFunctions::Function::Knob) {
+        ProceduralMean(std::shared_ptr<ProceduralScalar> f = nullptr) : _f(f) {}
+        ProceduralMean(SdfFunctions::Function fn) {
             _f = std::make_shared<ProceduralSdf>(fn);
         }
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override;
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
+
+        virtual void loadResources() override {
+            if (_f) _f->loadResources();
+        }
 
     private:
         std::shared_ptr<ProceduralScalar> _f;
