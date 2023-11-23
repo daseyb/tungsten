@@ -80,9 +80,15 @@ for param in experiment["params"]:
 
 
 for element, ids in zip(itertools.product(*param_values), itertools.product(*param_ids)):
+    has_skip_param = False
     for j, val in enumerate(element):
         for i, param_name in enumerate(param_objs[j]):
             set_param_path(base_scene, param_name, val[i])
+            if val[i] == "---":
+                has_skip_param = True
+    
+    if has_skip_param:
+        continue
     
     out_file = output_folder + f"/{'-'.join([str(id) for id in ids])}.json"
     with open(out_file, 'w', encoding='utf-8') as f:
