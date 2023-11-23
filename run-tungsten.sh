@@ -14,7 +14,7 @@
 
 #SBATCH -o ./report/output-render.%A.%a.out # STDOUT
 
-#SBATCH --array=1-500
+#SBATCH --array=1-50
 # Request memory
 #SBATCH --mem=4G
 # Walltime (job duration)

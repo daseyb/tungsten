@@ -494,13 +494,17 @@ namespace Tungsten {
             _f = scene.fetchProceduralScalar(f);
         }
 
+        if(auto c = value["color"]) {
+            _col = scene.fetchProceduralVector(c);
+        }
+
         value.getField("min", _min);
         value.getField("scale", _scale);
         value.getField("offset", _offset);
     }
 
     rapidjson::Value ProceduralMean::toJson(Allocator& allocator) const {
-        return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+        auto obj =  JsonObject{ JsonSerializable::toJson(allocator), allocator,
             "type", "procedural",
             "f", *_f,
             "transform", _configTransform,
@@ -508,6 +512,10 @@ namespace Tungsten {
             "scale", _scale,
             "scale", _offset,
         };
+
+        if(_col) {
+            obj.add("color", *_col);
+        }
     }
 
     double ProceduralMean::mean(Vec3d a) const {
