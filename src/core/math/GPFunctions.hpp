@@ -1484,6 +1484,7 @@ namespace Tungsten {
         std::shared_ptr<ProceduralScalar> _f;
 
         float _min = -FLT_MAX;
+        float _offset = 0;
         float _scale = 1.f;
 
         Mat4f _configTransform;

@@ -496,6 +496,7 @@ namespace Tungsten {
 
         value.getField("min", _min);
         value.getField("scale", _scale);
+        value.getField("offset", _offset);
     }
 
     rapidjson::Value ProceduralMean::toJson(Allocator& allocator) const {
@@ -505,6 +506,7 @@ namespace Tungsten {
             "transform", _configTransform,
             "min", _min,
             "scale", _scale,
+            "scale", _offset,
         };
     }
 
@@ -513,7 +515,7 @@ namespace Tungsten {
         p = _invConfigTransform.transformPoint(p);
         float m = (*_f)(a);
         m *= _scale;
-        return max(_min, m);
+        return max(_min, m + _offset);
     }
 
     Vec3d ProceduralMean::dmean_da(Vec3d a) const {

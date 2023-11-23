@@ -3,11 +3,13 @@
 #include "math/Angle.hpp"
 #include <Eigen/IterativeLinearSolvers>
 #include <random>
+#include <cmath>
 
 namespace Tungsten {
     CovMatrix project_to_psd(const CovMatrix& in) {
+
         Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigs(in);
-        auto eps = 1e6 * DBL_EPSILON * eigs.eigenvalues()[0];
+        auto eps = 1e6 * std::numeric_limits<double>::epsilon() * eigs.eigenvalues()[0];
 
         CovMatrix result = eigs.eigenvectors()
             * eigs.eigenvalues().array().max(eps).matrix() * eigs.eigenvectors();
