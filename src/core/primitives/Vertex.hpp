@@ -11,6 +11,7 @@ class Vertex
 {
     Vec3f _pos, _normal;
     Vec2f _uv;
+    Vec3f _color;
 
 public:
     Vertex() = default;
@@ -30,6 +31,12 @@ public:
     {
     }
 
+    Vertex(const Vec3f& pos, const Vec3f& normal, const Vec2f& uv, const Vec3f& color)
+        : _pos(pos), _normal(normal), _uv(uv), _color(color)
+    {
+    }
+
+
     const Vec3f &normal() const
     {
         return _normal;
@@ -43,6 +50,11 @@ public:
     const Vec2f &uv() const
     {
         return _uv;
+    }
+
+    const Vec3f& color() const
+    {
+        return _color;
     }
 
     Vec3f &normal()
@@ -60,11 +72,17 @@ public:
         return _uv;
     }
 
+    Vec3f& color()
+    {
+        return _color;
+    }
+
     bool operator==(const Vertex& o) const
     {
         if (pos() != o.pos()) return false;
         if (uv() != o.uv()) return false;
         if (normal() != o.normal()) return false;
+        if (color() != o.color()) return false;
         return true;
     }
 
@@ -73,6 +91,7 @@ public:
         if (pos() != o.pos()) return true;
         if (uv() != o.uv()) return true;
         if (normal() != o.normal()) return true;
+        if (color() != o.color()) return true;
         return false;
     }
 
@@ -105,6 +124,7 @@ namespace std
             hash_combine(result, c.pos());
             hash_combine(result, c.normal());
             hash_combine(result, c.uv());
+            hash_combine(result, c.color());
             return result;
         }
     };

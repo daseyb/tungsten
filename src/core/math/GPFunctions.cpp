@@ -560,6 +560,29 @@ namespace Tungsten {
         return (float)S_vis(0);
     }
 
+    Vec3d MeshSdfMean::color(Vec3d a) const {
+        Eigen::RowVector3d P = vec_conv<Eigen::RowVector3d>(a);
+
+        Eigen::VectorXd sqrD;
+        Eigen::VectorXi I;
+        Eigen::RowVector3d closest_point;
+        tree.squared_distance(V, F, P, sqrD, I, closest_point);
+
+        Eigen::VectorXi closestFace = F.row(I[0]);
+
+        Eigen::RowVector3d L;
+        igl::barycentric_coordinates(
+            closest_point,
+            V.row(closestFace[0]), V.row(closestFace[1]), V.row(closestFace[2]),
+            L);
+
+        Vec3f colA = _colors[closestFace[0]];
+        Vec3f colB = _colors[closestFace[1]];
+        Vec3f colC = _colors[closestFace[2]];
+
+        return vec_conv<Vec3d>(colA * L(0,0) + colB * L(0, 1) + colC * L(0,2));
+    }
+
     Vec3d MeshSdfMean::dmean_da(Vec3d a) const {
         double eps = 0.001f;
         double vals[] = {
@@ -582,12 +605,15 @@ namespace Tungsten {
         if (_path && MeshIO::load(*_path, _verts, _tris)) {
 
             V.resize(_verts.size(), 3);
+            _colors.resize(_verts.size());
 
             for (int i = 0; i < _verts.size(); i++) {
                 Vec3f tpos = _configTransform * _verts[i].pos();
                 V(i, 0) = tpos.x();
                 V(i, 1) = tpos.y();
                 V(i, 2) = tpos.z();
+
+                _colors[i] = _verts[i].color();
 
                 //Vec3f tnorm = _configTransform.transformVector(_verts[i].normal());
              
@@ -604,13 +630,10 @@ namespace Tungsten {
             }
 
             tree.init(V, F);
-            igl::per_face_normals(V, F, FN);
-            igl::per_vertex_normals(
-                V, F, igl::PER_VERTEX_NORMALS_WEIGHTING_TYPE_ANGLE, FN, VN);
-            igl::per_edge_normals(
-                V, F, igl::PER_EDGE_NORMALS_WEIGHTING_TYPE_UNIFORM, FN, EN, E, EMAP);
-
             igl::fast_winding_number(V, F, 2, fwn_bvh);
+        }
+        else {
+            FAIL("Failed to load mesh.");
         }
     }
 
