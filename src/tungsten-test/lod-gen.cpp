@@ -707,10 +707,10 @@ std::vector<double> compute_acf_fftw_3D(
         }
     }
 
-    meanV /= ww * wh * wd;
+    /*meanV /= ww * wh * wd;
     for (int i = 0; i < ww * wh * wd; ++i) {
         in[i] -= meanV;
-    }
+    }*/
 
     // Execute the forward FFT
     fftw_execute(forward_plan);
@@ -763,6 +763,10 @@ struct CovResidual {
             Derivative::None, Derivative::None, 
             Vec3d(), x_,
             Vec3d(), Vec3d());
+
+        if (!std::isfinite(residual[0])) {
+            residual[0] = 10000;
+        }
 
         return true;
     }
@@ -1195,8 +1199,9 @@ std::tuple<
 
 std::tuple<
     RegularGrid<double>, RegularGrid<double>, RegularGrid<double>, RegularGrid<double>,
-    RegularGrid<double>, RegularGrid<double>, RegularGrid<Vec3d>, RegularGrid<Vec3d>> compute_acf_nonstationary_real_3D(
+    RegularGrid<double>, RegularGrid<Vec3d>, RegularGrid<double>, RegularGrid<Vec3d>, RegularGrid<Vec3d>> compute_acf_nonstationary_real_3D(
         std::function<double(Vec3d)> signal,
+        std::function<Vec3d(Vec3d)> color,
         Box3d bounds,
         size_t res,
         size_t meanRes,
@@ -1205,21 +1210,25 @@ std::tuple<
 
     std::shared_ptr<StationaryCovariance> base_cov = std::make_shared<SquaredExponentialCovariance>();
 
-    RegularGrid<double> acf_fit{ bounds, res, std::vector<double>(res * res * res) };
-    RegularGrid<double> acf_fftw{ bounds, res, std::vector<double>(res * res * res) };
-    RegularGrid<double> residual{ bounds, res, std::vector<double>(res * res * res) };
-    RegularGrid<double> mean{ bounds, res, std::vector<double>(res * res * res) };
+    RegularGrid<double> acf_fit{ bounds, res, std::vector<double>(res * res * res), InterpolateMethod::Point };
+    RegularGrid<double> acf_fftw{ bounds, res, std::vector<double>(res * res * res), InterpolateMethod::Point };
+    RegularGrid<double> residual{ bounds, res, std::vector<double>(res * res * res), InterpolateMethod::Point };
+    RegularGrid<double> mean{ bounds, res, std::vector<double>(res * res * res), InterpolateMethod::Point };
 
     std::cout << "Evaluating signal on grid\n";
     RegularGrid signalGrid = eval_grid(signal, bounds, res);
 
-    auto cellSize = bounds.diagonal() / meanRes;
     auto meanBounds = bounds;
 
     std::cout << "Downsampling mean\n";
     RegularGrid meanGrid = eval_grid<double>([&](Vec3d p) {
         return signalGrid.getValue(p);
     }, meanBounds, meanRes, 1000);
+    meanGrid.interp = InterpolateMethod::Quadratic;
+
+    std::cout << "Downsampling color\n";
+    RegularGrid colorGrid = eval_grid<Vec3d>(color, meanBounds, meanRes, 1000);
+    colorGrid.interp = InterpolateMethod::Quadratic;
 
     auto mean_f = [&](Vec3d p) {
         return meanGrid.getValue(p);
@@ -1228,15 +1237,15 @@ std::tuple<
     auto points = signalGrid.makePoints();
 
     RegularGrid<double> varGrid{
-        bounds, covRes, std::vector<double>(covRes * covRes * covRes)
+        bounds, covRes, std::vector<double>(covRes * covRes * covRes), InterpolateMethod::Linear
     };
 
     RegularGrid<Vec3d> lsGrid{
-        bounds, covRes, std::vector<Vec3d>(covRes * covRes * covRes)
+        bounds, covRes, std::vector<Vec3d>(covRes * covRes * covRes), InterpolateMethod::Linear
     };
 
     RegularGrid<Vec3d> anisoGrid{
-        bounds, covRes, std::vector<Vec3d>(covRes * covRes * covRes)
+        bounds, covRes, std::vector<Vec3d>(covRes * covRes * covRes), InterpolateMethod::Linear
     };
 
     std::cout << "Compute covariance blocks\n";
@@ -1291,7 +1300,7 @@ std::tuple<
         }
     }
 
-    return { acf_fit, acf_fftw, residual, mean, meanGrid, varGrid, lsGrid, anisoGrid };
+    return { acf_fit, acf_fftw, residual, mean, meanGrid, colorGrid, varGrid, lsGrid, anisoGrid };
 }
 
 
@@ -1316,11 +1325,28 @@ int estimate_acf_mesh(int argc, char** argv) {
     size_t dim = 512;
 
     RegularGrid<double> signal;
+    RegularGrid<Vec3d> colors;
 
     auto sdfPath = basePath / Path(tinyformat::format("sdf-%d.json", dim));
     if (sdfPath.exists()) {
         std::cout << "Loading precomputed SDF\n";
         signal = load_grid<double>(sdfPath);
+        signal.interp = InterpolateMethod::Quadratic;
+
+        colors = load_grid<Vec3d>(basePath / Path(tinyformat::format("color-%d.json", dim)));
+        colors.interp = InterpolateMethod::Quadratic;
+
+        bool fixedAny = false;
+        for (auto& v : colors.values) {
+            if (std::isinf(v) || std::isnan(v)) {
+                v = Vec3d(0.);
+                fixedAny = true;
+            }
+        }
+
+        if (fixedAny) {
+            save_grid(colors, basePath / Path(tinyformat::format("color-%d.json", dim)));
+        }
     }
     else {
         std::cout << "Loading mesh\n";
@@ -1334,8 +1360,15 @@ int estimate_acf_mesh(int argc, char** argv) {
         signal = eval_grid<double>([&](Vec3d p) {
             return mean(Derivative::None, p, Vec3d()) - 0.01;
         }, bounds, dim);
-
+        signal.interp = InterpolateMethod::Quadratic;
         save_grid(signal, sdfPath);
+
+        std::cout << "Evaluating high-res color\n";
+        colors = eval_grid<Vec3d>([&](Vec3d p) {
+            return mean.color(p);
+        }, bounds, dim);
+        colors.interp = InterpolateMethod::Quadratic;
+        save_grid(colors, basePath / Path(tinyformat::format("color-%d.json", dim)));
     }
 
     int mean_res = 64;
@@ -1345,21 +1378,29 @@ int estimate_acf_mesh(int argc, char** argv) {
         return signal.getValue(p);
     };
 
+    auto color_f = [&](Vec3d p) {
+        return colors.getValue(p);
+    };
+
     auto occupancy_highres = eval_grid<double>([&](Vec3d p) {
         return signal_f(p) < 0 ? 1. : 0.;
     }, signal.bounds, dim, 1);
+    occupancy_highres.interp = InterpolateMethod::Quadratic;
     save_grid(occupancy_highres, basePath / "occupancy-high.json");
 
     auto occupancy_avg = eval_grid<double>([&](Vec3d p) {
         return signal_f(p) < 0 ? 1. : 0.;
     }, signal.bounds, mean_res, 1000);
+    occupancy_avg.interp = InterpolateMethod::Quadratic;
     save_grid(occupancy_avg, basePath / "occupancy-avg.json");
 
 
     std::cout << "Computing ACF\n";
-    auto [acf_fit, acf_fftw, residual, downsampled_mean, mean, variance, ls, aniso] = compute_acf_nonstationary_real_3D(signal_f, signal.bounds, dim, mean_res, cov_res);
+    auto [acf_fit, acf_fftw, residual, downsampled_mean, 
+        mean, color, variance, ls, aniso] = compute_acf_nonstationary_real_3D(signal_f, color_f, signal.bounds, dim, mean_res, cov_res);
 
     save_grid(mean, basePath / "mean.json");
+    save_grid(color, basePath / "color.json");
     save_grid(variance, basePath / "var.json");
     save_grid(ls, basePath / "ls.json");
     save_grid(aniso, basePath / "aniso.json");

@@ -293,7 +293,8 @@ namespace Tungsten {
 
         InterpolateMethod interp = InterpolateMethod::Linear;
 
-        RegularGrid(Box3d bounds = Box3d(), size_t res = 0, std::vector<ElemType> values = {}) : bounds(bounds), res(res), values(values) {}
+        RegularGrid(Box3d bounds = Box3d(), size_t res = 0, std::vector<ElemType> values = {}, InterpolateMethod interp = InterpolateMethod::Linear) 
+            : bounds(bounds), res(res), values(values), interp(interp) {}
 
         Box3d bounds;
         size_t res;
@@ -782,7 +783,7 @@ namespace Tungsten {
 
         Eigen::Matrix3d getAnisoRoot(Vec3d p) const {
             if (_anisoField && _ls) {
-                Vec3d dir = (*_anisoField)(p).normalized();
+                Vec3d dir = Vec3d(1., 0., 0.); // (*_anisoField)(p).normalized();
                 Vec3d ls = (*_ls)(p);
                 return compute_ansio<Eigen::Matrix3d>(vec_conv<Eigen::Vector3d>(dir), vec_conv<Eigen::Vector3d>(ls));
             }
@@ -798,7 +799,7 @@ namespace Tungsten {
 
         Eigen::Matrix3d getAniso(Vec3d p) const {
             if (_anisoField && _ls) {
-                Vec3d dir = (*_anisoField)(p).normalized();
+                Vec3d dir = Vec3d(1., 0., 0.); //(*_anisoField)(p).normalized();
                 Vec3d ls = (*_ls)(p);
                 return compute_ansio<Eigen::Matrix3d>(vec_conv<Eigen::Vector3d>(dir), vec_conv<Eigen::Vector3d>(ls*ls));
             }
@@ -1293,6 +1294,11 @@ namespace Tungsten {
         virtual double lipschitz() const {
             return 1.;
         }
+
+        virtual Vec3d color(Vec3d a) const {
+            return Vec3d(1.);
+        }
+
     private:
         virtual double mean(Vec3d a) const = 0;
     };
@@ -1480,8 +1486,19 @@ namespace Tungsten {
             if (_f) _f->loadResources();
         }
 
+        virtual Vec3d color(Vec3d a) const override  {
+            if (!_col) {
+                return Vec3d(1.);
+            }
+            else {
+                a = vec_conv<Vec3d>(_invConfigTransform.transformPoint(vec_conv<Vec3f>(a)));
+                return (*_col)(a);
+            }
+        }
+
     private:
         std::shared_ptr<ProceduralScalar> _f;
+        std::shared_ptr<ProceduralVector> _col;
 
         float _min = -FLT_MAX;
         float _offset = 0;
@@ -1503,6 +1520,9 @@ namespace Tungsten {
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
         virtual void loadResources() override;
 
+        virtual Vec3d color(Vec3d a) const override;
+
+
         Box3d bounds() {
             return _bounds;
         }
@@ -1516,6 +1536,8 @@ namespace Tungsten {
         Eigen::MatrixXd FN, VN, EN;
         Eigen::MatrixXi E;
         Eigen::VectorXi EMAP;
+
+        std::vector<Vec3f> _colors;
 
         igl::FastWindingNumberBVH fwn_bvh;
         igl::AABB<Eigen::MatrixXd, 3> tree;

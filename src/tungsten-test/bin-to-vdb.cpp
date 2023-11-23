@@ -114,6 +114,7 @@ int gen3d(int argc, char** argv) {
 
 }
 
+template<typename GridType>
 int grid_to_vdb(int argc, char** argv) {
 
     ThreadUtils::startThreads(1);
@@ -126,7 +127,7 @@ int grid_to_vdb(int argc, char** argv) {
 
     auto base_path = Path(argv[1]);
 
-    auto grid = load_grid<double>(base_path);
+    auto grid = load_grid<GridType::ValueType>(base_path);
 
 
     Vec3d minp = grid.bounds.min();
@@ -138,11 +139,11 @@ int grid_to_vdb(int argc, char** argv) {
     gridTransform.setToScale(vec_conv<openvdb::Vec3R>((maxp - minp) / dim));
     gridTransform.setTranslation(vec_conv<openvdb::Vec3R>(minp));
 
-    auto meanGrid = openvdb::createGrid<openvdb::FloatGrid>(100.f);
+    auto meanGrid = openvdb::createGrid<GridType>();
     meanGrid->setGridClass(openvdb::GRID_LEVEL_SET);
     meanGrid->setName("values");
     meanGrid->setTransform(openvdb::math::Transform::createLinearTransform(gridTransform));
-    openvdb::FloatGrid::Accessor meanAccessor = meanGrid->getAccessor();
+    GridType::Accessor meanAccessor = meanGrid->getAccessor();
 
     auto points = grid.makePoints(true);
     
@@ -165,7 +166,12 @@ int grid_to_vdb(int argc, char** argv) {
 int main(int argc, char** argv) {
 
     if (Path(argv[1]).extension() == ".json") {
-        return grid_to_vdb(argc, argv);
+        if (argc == 2 || std::string(argv[2]) == "1") {
+            return grid_to_vdb<openvdb::DoubleGrid>(argc, argv);
+        }
+        else if(std::string(argv[2]) == "3") {
+            return grid_to_vdb<openvdb::Vec3DGrid>(argc, argv);
+        }
     }
     else {
         return gen3d(argc, argv);

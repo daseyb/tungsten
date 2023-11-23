@@ -320,6 +320,7 @@ namespace Tungsten {
         sample.phase = _phaseFunctions[state.lastGPId].get();
         sample.gpId = state.lastGPId;
         sample.ctxt = state.gpContext.get();
+        sample.weight = vec_conv<Vec3f>(_gp->color(vec_conv<Vec3d>(sample.p)));
 
         return true;
     }
