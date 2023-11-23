@@ -1484,6 +1484,7 @@ namespace Tungsten {
 
         virtual void loadResources() override {
             if (_f) _f->loadResources();
+            if (_col) _col->loadResources();
         }
 
         virtual Vec3d color(Vec3d a) const override  {

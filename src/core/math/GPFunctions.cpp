@@ -516,6 +516,8 @@ namespace Tungsten {
         if(_col) {
             obj.add("color", *_col);
         }
+
+        return obj;
     }
 
     double ProceduralMean::mean(Vec3d a) const {
