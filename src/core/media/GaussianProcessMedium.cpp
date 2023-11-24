@@ -304,12 +304,17 @@ namespace Tungsten {
                     std::cout << "Gradient zero.\n";
                     return false;
                 }
+
+                sample.weight = vec_conv<Vec3f>(_gp->color(vec_conv<Vec3d>(sample.p)));
+                sample.continuedWeight = vec_conv<Vec3f>(_gp->color(vec_conv<Vec3d>(sample.p)));
+            } else {
+                sample.weight = sample.continuedWeight = Vec3f(1.f);
             }
 
             sample.t = min(float(t), maxT);
             sample.continuedT = float(t);
-            sample.weight = sigmaS(ray.pos() + sample.t * ray.dir()) / sigmaT(ray.pos() + sample.t * ray.dir());
-            sample.continuedWeight = sigmaS(ray.pos() + sample.continuedT * ray.dir()) / sigmaT(ray.pos() + sample.continuedT * ray.dir());
+            sample.weight *= sigmaS(ray.pos() + sample.t * ray.dir()) / sigmaT(ray.pos() + sample.t * ray.dir());
+            sample.continuedWeight *= sigmaS(ray.pos() + sample.continuedT * ray.dir()) / sigmaT(ray.pos() + sample.continuedT * ray.dir());
             sample.pdf = 1;
 
             state.lastAniso = sample.aniso;
@@ -320,7 +325,6 @@ namespace Tungsten {
         sample.phase = _phaseFunctions[state.lastGPId].get();
         sample.gpId = state.lastGPId;
         sample.ctxt = state.gpContext.get();
-        sample.weight = vec_conv<Vec3f>(_gp->color(vec_conv<Vec3d>(sample.p)));
 
         return true;
     }
