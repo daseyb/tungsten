@@ -569,7 +569,7 @@ namespace Tungsten {
         Eigen::VectorXd S_vis;
         igl::signed_distance_fast_winding_number(V_vis, V, F, tree, fwn_bvh, S_vis);
 
-        return (float)S_vis(0);
+        return (double)S_vis(0);
     }
 
     Vec3d MeshSdfMean::color(Vec3d a) const {
@@ -582,17 +582,38 @@ namespace Tungsten {
 
         Eigen::VectorXi closestFace = F.row(I[0]);
 
+        Eigen::RowVector3d 
+            vA = V.row(closestFace[0]), 
+            vB = V.row(closestFace[1]), 
+            vC = V.row(closestFace[2]);
+
         Eigen::RowVector3d L;
         igl::barycentric_coordinates(
             closest_point,
-            V.row(closestFace[0]), V.row(closestFace[1]), V.row(closestFace[2]),
+            vA, vB, vC,
             L);
 
         Vec3f colA = _colors[closestFace[0]];
         Vec3f colB = _colors[closestFace[1]];
         Vec3f colC = _colors[closestFace[2]];
 
-        return vec_conv<Vec3d>(colA * L(0,0) + colB * L(0, 1) + colC * L(0,2));
+        Vec3d result = vec_conv<Vec3d>(colA * L[0] + colB * L[1] + colC * L[2]);
+
+        if (std::isinf(result) || std::isnan(result) || (colA + colB + colC).sum() < 0.05f) {
+            /*std::cerr << "Sampled color is not valid\n";
+            std::cerr << L << "\n";
+            std::cerr << closestFace << "\n";
+            std::cerr << closest_point << "\n";
+            std::cerr << vA << "\n";
+            std::cerr << vB << "\n";
+            std::cerr << vC << "\n";
+            std::cerr << colA << "\n";
+            std::cerr << colB << "\n";
+            std::cerr << colC << "\n";*/
+            return vec_conv<Vec3d>(colA + colB + colC) / 3;
+        }
+
+        return result;
     }
 
     Vec3d MeshSdfMean::dmean_da(Vec3d a) const {
@@ -626,6 +647,10 @@ namespace Tungsten {
                 V(i, 2) = tpos.z();
 
                 _colors[i] = _verts[i].color();
+
+                if (_colors[i].sum() < 0.001) {
+                    _colors[i] = Vec3f(0.215684f, 0.262744f, 0.031373f);
+                }
 
                 //Vec3f tnorm = _configTransform.transformVector(_verts[i].normal());
              

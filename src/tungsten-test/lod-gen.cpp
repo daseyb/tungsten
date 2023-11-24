@@ -707,10 +707,10 @@ std::vector<double> compute_acf_fftw_3D(
         }
     }
 
-    /*meanV /= ww * wh * wd;
+    meanV /= ww * wh * wd;
     for (int i = 0; i < ww * wh * wd; ++i) {
         in[i] -= meanV;
-    }*/
+    }
 
     // Execute the forward FFT
     fftw_execute(forward_plan);
@@ -1266,7 +1266,6 @@ std::tuple<
                     int wz = (k) * (res / covRes) - (res / covRes) / 2;
 
                     std::vector<double> acf;
-
                     {
                         #pragma omp critical
                         acf = compute_acf_fftw_3D(signalGrid.values.data(), points.data(), wx, wy, wz, ww, wh, wd, res, res, res, mean_f);
