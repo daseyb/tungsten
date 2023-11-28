@@ -159,6 +159,7 @@ void GaussianProcess::fromJson(JsonPtr value, const Scene& scene) {
     value.getField("covariance_epsilon", _covEps);
     value.getField("id", _id);
     value.getField("project_cov", _requireCovProjection);
+    value.getField("pseudo_inverse", _usePseudoInverse);
 
     if (auto conditioningDataPath = value["conditioning_data"])
         _conditioningDataPath = scene.fetchResource(conditioningDataPath);
@@ -173,7 +174,8 @@ rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
         "max_num_eigenvalues", _maxEigenvaluesN,
         "covariance_epsilon", _covEps,
         "id", _id,
-        "project_cov", _requireCovProjection
+        "project_cov", _requireCovProjection,
+        "pseudo_inverse", _usePseudoInverse
     };
 
     if (_conditioningDataPath) {
@@ -601,44 +603,48 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         cond_ddirs, ddirs,
         deriv_dir, numCondPts, numPts);
 
-    //CovMatrix solved = (pseudo_inverse(s11) * s12).transpose();
     
     CovMatrix solved;
-    bool succesfullSolve = false;
-    if (true || s11.rows() <= 64) {
-#ifdef SPARSE_COV
-        Eigen::SimplicialLDLT<CovMatrix> solver(s11);
-#else
-        Eigen::LDLT<CovMatrix> solver(s11.triangularView<Eigen::Lower>());
-#endif
-        if (solver.info() == Eigen::ComputationInfo::Success && solver.isPositive()) {
-            solved = solver.solve(s12).transpose();
-            if (solver.info() == Eigen::ComputationInfo::Success) {
-                succesfullSolve = true;
-            }
-            else {
-                std::cerr << "Conditioning solving failed (LDLT)!\n";
-            }
-        }
+    if (_usePseudoInverse) {
+        solved = (pseudo_inverse(s11) * s12).transpose();
     }
-
-
-    if (!succesfullSolve) {
-        Eigen::BDCSVD<Eigen::MatrixXd, Eigen::ComputeThinU | Eigen::ComputeThinV> solver;
-        solver.compute(s11.triangularView<Eigen::Lower>());
-
-        if (solver.info() != Eigen::ComputationInfo::Success) {
-            std::cerr << "Conditioning decomposition failed (BDCSVD)!\n";
+    else {
+        bool succesfullSolve = false;
+        if (true || s11.rows() <= 64) {
+#ifdef SPARSE_COV
+            Eigen::SimplicialLDLT<CovMatrix> solver(s11);
+#else
+            Eigen::LDLT<CovMatrix> solver(s11.triangularView<Eigen::Lower>());
+#endif
+            if (solver.info() == Eigen::ComputationInfo::Success && solver.isPositive()) {
+                solved = solver.solve(s12).transpose();
+                if (solver.info() == Eigen::ComputationInfo::Success) {
+                    succesfullSolve = true;
+                }
+                else {
+                    std::cerr << "Conditioning solving failed (LDLT)!\n";
+                }
+            }
         }
 
+
+        if (!succesfullSolve) {
+            Eigen::BDCSVD<Eigen::MatrixXd, Eigen::ComputeThinU | Eigen::ComputeThinV> solver;
+            solver.compute(s11.triangularView<Eigen::Lower>());
+
+            if (solver.info() != Eigen::ComputationInfo::Success) {
+                std::cerr << "Conditioning decomposition failed (BDCSVD)!\n";
+            }
+
 #ifdef SPARSE_COV
-        Eigen::MatrixXd solvedDense = solver.solve(s12.toDense()).transpose();
-        solved = solvedDense.sparseView();
+            Eigen::MatrixXd solvedDense = solver.solve(s12.toDense()).transpose();
+            solved = solvedDense.sparseView();
 #else
-        solved = solver.solve(s12).transpose();
+            solved = solver.solve(s12).transpose();
 #endif
-        if (solver.info() != Eigen::ComputationInfo::Success) {
-            std::cerr << "Conditioning solving failed (BDCSVD)!\n";
+            if (solver.info() != Eigen::ComputationInfo::Success) {
+                std::cerr << "Conditioning solving failed (BDCSVD)!\n";
+            }
         }
     }
 
@@ -652,6 +658,10 @@ MultivariateNormalDistribution GaussianProcess::create_mvn_cond(
         deriv_dir, numPts);
 
     CovMatrix s2 = s22 - (solved * s12);
+
+    if (_requireCovProjection) {
+        s2 = project_to_psd(s2);
+    }
 
     return MultivariateNormalDistribution(m2, s2);
 }

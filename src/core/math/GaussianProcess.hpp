@@ -336,6 +336,7 @@ namespace Tungsten {
         int _id = 0;
 
         bool _requireCovProjection = false;
+        bool _usePseudoInverse = false;
     };
 }
 
