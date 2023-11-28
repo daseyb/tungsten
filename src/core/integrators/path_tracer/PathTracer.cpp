@@ -146,8 +146,21 @@ Vec3f PathTracer::traceSample(Vec2u pixel, PathSampleGenerator &sampler)
             std::cerr << "Path tracing bounces ended with farT == 0. Was surface event? " << (hitSurface ? "yes" : "no") << "\n";
         }
     }
-    if (bounce >= _settings.minBounces && bounce < _settings.maxBounces)
+    if (bounce >= _settings.minBounces && bounce < _settings.maxBounces) {
         handleInfiniteLights(data, info, _settings.enableLightSampling, ray, throughput, wasSpecular, emission);
+        if (_firstMediumBounceCb) {
+            mediumSample.p = ray.pos() + ray.dir() * 10;
+            if (!_firstMediumBounceCb(mediumSample, ray.scatter(mediumSample.p, ray.dir(), 0))) {
+                return Vec3f(0.f);
+            }
+        }
+
+        if (_firstSurfaceBounceCb) {
+            if (!_firstSurfaceBounceCb(surfaceEvent, ray.scatter(ray.pos() + ray.dir() * 10, ray.dir(), 0))) {
+                return Vec3f(0.f);
+            }
+        }
+    }
     if (std::isnan(throughput.sum() + emission.sum()))
         return nanEnvDirColor;
 

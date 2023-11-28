@@ -238,7 +238,7 @@ void record_paths(std::string scene_file, TraceableScene* tracableScene) {
 
     PathTracer pathTracer(tracableScene, settings, 0);
 
-    int samples = 100000;
+    int samples = 1000;
     Eigen::MatrixXf path_points(samples * settings.maxBounces, 3);
     path_points.setZero();
 
@@ -334,8 +334,8 @@ int main(int argc, char** argv) {
 
         //first_intersect_ansio(argv[arg], scene);
 
-        record_first_hit(argv[arg], tracableScene);
+        //record_first_hit(argv[arg], tracableScene);
 
-        //record_paths(argv[arg], tracableScene);
+        record_paths(argv[arg], tracableScene);
     }
 }

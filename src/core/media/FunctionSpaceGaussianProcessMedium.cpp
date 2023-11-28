@@ -122,7 +122,7 @@ namespace Tungsten {
             std::shared_ptr<GPRealNode> cond_vs = _gp->sample_start_value(rp, sampler);
             gpSamples = _gp->sample_cond(
                 points.data(), derivs.data(), _samplePoints, nullptr,
-                cond_pts.data(), cond_vs.get(), cond_deriv.data(), 0, nullptr,
+                cond_pts.data(), cond_vs.get(), cond_deriv.data(), 1, nullptr,
                 nullptr, 0,
                 rd, 1, sampler);
         }
