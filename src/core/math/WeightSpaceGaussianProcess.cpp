@@ -132,44 +132,42 @@ double WeightSpaceBasis::lipschitz(const Eigen::VectorXd& weights) const {
 }
 
 
-WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> cov, int n, PathSampleGenerator& sampler, Vec3d spectralLoc, bool sort) {
+WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> cov, int n, PathSampleGenerator& sampler, Vec3d spectralLoc, bool sort, int d) {
     WeightSpaceBasis b(n);
     TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame({0., 0., 1.});
 
     for (int i = 0; i < n; i++) {
         b.offsets(i) = sampler.next1D() * TWO_PI;
         
-#if 0
-        b.freqs(i) = cov->sample_spectral_density(sampler, spectralLoc);
-        auto dir = SampleWarp::uniformCylinder(sampler.next2D());
-        dir.z() = 0;
-        b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir);
-#elif 1
-        auto dir2d = cov->sample_spectral_density_2d(sampler, spectralLoc) ;
-        auto dir = Vec3d(dir2d.x(), dir2d.y(), 0.) ;
-
-        b.dirs.row(i) = frame.toGlobal(vec_conv<Eigen::Vector3d>(dir.normalized()));
-        b.freqs(i) = dir.length();
-
-        if (!std::isfinite(b.freqs(i)) || dir.length() < 0.000001) {
-            std::cerr << "Sampling error!\n";
-            i--;
-            continue;
+        if (d == 1) {
+            b.freqs(i) = cov->sample_spectral_density(sampler, spectralLoc);
+            auto dir = SampleWarp::uniformCylinder(sampler.next2D());
+            dir.z() = 0;
+            b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir);
         }
-#elif 0
-        auto dir = cov->sample_spectral_density_3d(sampler, spectralLoc);
+        else if (d == 2) {
+            auto dir2d = cov->sample_spectral_density_2d(sampler, spectralLoc);
+            auto dir = Vec3d(dir2d.x(), dir2d.y(), 0.);
 
-        b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir.normalized());
-        b.freqs(i) = dir.length();
+            b.dirs.row(i) = frame.toGlobal(vec_conv<Eigen::Vector3d>(dir.normalized()));
+            b.freqs(i) = dir.length();
 
-        if (!std::isfinite(b.freqs(i))) {
-            std::cerr << "Sampling error!\n";
+            if (!std::isfinite(b.freqs(i)) || dir.length() < 0.000001) {
+                std::cerr << "Sampling error!\n";
+                i--;
+                continue;
+            }
         }
-#else
-        b.freqs(i) = cov->sample_spectral_density(sampler);
-        b.dirs.row(i) = Eigen::Vector3d(sampler.nextBoolean(0.5) ? 1. : -1., 0., 0.);
-#endif
+        else {
+            auto dir = cov->sample_spectral_density_3d(sampler, spectralLoc);
 
+            b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir.normalized());
+            b.freqs(i) = dir.length();
+
+            if (!std::isfinite(b.freqs(i))) {
+                std::cerr << "Sampling error!\n";
+            }
+        }
     }
 
     if (sort) {

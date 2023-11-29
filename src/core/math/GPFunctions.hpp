@@ -1008,7 +1008,7 @@ namespace Tungsten {
         virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             Vec3d normal = vec_conv<Vec3d>(sample_standard_normal(3, sampler));
             double rad = sqrt(2) * 1 / _l * normal.length();
-            return vec_conv<Vec3d>(SampleWarp::uniformSphere(sampler.next2D())) * rad;
+            return vec_conv<Vec3d>(SampleWarp::uniformSphere(sampler.next2D()) * _aniso).normalized() * rad;
         }
 
     private:

@@ -39,7 +39,7 @@ namespace Tungsten {
         if (_useSingleRealization) {
             auto basisSampler = UniformPathSampler(0xdeadbeef);
             auto gp = std::static_pointer_cast<GaussianProcess>(_gp);
-            WeightSpaceBasis basis = WeightSpaceBasis::sample(gp->_cov, _numBasisFunctions, basisSampler);
+            WeightSpaceBasis basis = WeightSpaceBasis::sample(gp->_cov, _numBasisFunctions, basisSampler, Vec3d(0.), false, 3);
 
             _globalReal = WeightSpaceRealization::sample(std::make_shared<WeightSpaceBasis>(basis), gp, basisSampler);
         }
@@ -61,6 +61,25 @@ namespace Tungsten {
         GPContextWeightSpace& ctxt = *(GPContextWeightSpace*)state.gpContext.get();
 
         auto rd = vec_conv<Vec3d>(ray.dir());
+
+        auto surface_param = [&](Vec3d p) {
+            Vec3d pc = p - Vec3d(0., 0.5, -5.);
+            double r = pc.length();
+            double theta = acos(pc.y() / r);
+            double phi = atan2(pc.z(), pc.x());
+
+            return Vec3d(theta, phi, (r - 100) * 0.01);
+        };
+
+        auto get_jacobian = [&](auto f, Vec3d p) {
+            auto c = f(p);
+            const double eps = 0.0001;
+            Eigen::Matrix3d jac;
+            jac.row(0) = vec_conv<Eigen::Vector3d>((f(p + Vec3d(eps, 0., 0.))-c) / eps);
+            jac.row(1) = vec_conv<Eigen::Vector3d>((f(p + Vec3d(0., eps, 0.))-c) / eps);
+            jac.row(2) = vec_conv<Eigen::Vector3d>((f(p + Vec3d(0., 0., eps))-c) / eps);
+            return jac;
+        };
 
         switch(_normalSamplingMethod) {
             case GPNormalSamplingMethod::FiniteDifferences:
@@ -90,7 +109,9 @@ namespace Tungsten {
             }
             case GPNormalSamplingMethod::ConditionedGaussian:
             {
-                grad = ctxt.real.evaluateGradient(ip);
+                grad = ctxt.real.evaluateGradient(surface_param(ip));
+                Eigen::Matrix3d jac = get_jacobian(surface_param, ip);
+                grad = vec_conv<Vec3d>(jac.inverse().transpose() * vec_conv<Eigen::Vector3d>(grad)).normalized();
                 break;
             }
             case GPNormalSamplingMethod::Beckmann:
@@ -128,6 +149,7 @@ namespace Tungsten {
             }
         }
 
+
         return true;
     }
 
@@ -140,12 +162,21 @@ namespace Tungsten {
                 ctxt->real = _globalReal;
             }
             else {
-                WeightSpaceBasis basis = WeightSpaceBasis::sample(gp->_cov, _numBasisFunctions, sampler);
+                WeightSpaceBasis basis = WeightSpaceBasis::sample(gp->_cov, _numBasisFunctions, sampler, Vec3d(), false, 3);
                 ctxt->real = WeightSpaceRealization::sample(std::make_shared<WeightSpaceBasis>(basis), gp, sampler);
             }
             
             state.gpContext = ctxt;
         }
+
+        auto surface_param = [&](Vec3d p) {
+            Vec3d pc = p - Vec3d(0., 0.5, -5.);
+            double r = pc.length();
+            double theta = acos(pc.y() / r);
+            double phi = atan2(pc.z(), pc.x());
+
+            return Vec3d(theta, phi, (r-100) * 0.01);
+        };
 
         GPContextWeightSpace& ctxt = *(GPContextWeightSpace*)state.gpContext.get();
         const WeightSpaceRealization& real = ctxt.real;
@@ -163,13 +194,13 @@ namespace Tungsten {
             double sig = sig_0;
 
             auto p = vec_conv<Vec3d>(ray.pos()) + (t + ray.nearT()) * rd;
-            double f0 = real.evaluate(p);
+            double f0 = real.evaluate(surface_param(p));
 
             int sign0 = f0 < 0 ? -1 : 1;
 
             for (int i = 0; i < 2048 * 4; i++) {
                 auto p_c = p + (t + ray.nearT() + delta) * rd;
-                double f_c = real.evaluate(p_c);
+                double f_c = real.evaluate(surface_param(p_c));
                 int signc = f_c < 0 ? -1 : 1;
 
                 if (signc != sign0) {
@@ -204,14 +235,14 @@ namespace Tungsten {
         }
         else {
             auto p = vec_conv<Vec3d>(ray.pos());
-            double f0 = real.evaluate(p);
+            double f0 = real.evaluate(surface_param(p));
             int sign0 = f0 < 0 ? -1 : 1;
 
             double pf = f0;
             t = ray.nearT() + _rayMarchStepSize * sampler.next1D();
             while (t < ray.farT()) {
                 auto p_c = p + t * rd;
-                double f_c = real.evaluate(p_c);
+                double f_c = real.evaluate(surface_param(p_c));
                 int signc = f_c < 0 ? -1 : 1;
                 if (signc != sign0) {
                     t = lerp(t - _rayMarchStepSize, t, (f_c - pf) / _rayMarchStepSize);

@@ -330,7 +330,7 @@ namespace Tungsten {
         auto detAnisoA = anisoA.determinant();
         auto detAnisoB = anisoB.determinant();
 
-        auto anisoABavg = 0.5 * (anisoA + anisoB);
+        Eigen::Matrix3d anisoABavg = 0.5 * (anisoA + anisoB);
         auto detAnisoABavg = anisoABavg.determinant();
 
         auto ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
@@ -351,7 +351,7 @@ namespace Tungsten {
         auto detAnisoA = anisoA.determinant();
         auto detAnisoB = anisoB.determinant();
 
-        auto anisoABavg = 0.5 * (anisoA + anisoB);
+        Eigen::Matrix3d anisoABavg = 0.5 * (anisoA + anisoB);
         auto detAnisoABavg = anisoABavg.determinant();
 
         auto ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
@@ -372,7 +372,7 @@ namespace Tungsten {
         auto detAnisoA = anisoA.determinant();
         auto detAnisoB = anisoB.determinant();
 
-        auto anisoABavg = 0.5 * (anisoA + anisoB);
+        Eigen::Matrix3d anisoABavg = 0.5 * (anisoA + anisoB);
         auto detAnisoABavg = anisoABavg.determinant();
 
         float ansioFac = pow(detAnisoA, 0.25f) * pow(detAnisoB, 0.25f) / sqrt(detAnisoABavg);
