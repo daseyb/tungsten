@@ -607,6 +607,7 @@ namespace Tungsten {
     }
 
     Vec3d MeshSdfMean::shell_embedding(Vec3d a) const {
+        //return a;
         Eigen::RowVector3d P = vec_conv<Eigen::RowVector3d>(a);
 
         Eigen::VectorXd sqrD;

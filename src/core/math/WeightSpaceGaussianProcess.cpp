@@ -47,11 +47,14 @@ Affine<1> WeightSpaceRealization::evaluate(const Affine<3>& p) const {
 Vec3d WeightSpaceRealization::evaluateGradient(const Vec3d& p) const {
     auto get_jacobian = [&](auto f, Vec3d p) {
         auto c = f(p);
-        const double eps = 0.0001;
+        double eps = 0.0001;
         Eigen::Matrix3d jac;
-        jac.row(0) = vec_conv<Eigen::Vector3d>((f(p + Vec3d(eps, 0., 0.)) - c) / eps);
-        jac.row(1) = vec_conv<Eigen::Vector3d>((f(p + Vec3d(0., eps, 0.)) - c) / eps);
-        jac.row(2) = vec_conv<Eigen::Vector3d>((f(p + Vec3d(0., 0., eps)) - c) / eps);
+        do {
+            jac.row(0) = vec_conv<Eigen::Vector3d>((f(p + Vec3d(eps, 0., 0.)) - c) / eps);
+            jac.row(1) = vec_conv<Eigen::Vector3d>((f(p + Vec3d(0., eps, 0.)) - c) / eps);
+            jac.row(2) = vec_conv<Eigen::Vector3d>((f(p + Vec3d(0., 0., eps)) - c) / eps);
+            eps *= 2;
+        } while(jac.determinant() < 0.0001);
         return jac;
     };
 
