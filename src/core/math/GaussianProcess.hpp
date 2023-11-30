@@ -240,7 +240,7 @@ namespace Tungsten {
             return _mean->color(p);
         }
 
-        Vec3d shell_embedding(Vec3d p) const override {
+        Vec3d shell_embedding(Vec3d p) const {
             if(_embedCov) {
                 return _mean->shell_embedding(p);
             } else {
@@ -345,7 +345,7 @@ namespace Tungsten {
 
         bool _requireCovProjection = false;
         bool _usePseudoInverse = false;
-        bool _embedShell = false;
+        bool _embedCov = false;
     };
 }
 
