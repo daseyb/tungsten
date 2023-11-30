@@ -631,7 +631,7 @@ namespace Tungsten {
         Vec2f uvB = _uvs[closestFace[1]];
         Vec2f uvC = _uvs[closestFace[2]];
 
-        Vec2d uv = Vec2d(uvA * L[0] + uvB * L[1] + uvC * L[2]);
+        Vec2d uv = Vec2d(uvA * L[0] + uvB * L[1] + uvC * L[2]) * _bounds.diagonal().length();
 
         double w = igl::fast_winding_number(fwn_bvh, 2, P);
         //0.5 is on surface
