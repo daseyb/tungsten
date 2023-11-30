@@ -600,20 +600,44 @@ namespace Tungsten {
         Vec3d result = vec_conv<Vec3d>(colA * L[0] + colB * L[1] + colC * L[2]);
 
         if (std::isinf(result) || std::isnan(result) || (colA + colB + colC).sum() < 0.05f) {
-            /*std::cerr << "Sampled color is not valid\n";
-            std::cerr << L << "\n";
-            std::cerr << closestFace << "\n";
-            std::cerr << closest_point << "\n";
-            std::cerr << vA << "\n";
-            std::cerr << vB << "\n";
-            std::cerr << vC << "\n";
-            std::cerr << colA << "\n";
-            std::cerr << colB << "\n";
-            std::cerr << colC << "\n";*/
             return vec_conv<Vec3d>(colA + colB + colC) / 3;
         }
 
         return result;
+    }
+
+    Vec3d MeshSdfMean::shell_embedding(Vec3d a) const {
+        Eigen::RowVector3d P = vec_conv<Eigen::RowVector3d>(a);
+
+        Eigen::VectorXd sqrD;
+        Eigen::VectorXi I;
+        Eigen::RowVector3d closest_point;
+        tree.squared_distance(V, F, P, sqrD, I, closest_point);
+
+        Eigen::VectorXi closestFace = F.row(I[0]);
+
+        Eigen::RowVector3d
+            vA = V.row(closestFace[0]),
+            vB = V.row(closestFace[1]),
+            vC = V.row(closestFace[2]);
+
+        Eigen::RowVector3d L;
+        igl::barycentric_coordinates(
+            closest_point,
+            vA, vB, vC,
+            L);
+
+        Vec2f uvA = _uvs[closestFace[0]];
+        Vec2f uvB = _uvs[closestFace[1]];
+        Vec2f uvC = _uvs[closestFace[2]];
+
+        Vec2d uv = Vec2d(uvA * L[0] + uvB * L[1] + uvC * L[2]) * _bounds.diagonal().length();
+
+        double w = igl::fast_winding_number(fwn_bvh, 2, P);
+        //0.5 is on surface
+        double dist = sqrt(sqrD(0)) * (1. - 2. * std::abs(w));
+
+        return Vec3d(uv.x(), uv.y(), dist);
     }
 
     Vec3d MeshSdfMean::dmean_da(Vec3d a) const {
@@ -639,6 +663,7 @@ namespace Tungsten {
 
             V.resize(_verts.size(), 3);
             _colors.resize(_verts.size());
+            _uvs.resize(_verts.size());
 
             for (int i = 0; i < _verts.size(); i++) {
                 Vec3f tpos = _configTransform * _verts[i].pos();
@@ -651,6 +676,8 @@ namespace Tungsten {
                 if (_colors[i].sum() < 0.001) {
                     _colors[i] = Vec3f(0.215684f, 0.262744f, 0.031373f);
                 }
+
+                _uvs[i] = _verts[i].uv();
 
                 //Vec3f tnorm = _configTransform.transformVector(_verts[i].normal());
              
