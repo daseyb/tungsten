@@ -141,7 +141,8 @@ WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> co
         
         if (d == 1) {
             b.freqs(i) = cov->sample_spectral_density(sampler, spectralLoc);
-            auto dir = SampleWarp::uniformCylinder(sampler.next2D());
+            auto xi = sampler.next2D();
+            auto dir = SampleWarp::uniformCylinder(xi);
             dir.z() = 0;
             b.dirs.row(i) = vec_conv<Eigen::Vector3d>(dir);
         }
