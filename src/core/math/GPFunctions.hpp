@@ -3,6 +3,7 @@
 
 #include <math/Vec.hpp>
 #include <math/Angle.hpp>
+#include <math/TangentFrame.hpp>
 #include "io/JsonSerializable.hpp"
 #include "io/JsonObject.hpp"
 #include <math/AffineArithmetic.hpp>
@@ -1299,6 +1300,10 @@ namespace Tungsten {
             return Vec3d(1.);
         }
 
+        virtual Vec3d shell_embedding(Vec3d a) const {
+            return a;
+        }
+
     private:
         virtual double mean(Vec3d a) const = 0;
     };
@@ -1362,6 +1367,14 @@ namespace Tungsten {
             return (a - _c).length() - _r;
         }
 
+        virtual Vec3d shell_embedding(Vec3d a) const {
+            Vec3d pc = a - _c;
+            double r = pc.length();
+            double theta = acos(pc.y() / r);
+            double phi = atan2(pc.z(), pc.x());
+            return Vec3d(theta * _r, phi * _r, (r - _r) );
+        }
+
     private:
         Vec3d _c;
         float _r;
@@ -1379,7 +1392,7 @@ namespace Tungsten {
     public:
 
         LinearMean(Vec3d ref = Vec3d(0.), Vec3d dir = Vec3d(1., 0., 0.), float scale = 1.0f, float min = -FLT_MAX) :
-            _ref(ref), _dir(dir.normalized()), _scale(scale), _min(min) {}
+            _ref(ref), _dir(dir.normalized()), _scale(scale), _min(min), _tf(Vec3f(dir.normalized())) {}
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             MeanFunction::fromJson(value, scene);
@@ -1388,8 +1401,8 @@ namespace Tungsten {
             value.getField("direction", _dir);
             value.getField("scale", _scale);
             value.getField("min", _min);
-
             _dir.normalize();
+            _tf = TangentFrame(Vec3f(_dir));
         }
 
         virtual rapidjson::Value toJson(Allocator& allocator) const override {
@@ -1406,11 +1419,16 @@ namespace Tungsten {
             return dot(_dir, a - _ref) * _scale;
         }
 
+        virtual Vec3d shell_embedding(Vec3d a) const {
+            return Vec3d(_tf.toLocal(Vec3f(a)));
+        }
+
     private:
         Vec3d _ref;
         Vec3d _dir;
         float _scale;
         float _min = -FLT_MAX;
+        TangentFrame _tf;
 
         virtual double mean(Vec3d a) const override {
             return max((a - _ref).dot(_dir) * _scale, (double)_min);
@@ -1522,6 +1540,7 @@ namespace Tungsten {
         virtual void loadResources() override;
 
         virtual Vec3d color(Vec3d a) const override;
+        virtual Vec3d shell_embedding(Vec3d a) const override;
 
 
         Box3d bounds() {
@@ -1539,6 +1558,7 @@ namespace Tungsten {
         Eigen::VectorXi EMAP;
 
         std::vector<Vec3f> _colors;
+        std::vector<Vec2f> _uvs;
 
         igl::FastWindingNumberBVH fwn_bvh;
         igl::AABB<Eigen::MatrixXd, 3> tree;
