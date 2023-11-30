@@ -240,6 +240,14 @@ namespace Tungsten {
             return _mean->color(p);
         }
 
+        Vec3d shell_embedding(Vec3d p) const override {
+            if(_embedCov) {
+                return _mean->shell_embedding(p);
+            } else {
+                return p;
+            }
+        }
+
         std::tuple<Eigen::VectorXd, CovMatrix> mean_and_cov(
             const Vec3d* points, const Derivative* derivative_types, const Vec3d* ddirs,
             Vec3d deriv_dir, size_t numPts) const;
@@ -337,6 +345,7 @@ namespace Tungsten {
 
         bool _requireCovProjection = false;
         bool _usePseudoInverse = false;
+        bool _embedShell = false;
     };
 }
 

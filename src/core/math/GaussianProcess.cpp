@@ -160,6 +160,7 @@ void GaussianProcess::fromJson(JsonPtr value, const Scene& scene) {
     value.getField("id", _id);
     value.getField("project_cov", _requireCovProjection);
     value.getField("pseudo_inverse", _usePseudoInverse);
+    value.getField("embed_cov", _embedCov);
 
     if (auto conditioningDataPath = value["conditioning_data"])
         _conditioningDataPath = scene.fetchResource(conditioningDataPath);
@@ -175,7 +176,8 @@ rapidjson::Value GaussianProcess::toJson(Allocator& allocator) const {
         "covariance_epsilon", _covEps,
         "id", _id,
         "project_cov", _requireCovProjection,
-        "pseudo_inverse", _usePseudoInverse
+        "pseudo_inverse", _usePseudoInverse,
+        "embed_cov", _embedCov
     };
 
     if (_conditioningDataPath) {
@@ -304,7 +306,7 @@ std::tuple<Eigen::VectorXd, CovMatrix> GaussianProcess::mean_and_cov(
 
         for (size_t j = 0; j <= i; j++) {
             const Vec3d& ddir_b = ddirs ? ddirs[j] : deriv_dir;
-            double cov_ij = (*_cov)(derivative_types[i], derivative_types[j], points[i], points[j], ddir_a, ddir_b);
+            double cov_ij = (*_cov)(derivative_types[i], derivative_types[j], shell_embedding(points[i]), shell_embedding(points[j]), ddir_a, ddir_b);
 
 #ifdef SPARSE_COV
             if (i == j || std::abs(cov_ij) > _covEps) {
@@ -395,7 +397,7 @@ CovMatrix GaussianProcess::cov_prior(
         for (size_t j = 0; j < numPtsB; j++) {
             const Vec3d& ddir_b = ddirs_b ? ddirs_b[j] : deriv_dir;
 
-            double cov_ij = (*_cov)(dtypes_a[i], dtypes_b[j], points_a[i], points_b[j], ddir_a, ddir_b);
+            double cov_ij = (*_cov)(dtypes_a[i], dtypes_b[j], shell_embedding(points_a[i]), shell_embedding(points_b[j]), ddir_a, ddir_b);
 
 #ifdef SPARSE_COV
             if (i == j || std::abs(cov_ij) > _covEps) {
@@ -467,7 +469,7 @@ CovMatrix GaussianProcess::cov_sym(
         for (size_t j = 0; j <= i; j++) {
             const Vec3d& ddir_b = ddirs_a ? ddirs_a[j] : deriv_dir;
 
-            double cov_ij = (*_cov)(dtypes_a[i], dtypes_a[j], points_a[i], points_a[j], ddir_a, ddir_b);
+            double cov_ij = (*_cov)(dtypes_a[i], dtypes_a[j], shell_embedding(points_a[i]), shell_embedding(points_a[j]), ddir_a, ddir_b);
 
 #ifdef SPARSE_COV
             if (i == j || std::abs(cov_ij) > _covEps) {
@@ -683,7 +685,7 @@ double GaussianProcess::eval_cond(
 
 double GaussianProcess::noIntersectBound(Vec3d p, double q) const
 {
-    double stddev = sqrt((*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.)));
+    double stddev = sqrt((*_cov)(Derivative::None, Derivative::None, shell_embedding(p), shell_embedding(p), Vec3d(0.), Vec3d(0.)));
     return stddev * sqrt(2.) * boost::math::erf_inv(2 * q - 1);
 }
 
@@ -697,13 +699,13 @@ double GaussianProcess::cdf(Vec3d p) const
 
 double GaussianProcess::goodStepsize(Vec3d p, double targetCov, Vec3d rd) const
 {
-    double sigma = (*_cov)(Derivative::None, Derivative::None, p, p, Vec3d(0.), Vec3d(0.));
+    double sigma = (*_cov)(Derivative::None, Derivative::None, shell_embedding(p), shell_embedding(p), Vec3d(0.), Vec3d(0.));
 
     double stepsize_lb = 0;
     double stepsize_ub = 2;
 
     double stepsize_avg = (stepsize_lb + stepsize_ub) * 0.5;
-    double cov = (*_cov)(Derivative::None, Derivative::None, p, p + rd * stepsize_avg, Vec3d(0.), Vec3d(0.));
+    double cov = (*_cov)(Derivative::None, Derivative::None, shell_embedding(p), shell_embedding(p + rd * stepsize_avg), Vec3d(0.), Vec3d(0.));
 
     size_t it = 0;
     while (std::abs(cov - targetCov) > 0.00000000001 && it++ < 100) {
@@ -714,7 +716,7 @@ double GaussianProcess::goodStepsize(Vec3d p, double targetCov, Vec3d rd) const
         else {
             stepsize_ub = stepsize_avg;
         }
-        cov = (*_cov)(Derivative::None, Derivative::None, p, p + rd * stepsize_avg, Vec3d(0.), Vec3d(0.)) / sigma;
+        cov = (*_cov)(Derivative::None, Derivative::None, shell_embedding(p), shell_embedding(p + rd * stepsize_avg), Vec3d(0.), Vec3d(0.)) / sigma;
     } 
 
     return stepsize_avg;

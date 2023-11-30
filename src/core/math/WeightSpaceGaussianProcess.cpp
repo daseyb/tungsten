@@ -26,7 +26,7 @@ double WeightSpaceRealization::evaluate(const Vec3d& p) const {
     Derivative d = Derivative::None;
     double c = (*gp->_cov)(Derivative::None, Derivative::None, p, p, Vec3d(), Vec3d());
     double scale = sqrt(c);
-    return scale * basis->evaluate(vec_conv<Eigen::Vector3d>((*gp->_mean).shell_embedding(p)), weights) + gp->mean_prior(&p, &d, nullptr, Vec3d(0.), 1)(0);
+    return scale * basis->evaluate(vec_conv<Eigen::Vector3d>(gp->shell_embedding(p)), weights) + gp->mean_prior(&p, &d, nullptr, Vec3d(0.), 1)(0);
 }
 
 Affine<1> WeightSpaceRealization::evaluate(const Affine<3>& p) const {
@@ -61,8 +61,8 @@ Vec3d WeightSpaceRealization::evaluateGradient(const Vec3d& p) const {
     Derivative d = Derivative::None;
     double scale = sqrt((*gp->_cov)(Derivative::None, Derivative::None, p, p, Vec3d(), Vec3d()));
 
-    Vec3d basisGrad = scale * basis->evaluateGradient(vec_conv<Eigen::Vector3d>((*gp->_mean).shell_embedding(p)), weights);
-    Eigen::Matrix3d jac = get_jacobian([&](Vec3d p) {return (*gp->_mean).shell_embedding(p); }, p);
+    Vec3d basisGrad = scale * basis->evaluateGradient(vec_conv<Eigen::Vector3d>(gp->shell_embedding(p)), weights);
+    Eigen::Matrix3d jac = get_jacobian([&](Vec3d p) {return gp->shell_embedding(p); }, p);
     basisGrad = vec_conv<Vec3d>(jac.inverse().transpose() * vec_conv<Eigen::Vector3d>(basisGrad));
     
     return basisGrad + gp->_mean->dmean_da(p);
