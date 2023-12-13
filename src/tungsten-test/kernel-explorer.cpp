@@ -190,6 +190,8 @@ void realization_fs(std::shared_ptr<CovarianceFunction> cov) {
 
 void conditioned_realization(std::shared_ptr<CovarianceFunction> cov, bool doNormals) {
 
+    constexpr size_t NUM_SAMPLE_POINTS = 32;
+
     int num_reals = 2000;
 
     auto gp = std::make_shared<GaussianProcess>(std::make_shared<HomogeneousMean>(), cov);

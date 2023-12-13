@@ -1215,15 +1215,19 @@ namespace Tungsten {
         float _sigma, _w, _l;
 
         virtual FloatD cov(FloatD absq) const override {
-            return sqr(_sigma) * exp(-2 * pow(sin(PI * sqrt(absq) * _w), 2.f)) / (_l * _l);
+            auto per = sin(PI * sqrt(absq) * _w);
+            return sqr(_sigma) * exp(-2 * per * per / sqr(_l));
         }
 
         virtual FloatDD cov(FloatDD absq) const override {
-            return sqr(_sigma) * exp(-2 * pow(sin(PI * sqrt(absq) * _w), 2.f)) / (_l * _l);
+            FloatDD ab = sqrt(absq + FLT_EPSILON);
+            FloatDD per = sin(PI * ab * _w);
+            return sqr(_sigma) * exp(-2 * per * per / sqr(_l)) ;
         }
 
         virtual double cov(double absq) const override {
-            return sqr(_sigma) * exp(-2 * pow(sin(PI * sqrt(absq) * _w), 2.f)) / (_l * _l);
+            auto per = sin(PI * sqrt(absq) * _w);
+            return sqr(_sigma) * exp(-2 * per * per / sqr(_l)) ;
         }
     };
 
