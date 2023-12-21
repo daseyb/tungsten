@@ -193,6 +193,55 @@ namespace Tungsten {
         friend class ProceduralNonstationaryCovariance;
     };
 
+    class DotProductCovariance : public CovarianceFunction {
+    public:
+
+        DotProductCovariance(float sigma = 1.f, float l = 1., float p = 3., Vec3f aniso = Vec3f(1.f)) : _sigma(sigma), _l(l), _p(p) {
+            _aniso = aniso;
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            CovarianceFunction::fromJson(value, scene);
+            value.getField("sigma", _sigma);
+            value.getField("lengthScale", _l);
+            value.getField("p", _p);
+            value.getField("aniso", _aniso);
+        }
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+                "type", "dot_product",
+                "sigma", _sigma,
+                "lengthScale", _l,
+                "p", _p,
+                "aniso", _aniso
+            };
+        }
+
+
+        virtual std::string id() const {
+            return tinyformat::format("dp/aniso=[%.4f,%.4f,%.4f]-s=%.3f-l=%.3f-p=%.3f", _aniso.x(), _aniso.y(), _aniso.z(), _sigma, _l, _p);
+        }
+
+    private:
+        float _sigma, _l, _p;
+
+        virtual FloatD cov(Vec3Diff a, Vec3Diff b) const override {
+            auto d = a.dot(Vec3Diff{ _aniso.x(), _aniso.y(), _aniso.z() }.cwiseProduct(b));
+            return pow(sqr(_sigma) + d / sqr(_l), _p);
+        }
+
+        virtual FloatDD cov(Vec3DD a, Vec3DD b) const override {
+            auto d = a.dot(Vec3DD{ _aniso.x(), _aniso.y(), _aniso.z() }.cwiseProduct(b));
+            return pow(sqr(_sigma) + d / sqr(_l), _p);
+        }
+
+        virtual double cov(Vec3d a, Vec3d b) const override {
+            auto d = a.dot(Vec3d{ _aniso.x(), _aniso.y(), _aniso.z() }.cwiseProduct(b));
+            return pow(sqr(_sigma) + d / sqr(_l), _p);
+        }
+    };
+
     class MeanGradNonstationaryCovariance : public CovarianceFunction {
     public:
 
@@ -991,6 +1040,7 @@ namespace Tungsten {
         }
 
         virtual bool hasAnalyticSpectralDensity() const override { return true; }
+
         virtual double spectral_density(double s) const {
             double norm = 1.0 / (sqrt(PI / 2) * sqr(_sigma));
             return norm * (exp(-0.5 * _l * _l * s * s) * _sigma * _sigma) / sqrt(1. / (_l * _l));
@@ -1058,6 +1108,7 @@ namespace Tungsten {
         }
 
         virtual bool hasAnalyticSpectralDensity() const override { return true; }
+
         virtual double spectral_density(double s) const {
             double norm = 1.0 / (sqrt(PI / 2.) * sqr(_sigma));
             return norm * (pow(2., 5. / 4. - _a / 2) * pow(1 / (_a * _l * _l), -(1. / 4.) - _a /
@@ -1130,6 +1181,7 @@ namespace Tungsten {
         }
 
         virtual bool hasAnalyticSpectralDensity() const override { return true; }
+
         virtual double spectral_density(double s) const {
             const int D = 1;
             return pow(2, D) * pow(PI, D / 2.) * std::lgamma(_v + D / 2.) *
@@ -1263,20 +1315,22 @@ namespace Tungsten {
         float _sigma, _R;
 
         virtual FloatD cov(FloatD absq) const override {
-            auto ab = sqrt(absq);
-            return sqr(_sigma) / 12 * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
+            auto ab = sqrt(absq + FLT_EPSILON);
+            return sqr(_sigma) * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
         }
 
         virtual FloatDD cov(FloatDD absq) const override {
-            auto ab = sqrt(absq);
-            return sqr(_sigma) / 12 * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
+            auto ab = sqrt(absq + FLT_EPSILON);
+            return sqr(_sigma) * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
         }
 
         virtual double cov(double absq) const override {
-            auto ab = sqrt(absq);
-            return sqr(_sigma) / 12 * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
+            auto ab = sqrt(absq + FLT_EPSILON);
+            return sqr(_sigma) * (2 * pow(ab, 3) - 3 * _R * absq + _R * _R * _R);
         }
     };
+
+
 
     class MeanFunction : public JsonSerializable {
     public:

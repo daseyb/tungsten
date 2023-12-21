@@ -32,6 +32,7 @@ DEFINE_STRINGABLE_ENUM(CovarianceFunctionFactory, "covariance", ({
     {"thin_plate", std::make_shared<ThinPlateCovariance>},
     {"neural", std::make_shared<NeuralNonstationaryCovariance>},
     {"proc_nonstationary", std::make_shared<ProceduralNonstationaryCovariance>},
+    {"dot_product", std::make_shared<DotProductCovariance>},
 }))
 
 

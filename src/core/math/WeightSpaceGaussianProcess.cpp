@@ -206,6 +206,23 @@ WeightSpaceBasis WeightSpaceBasis::sample(std::shared_ptr<CovarianceFunction> co
     return b;
 }
 
+WeightSpaceBasis WeightSpaceBasis::create_regular(std::shared_ptr<CovarianceFunction> cov, int n, float maxFreq, PathSampleGenerator& sampler, Vec3d spectralLoc) {
+    WeightSpaceBasis b(n);
+    TangentFrameD<Eigen::Matrix3d, Eigen::Vector3d> frame({ 0., 0., 1. });
+
+    for (int i = 0; i < n; i++) {
+        b.offsets(i) = sampler.next1D() * TWO_PI;
+
+        float s =  maxFreq * (i + 1) / n;
+
+        b.freqs(i) = cov->spectral_density(s);
+        auto xi = sampler.next2D();
+        b.dirs.row(i) = vec_conv<Eigen::Vector3d>(SampleWarp::uniformSphere(sampler.next2D()));
+    }
+
+    return b;
+}
+
 WeightSpaceRealization WeightSpaceRealization::sample(std::shared_ptr<WeightSpaceBasis> basis, std::shared_ptr<GaussianProcess> gp, PathSampleGenerator& sampler) {
     return WeightSpaceRealization{
         basis, gp, sample_standard_normal(basis->size(), sampler)
