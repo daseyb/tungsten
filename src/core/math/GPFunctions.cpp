@@ -79,6 +79,15 @@ namespace Tungsten {
         }
     }
 
+    Vec3d ProceduralNoiseVec::operator()(Vec3d p) const {
+        switch (type) {
+        case NoiseType::BottomTop:
+            return Vec3d(exp(lerp(log(_max),  log(_min), clamp(p.y() * .75, 0., 1.))));
+        case NoiseType::LeftRight:
+            return Vec3d(exp(lerp(log(_max), log(_min), clamp(p.x()*2 + 1, 0., 1.))));
+        }
+    }
+
     void NonstationaryCovariance::fromJson(JsonPtr value, const Scene& scene) {
         CovarianceFunction::fromJson(value, scene);
 
@@ -545,8 +554,8 @@ namespace Tungsten {
         if (auto path = value["file"]) _path = scene.fetchResource(path);
         value.getField("transform", _configTransform);
         value.getField("signed", _signed);
+        value.getField("min", _min);
         _invConfigTransform = _configTransform.invert();
-
     }
 
     rapidjson::Value MeshSdfMean::toJson(Allocator& allocator) const {
@@ -555,6 +564,7 @@ namespace Tungsten {
             "file", *_path,
             "transform", _configTransform,
             "signed", _signed,
+            "min", _min,
         };
     }
 
@@ -569,7 +579,7 @@ namespace Tungsten {
         Eigen::VectorXd S_vis;
         igl::signed_distance_fast_winding_number(V_vis, V, F, tree, fwn_bvh, S_vis);
 
-        return (double)S_vis(0);
+        return max((double)S_vis(0), _min);
     }
 
     Vec3d MeshSdfMean::color(Vec3d a) const {

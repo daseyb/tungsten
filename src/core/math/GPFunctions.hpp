@@ -723,6 +723,55 @@ namespace Tungsten {
     };
 
 
+    class ProceduralNoiseVec: public ProceduralVector {
+        double _min = 1., _max = 500.;
+        enum class NoiseType {
+            BottomTop,
+            LeftRight
+        };
+
+        NoiseType type = NoiseType::BottomTop;
+
+        static std::string noiseTypeToString(NoiseType v) {
+            switch (v) {
+            case NoiseType::BottomTop: return "bottom_top";
+            case NoiseType::LeftRight: return "left_right";
+            }
+        }
+
+        static NoiseType stringToNoiseType(std::string v) {
+            if (v == "bottom_top")
+                return NoiseType::BottomTop;
+            else if (v == "left_right")
+                return NoiseType::LeftRight;
+
+            FAIL("Invalid noise typ function: '%s'", v);
+        }
+
+    public:
+        ProceduralNoiseVec() {}
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            return JsonObject{ ProceduralVector::toJson(allocator), allocator,
+                "type", "noise",
+                "noise", noiseTypeToString(type)
+            };
+        }
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            ProceduralVector::fromJson(value, scene);
+            std::string noiseString = noiseTypeToString(type);
+            value.getField("noise", noiseString);
+            type = stringToNoiseType(noiseString);
+
+            value.getField("min", _min);
+            value.getField("max", _max);
+        }
+
+        virtual Vec3d operator()(Vec3d p) const override;
+    };
+
+
     class ProceduralNonstationaryCovariance : public CovarianceFunction {
     public:
 
@@ -1058,7 +1107,7 @@ namespace Tungsten {
 
         virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             double normal_l = vec_conv<Vec3d>(sample_standard_normal(3, sampler)).length();
-            double rad = sqrt(2) * sqrt(1. / (2. * _l *_l)) * normal_l;
+            double rad = normal_l / _l;
             return vec_conv<Vec3d>(SampleWarp::uniformSphere(sampler.next2D()) * _aniso).normalized() * rad;
         }
 
@@ -1608,6 +1657,7 @@ namespace Tungsten {
     private:
         PathPtr _path;
         bool _signed;
+        double _min = -DBL_MAX;
 
         Eigen::MatrixXd V;
         Eigen::MatrixXi T, F;
