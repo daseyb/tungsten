@@ -43,6 +43,7 @@ DEFINE_STRINGABLE_ENUM(ProceduralScalarFactory, "procedural_scalar", ({
 
 DEFINE_STRINGABLE_ENUM(ProceduralVectorFactory, "procedural_vector", ({
     {"regular_grid", std::make_shared<RegularGridVector>},
+    {"noise", std::make_shared<ProceduralNoiseVec>},
 }))
 
 }
