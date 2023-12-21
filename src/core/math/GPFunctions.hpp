@@ -1008,7 +1008,7 @@ namespace Tungsten {
 
         virtual Vec3d sample_spectral_density_3d(PathSampleGenerator& sampler, Vec3d p = Vec3d(0.)) const override {
             double normal_l = vec_conv<Vec3d>(sample_standard_normal(3, sampler)).length();
-            double rad = sqrt(2) * sqrt(1. / (2. * _l *_l)) * normal_l;
+            double rad = normal_l / _l;
             return vec_conv<Vec3d>(SampleWarp::uniformSphere(sampler.next2D()) * _aniso).normalized() * rad;
         }
 
@@ -1550,6 +1550,7 @@ namespace Tungsten {
     private:
         PathPtr _path;
         bool _signed;
+        double _min = -DBL_MAX;
 
         Eigen::MatrixXd V;
         Eigen::MatrixXi T, F;
