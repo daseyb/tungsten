@@ -1,0 +1,7 @@
+{
+    "name": "dragon",
+    "base_file": "gp-medium-voxel/dragon-video-test",
+    "deps": ["dragon.vdb", "FlowCheck.hdr", "background.obj"],
+    "frames": 48,
+    "swivel_offset": 10
+}

@@ -20,13 +20,9 @@ base_scene_file_dir = os.path.dirname(base_scene_file)
 base_scene_file_dir = os.path.abspath(base_scene_file_dir)
 
 with open(base_scene_file) as base_scene_fd:
-    #print(base_scene_fd.read())
     base_scene = json.load(base_scene_fd)
 
-
-
-
-output_folder = f"./video/turntable/{experiment_name}"
+output_folder = f"./video/swivel/{experiment_name}"
 if(Path(output_folder).exists()):
     shutil.rmtree(output_folder,)
 Path(output_folder).mkdir(parents=True, exist_ok=True)
@@ -40,20 +36,25 @@ for file in experiment["deps"]:
 
 scene_files = []
 
-
 camera_pos = np.array(base_scene["camera"]["transform"]["position"])
 camera_target = np.array(base_scene["camera"]["transform"]["look_at"])
 camera_up = np.array(base_scene["camera"]["transform"]["up"])
 
 camera_offset = camera_pos - camera_target
 
-axis = camera_up / norm(camera_up)  # normalize the rotation vector first
+axis = camera_offset / norm(camera_offset)  # normalize the rotation vector first
+
+camera_ortho_right = np.cross(axis, camera_up)
+camera_ortho_up = np.cross(axis, camera_ortho_right / norm(camera_ortho_right))
+
+camera_offset_rad = Rotation.from_rotvec(float(experiment["swivel_offset"]) / 180 * np.pi * camera_ortho_up).apply(camera_offset)
+
 
 num_frames = int(experiment["frames"])
 
 for i, angle in enumerate(np.linspace(0, np.pi * 2, num_frames, False)):
     rot = Rotation.from_rotvec(angle * axis)
-    curr_cam_offset = rot.apply(camera_offset) 
+    curr_cam_offset = rot.apply(camera_offset_rad) 
 
     curr_cam_pos = camera_target + curr_cam_offset
 

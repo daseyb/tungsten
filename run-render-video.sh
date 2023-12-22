@@ -25,4 +25,4 @@ conda init bash
 source ~/.bashrc
 conda activate research
 export JOB_DIR="/dartfs-hpc/rc/lab/J/JaroszLab/dseyb/stimp/${SLURM_JOB_NAME}/.."
-ffmpeg -y -framerate 12 -pattern_type glob -i "$JOB_DIR/*.png" -c:v libx264 -pix_fmt yuv420p render.mp4
+ffmpeg -y -framerate 12 -pattern_type glob -i "$JOB_DIR/*.png" -c:v libx264 -pix_fmt yuv420p "$JOB_DIR/render.mp4"
