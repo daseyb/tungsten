@@ -82,13 +82,13 @@ namespace Tungsten {
             double f = fbm(p + fbm(p + fbm(p)));
             Vec3d col = Vec3d(f * 1.9, f * 0.7, f * 0.25);
             col = std::sqrt(col*1.2) - 0.35;
-            return lerp(_min, _max, col.x());
+            return lerp(_min, _max, clamp(col.x(), 0., 1.));
         }
         case NoiseType::Rust:
         {
             p *= 0.3;
             double f = smoothStep(0.4, 0.6, fbm(p + fbm(p*.1)*0.4) + fbm(p*25.)*0.1);
-            return lerp(_min, _max, f);
+            return lerp(_min, _max, clamp(f, 0., 1.));
         }
         }
     }
