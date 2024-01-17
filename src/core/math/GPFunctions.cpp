@@ -87,10 +87,10 @@ namespace Tungsten {
             return Vec3d(sqrt(exp(lerp(log(_max), log(_min), clamp(p.x()*2 + 1, 0., 1.)))));
         case NoiseType::Sandstone:
         {
-            p *= 0.1;
+            p *= 0.3;
             double f = fbm(p + fbm(p + fbm(p)));
             Vec3d col = Vec3d(f * 1.9, f * 0.7, f * 0.25);
-            col = std::sqrt(col) - 0.3;
+            col = std::sqrt(col*1.2) - 0.35;
             return  clamp(col * 0.2, Vec3d(0.), Vec3d(1.));
         }
         }
