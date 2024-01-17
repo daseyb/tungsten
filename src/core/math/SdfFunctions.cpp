@@ -190,8 +190,7 @@ namespace Tungsten {
         return v - floor(v);
     }
 
-    template<typename Scalar, int Size>
-    Scalar dot(Vec<Scalar, Size> a, Vec<Scalar, Size> b) {
+    auto dot(auto a, auto b) {
         return a.dot(b);
     }
 
