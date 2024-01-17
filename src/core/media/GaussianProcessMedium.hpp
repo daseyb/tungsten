@@ -50,7 +50,7 @@ struct MVNNormalDistribution : NormalDistribution {
     
     virtual bool isDeltaDistribution() override { return true; }
     virtual double evaluate(Vec3d normal) override { return 0.; }
-    virtual Vec3d sample(PathSampleGenerator& sampler) override { return normal; }
+    virtual Vec3d sample(PathSampleGenerator& sampler) override { return {}; }
 };
 
 class GaussianProcessMedium : public Medium
@@ -104,7 +104,7 @@ public:
         MediumState& state,
         Vec3d& grad) const = 0;
 
-    virtual std::shared_ptr<NormalDistribution> normalDistribution(const Ray& ray, const Vec3d& ip, MediumState& state) const = 0;
+    virtual std::shared_ptr<NormalDistribution> normalDistribution(const Ray& ray, const Vec3d& ip, MediumState& state) const { return nullptr; }
 
     bool intersect(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const;
     virtual bool intersectGP(PathSampleGenerator& sampler, const Ray& ray, MediumState& state, double& t) const = 0;
