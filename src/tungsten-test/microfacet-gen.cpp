@@ -78,10 +78,12 @@ void normals_and_stuff(const GaussianProcess& gp, std::string output) {
         }
 
 
-        Eigen::MatrixXf samples = gp.sample(
+        auto [samplesD, ids] = gp.sample(
             points.data(), derivs.data(), points.size(), nullptr,
             nullptr, 0,
-            Vec3d(1.0f, 0.0f, 0.0f), 1, sampler).cast<float>();
+            Vec3d(1.0f, 0.0f, 0.0f), 1, sampler)->flatten();
+
+        Eigen::MatrixXf samples = samplesD.cast<float>();
 
         std::cout << samples.minCoeff() << "-" << samples.maxCoeff() << std::endl;
 
@@ -137,10 +139,13 @@ void side_view(const GaussianProcess& gp, std::string output) {
         }
 
 
-        Eigen::MatrixXf samples = gp.sample(
+        auto [samplesD, ids] = gp.sample(
             points.data(), derivs.data(), points.size(), nullptr,
             nullptr, 0,
-            Vec3d(1.0f, 0.0f, 0.0f), 1, sampler).cast<float>();
+            Vec3d(1.0f, 0.0f, 0.0f), 1, sampler)->flatten();
+
+
+        Eigen::MatrixXf samples = samplesD.cast<float>();
 
         std::cout << samples.minCoeff() << "-" << samples.maxCoeff() << std::endl;
 
@@ -183,7 +188,7 @@ void sample_beckmann(float alpha) {
     UniformPathSampler sampler(0);
     sampler.next2D();
 
-    Eigen::MatrixXf normals(10000000, 3);
+    Eigen::MatrixXd normals(10000000, 3);
     Microfacet::Distribution distribution("beckmann");
 
     for (int i = 0; i < normals.rows(); i++) {
@@ -195,7 +200,7 @@ void sample_beckmann(float alpha) {
 
     {
         std::ofstream xfile(incrementalFilename(Path(tinyformat::format("microfacet/visible-normals/beckmann-%.4f.bin", alpha)), "", false).asString(), std::ios::out | std::ios::binary);
-        xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
+        xfile.write((char*)normals.data(), sizeof(normals[0]) * normals.size());
         xfile.close();
     }
 
@@ -214,7 +219,7 @@ void v_ndf(std::shared_ptr<GaussianProcess> gp, float angle, int samples, std::s
     ray.setNearT(-(ray.pos().z()-5.0f) / ray.dir().z());
     ray.setFarT(-(ray.pos().z()+5.0f) / ray.dir().z());
 
-    Eigen::MatrixXf normals(samples, 3);
+    Eigen::MatrixXd normals(samples, 3);
 
     int failed = 0;
 
@@ -243,7 +248,7 @@ void v_ndf(std::shared_ptr<GaussianProcess> gp, float angle, int samples, std::s
 
     {
         std::ofstream xfile(incrementalFilename(Path(output) / Path(gp->_cov->id()) + Path(tinyformat::format("-%.1fdeg-%d.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS)), "", false).asString(), std::ios::out | std::ios::binary);
-        xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
+        xfile.write((char*)normals.data(), sizeof(normals[0]) * normals.size());
         xfile.close();
     }
 }
@@ -262,7 +267,7 @@ void ndf(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
     sampler.next1D();
     sampler.next1D();
 
-    Eigen::MatrixXf normals(samples, 3);
+    Eigen::MatrixXd normals(samples, 3);
 
 
     Ray ray = Ray(Vec3f(0.f, 0.f, 50.f), Vec3f(0.f, 0.f, -1.f));
@@ -290,12 +295,15 @@ void ndf(std::shared_ptr<GaussianProcess> gp, int samples, std::string output) {
 
     {
         std::ofstream xfile(incrementalFilename(basePath + Path("-ndf.bin"), "", false).asString(), std::ios::out | std::ios::binary);
-        xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
+        xfile.write((char*)normals.data(), sizeof(normals[0]) * normals.size());
         xfile.close();
     }
 }
 
-void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::string output, float angle = (2 * PI) / 8, GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian, float zrange = 4.f, float maxStepSize = 0.15f, std::function<void(float)> update_progress = nullptr) {
+void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, 
+    std::string output, float angle = (2 * PI) / 8, 
+    GPNormalSamplingMethod nsm = GPNormalSamplingMethod::ConditionedGaussian, float zrange = 4.f, 
+    float maxStepSize = 0.15f, std::function<void(float)> update_progress = nullptr, int normalResampleCount = 1) {
     
     Path basePath = Path(output) / Path(gp->_cov->id());
 
@@ -319,7 +327,7 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
     UniformPathSampler sampler(0);
     sampler.next2D();
 
-    Eigen::MatrixXf normals(samples, 3);
+    std::vector<Vec3d> sampledNormals(samples);
 
     Ray ray = Ray(Vec3f(0.f, 0.f, 500.f), Vec3f(sin(angle), 0.f, -cos(angle)));
 
@@ -354,21 +362,30 @@ void ndf_cond_validate(std::shared_ptr<GaussianProcess> gp, int samples, std::st
             continue;
         }
 
-        Vec3d grad = sample.aniso.normalized();
+        for (int i = 0; i < normalResampleCount; i++) {
+            Vec3d grad;
+            if(gp_med->sampleGradient(sampler, tRay, vec_conv<Vec3d>(sample.p), state, grad)) {
+                grad.normalize();
+                sampledNormals[s] = grad;
+                s++;
+            }
+        }
+
+        /*Vec3d grad = sample.aniso.normalized();
         normals(s, 0) = grad.x();
         normals(s, 1) = grad.y();
         normals(s, 2) = grad.z();
-        s++;
+        s++;*/
     }
 
     {
         std::ofstream xfile(
             incrementalFilename(
-                basePath + Path(tinyformat::format("-%.1fdeg-%d-%s-%.3f.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS, GaussianProcessMedium::normalSamplingMethodToString(nsm), zrange)), 
+                basePath + Path(tinyformat::format("/%.1fdeg-%d-%s-%.3f.bin", 180 * angle / PI, NUM_RAY_SAMPLE_POINTS, GaussianProcessMedium::normalSamplingMethodToString(nsm), zrange)), 
                 "", false).asString(), 
             std::ios::out | std::ios::binary);
 
-        xfile.write((char*)normals.data(), sizeof(float) * normals.rows() * normals.cols());
+        xfile.write((char*)sampledNormals.data(), sizeof(sampledNormals[0]) * sampledNormals.size());
         xfile.close();
     }
 }
@@ -386,7 +403,7 @@ int main(int argc, char** argv) {
 
     std::shared_ptr<JsonDocument> document;
     try {
-        document = std::make_shared<JsonDocument>(argc > 1 ? argv[1] : "testing/microfacet/covariances-smith-test.json");
+        document = std::make_shared<JsonDocument>(argc > 1 ? argv[1] : "testing/microfacet/covariances-resample.json");
     }
     catch (std::exception& e) {
         std::cerr << e.what() << "\n";
@@ -463,7 +480,7 @@ int main(int argc, char** argv) {
 
             float angleInDeg = 80.967;
 
-            //ndf_cond_validate(gp, 10000000, "testing/microfacet/normals-validate-nocond/", 87.f / 180 * PI, GPNormalSamplingMethod::Beckmann, 0.01f);
+            ndf_cond_validate(gp, 10000, "testing/microfacet/normals-resample/", 45.f / 180 * PI, GPNormalSamplingMethod::ConditionedGaussian, 1.0f, 0.15f, nullptr, 2500);
 
             //ndf_cond_validate(gp, 1000000, "testing/microfacet/normals-validate-nocond", angleInDeg / 180 * PI, GPNormalSamplingMethod::ConditionedGaussian, 0.02f);
             //ndf_cond_validate(gp, 10000000, "testing/microfacet/normals-validate-nocond", angleInDeg / 180 * PI, GPNormalSamplingMethod::Beckmann, 0.02f);
@@ -474,8 +491,8 @@ int main(int argc, char** argv) {
             //ndf_cond_validate(gp, 10000000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::Beckmann, 0.2f);
             //ndf_cond_validate(gp, 1000000, "testing/microfacet/normals-validate-nocond", 3 * PI / 8, GPNormalSamplingMethod::Beckmann, 0.1f);
 
+            /*
             MultiProgress<ProgressBar, NUM_STEPS> progress;
-
 #pragma omp parallel for
             for (int j = 0; j < NUM_STEPS; j++) {
                 float angle = 80 + float(j) / (NUM_STEPS - 1) * 9;
@@ -487,7 +504,7 @@ int main(int argc, char** argv) {
 
                 ndf_cond_validate(gp, 100000, "testing/microfacet/smith-test/angle-range", angle, GPNormalSamplingMethod::ConditionedGaussian, bound * 2, maxStepsize, update_progress);
                 ndf_cond_validate(gp, 1000000, "testing/microfacet/smith-test/angle-range", angle, GPNormalSamplingMethod::Beckmann, bound * 2, maxStepsize, update_progress);
-            }
+            }*/
             
             //ndf(gp, 10000000, "microfacet/normals/");
             //side_view(gp, "microfacet/side-view/");
