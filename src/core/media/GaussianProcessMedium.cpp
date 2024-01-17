@@ -202,7 +202,7 @@ namespace Tungsten {
                 return true;
             }
 
-            t += m * 0.05f;
+            t += m * 0.4f;
 
             if(t >= ray.farT()) {
                 return false;

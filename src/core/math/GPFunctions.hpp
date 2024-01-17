@@ -727,7 +727,8 @@ namespace Tungsten {
         double _min = 1., _max = 500.;
         enum class NoiseType {
             BottomTop,
-            LeftRight
+            LeftRight,
+            Sandstone,
         };
 
         NoiseType type = NoiseType::BottomTop;
@@ -736,6 +737,7 @@ namespace Tungsten {
             switch (v) {
             case NoiseType::BottomTop: return "bottom_top";
             case NoiseType::LeftRight: return "left_right";
+            case NoiseType::Sandstone: return "sandstone";
             }
         }
 
@@ -744,6 +746,8 @@ namespace Tungsten {
                 return NoiseType::BottomTop;
             else if (v == "left_right")
                 return NoiseType::LeftRight;
+            else if (v == "sandstone")
+                return NoiseType::Sandstone;
 
             FAIL("Invalid noise typ function: '%s'", v);
         }
@@ -1383,6 +1387,28 @@ namespace Tungsten {
 
     class MeanFunction : public JsonSerializable {
     public:
+        std::shared_ptr<ProceduralVector> _col = nullptr;
+
+        virtual void fromJson(JsonPtr value, const Scene& scene) override {
+            JsonSerializable::fromJson(value, scene);
+
+            if (auto c = value["color"]) {
+                _col = scene.fetchProceduralVector(c);
+            }
+        }
+
+        virtual void loadResources() override {
+            if (_col) _col->loadResources();
+        }
+
+        virtual rapidjson::Value toJson(Allocator& allocator) const override {
+            auto obj = JsonObject{ JsonSerializable::toJson(allocator), allocator };
+            if (_col) {
+                obj.add("color", *_col);
+            }
+            return obj;
+        }
+
         double operator()(Derivative a, Vec3d p, Vec3d d) const {
             if (a == Derivative::None) {
                 return mean(p);
@@ -1404,7 +1430,8 @@ namespace Tungsten {
         }
 
         virtual Vec3d color(Vec3d a) const {
-            return Vec3d(1.);
+            if (!_col) { return Vec3d(1.); }
+            return (*_col)(a);
         }
 
         virtual Vec3d shell_embedding(Vec3d a) const {
@@ -1608,8 +1635,8 @@ namespace Tungsten {
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
 
         virtual void loadResources() override {
+            MeanFunction::loadResources();
             if (_f) _f->loadResources();
-            if (_col) _col->loadResources();
         }
 
         virtual Vec3d color(Vec3d a) const override  {
@@ -1624,7 +1651,6 @@ namespace Tungsten {
 
     private:
         std::shared_ptr<ProceduralScalar> _f;
-        std::shared_ptr<ProceduralVector> _col;
 
         float _min = -FLT_MAX;
         float _offset = 0;

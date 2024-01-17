@@ -4,6 +4,8 @@
 #include <math/Vec.hpp>
 
 namespace Tungsten {
+	double fbm(Vec3d uv);
+
 	class SdfFunctions {
 	public:
 

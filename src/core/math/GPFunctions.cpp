@@ -85,6 +85,14 @@ namespace Tungsten {
             return Vec3d(sqrt(exp(lerp(log(_max),  log(_min), clamp(p.y() * .75, 0., 1.)))));
         case NoiseType::LeftRight:
             return Vec3d(sqrt(exp(lerp(log(_max), log(_min), clamp(p.x()*2 + 1, 0., 1.)))));
+        case NoiseType::Sandstone:
+        {
+            p *= 0.1;
+            double f = fbm(p + fbm(p + fbm(p)));
+            Vec3d col = Vec3d(f * 1.9, f * 0.7, f * 0.25);
+            col = std::sqrt(col) - 0.3;
+            return  clamp(col * 0.2, Vec3d(0.), Vec3d(1.));
+        }
         }
     }
 
@@ -403,7 +411,7 @@ namespace Tungsten {
     }
 
     rapidjson::Value TabulatedMean::toJson(Allocator& allocator) const {
-        return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+        return JsonObject{ MeanFunction::toJson(allocator), allocator,
             "type", "tabulated",
             "grid", *_grid,
             "offset", _offset,
@@ -450,7 +458,7 @@ namespace Tungsten {
     }
 
     rapidjson::Value NeuralMean::toJson(Allocator& allocator) const {
-        return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+        return JsonObject{ MeanFunction::toJson(allocator), allocator,
             "type", "neural",
             "network", *_path,
             "offset", _offset,
@@ -503,17 +511,13 @@ namespace Tungsten {
             _f = scene.fetchProceduralScalar(f);
         }
 
-        if(auto c = value["color"]) {
-            _col = scene.fetchProceduralVector(c);
-        }
-
         value.getField("min", _min);
         value.getField("scale", _scale);
         value.getField("offset", _offset);
     }
 
     rapidjson::Value ProceduralMean::toJson(Allocator& allocator) const {
-        auto obj =  JsonObject{ JsonSerializable::toJson(allocator), allocator,
+        return  JsonObject{ MeanFunction::toJson(allocator), allocator,
             "type", "procedural",
             "f", *_f,
             "transform", _configTransform,
@@ -521,12 +525,6 @@ namespace Tungsten {
             "scale", _scale,
             "scale", _offset,
         };
-
-        if(_col) {
-            obj.add("color", *_col);
-        }
-
-        return obj;
     }
 
     double ProceduralMean::mean(Vec3d a) const {
@@ -559,7 +557,7 @@ namespace Tungsten {
     }
 
     rapidjson::Value MeshSdfMean::toJson(Allocator& allocator) const {
-        return JsonObject{ JsonSerializable::toJson(allocator), allocator,
+        return JsonObject{ MeanFunction::toJson(allocator), allocator,
             "type", "mesh",
             "file", *_path,
             "transform", _configTransform,
