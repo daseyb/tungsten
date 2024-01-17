@@ -678,7 +678,9 @@ namespace Tungsten {
         double _min = 1., _max = 500.;
         enum class NoiseType {
             BottomTop,
-            LeftRight
+            LeftRight,
+            Sandstone,
+            Rust
         };
 
         NoiseType type = NoiseType::BottomTop;
@@ -687,6 +689,8 @@ namespace Tungsten {
             switch (v) {
             case NoiseType::BottomTop: return "bottom_top";
             case NoiseType::LeftRight: return "left_right";
+            case NoiseType::Sandstone: return "sandstone";
+            case NoiseType::Rust: return "rust";
             }
         }
 
@@ -695,6 +699,10 @@ namespace Tungsten {
                 return NoiseType::BottomTop;
             else if (v == "left_right")
                 return NoiseType::LeftRight;
+            else if (v == "sandstone")
+                return NoiseType::Sandstone;
+            else if (v == "rust")
+                return NoiseType::Rust;
 
             FAIL("Invalid noise typ function: '%s'", v);
         }
@@ -729,6 +737,7 @@ namespace Tungsten {
             BottomTop,
             LeftRight,
             Sandstone,
+            Rust
         };
 
         NoiseType type = NoiseType::BottomTop;
@@ -738,6 +747,7 @@ namespace Tungsten {
             case NoiseType::BottomTop: return "bottom_top";
             case NoiseType::LeftRight: return "left_right";
             case NoiseType::Sandstone: return "sandstone";
+            case NoiseType::Rust: return "rust";
             }
         }
 
@@ -748,6 +758,8 @@ namespace Tungsten {
                 return NoiseType::LeftRight;
             else if (v == "sandstone")
                 return NoiseType::Sandstone;
+            else if (v == "rust")
+                return NoiseType::Rust;
 
             FAIL("Invalid noise typ function: '%s'", v);
         }

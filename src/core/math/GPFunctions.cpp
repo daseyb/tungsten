@@ -76,6 +76,20 @@ namespace Tungsten {
             return sqrt(exp(lerp(log(_max),  log(_min), clamp(p.y() * .75, 0., 1.))));
         case NoiseType::LeftRight:
             return sqrt(exp(lerp(log(_max), log(_min), clamp(p.x()*2 + 1, 0., 1.))));
+        case NoiseType::Sandstone:
+        {
+            p *= 0.3;
+            double f = fbm(p + fbm(p + fbm(p)));
+            Vec3d col = Vec3d(f * 1.9, f * 0.7, f * 0.25);
+            col = std::sqrt(col*1.2) - 0.35;
+            return lerp(_min, _max, col.x());
+        }
+        case NoiseType::Rust:
+        {
+            p *= 0.3;
+            double f = smoothStep(0.4, 0.6, fbm(p + fbm(p*.1)*0.4) + fbm(p*25.)*0.1);
+            return lerp(_min, _max, f);
+        }
         }
     }
 
@@ -92,6 +106,12 @@ namespace Tungsten {
             Vec3d col = Vec3d(f * 1.9, f * 0.7, f * 0.25);
             col = std::sqrt(col*1.2) - 0.35;
             return  clamp(col * 0.2, Vec3d(0.), Vec3d(1.));
+        }
+        case NoiseType::Rust:
+        {
+            p *= 0.3;
+            double f = smoothStep(0.4, 0.6, fbm(p + fbm(p*.1)*0.4) + fbm(p*25.)*0.1);
+            return lerp(Vec3d(0.278,0.212,0.141), Vec3d(0.5), f);
         }
         }
     }
