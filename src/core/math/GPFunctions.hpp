@@ -1598,7 +1598,7 @@ namespace Tungsten {
     class TabulatedMean : public MeanFunction {
     public:
 
-        TabulatedMean(std::shared_ptr<Grid> grid = nullptr, float offset = 0, float scale = 1) : _grid(grid), _offset(offset), _scale(scale) {}
+        TabulatedMean(std::shared_ptr<Grid> grid = nullptr, float offset = 0, float scale = 1, bool isVolume = false) : _grid(grid), _offset(offset), _scale(scale), _isVolume(isVolume) {}
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override;
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
@@ -1608,6 +1608,7 @@ namespace Tungsten {
         std::shared_ptr<Grid> _grid;
         float _offset = 0;
         float _scale = 1;
+        bool _isVolume = false;
 
         virtual double mean(Vec3d a) const override;
         virtual Vec3d dmean_da(Vec3d a) const override;

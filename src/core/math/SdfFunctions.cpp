@@ -269,7 +269,7 @@ namespace Tungsten {
     }
 
     // fbm function by https://code.google.com/p/fractalterraingeneration/wiki/Fractional_Brownian_Motion
-    double fbm(Vec3d uv)
+    double fbm(Vec3d uv, int octaves)
     {
         float gain = 0.65;
         float lacunarity = 2.1042;
@@ -282,7 +282,7 @@ namespace Tungsten {
 
         total = simplex3d(Vec3f(uv));
 
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < octaves; i++)
         {
             total += simplex3d(Vec3f(uv) * frequency) * amplitude;
             frequency *= lacunarity;
