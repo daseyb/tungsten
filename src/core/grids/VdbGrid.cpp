@@ -404,7 +404,9 @@ static inline float gridAt(TreeT &acc, Vec3f p)
 
 float VdbGrid::density(Vec3f p) const
 {
-    p = clamp(p, bounds().min()+2, bounds().max()-3);
+    if(!_emissionGrid) {
+        p = clamp(p, bounds().min()+2, bounds().max()-3);
+    }
 
     auto grid = _densityGrid;
 

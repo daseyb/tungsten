@@ -16,7 +16,7 @@
 
 #SBATCH --array=1-10
 # Request memory
-#SBATCH --mem=4G
+#SBATCH --mem=12G
 # Walltime (job duration)
 #SBATCH --time=24:00:00
 # Email notifications (comma-separated options: BEGIN,END,FAIL)
