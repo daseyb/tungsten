@@ -313,7 +313,7 @@ int mesh_convert(int argc, char** argv) {
     UniformPathSampler sampler(0);
     sampler.next2D();
 
-    int num_samples = 1;
+    int num_samples = 5;
 
     for (int i = 0; i < dims.x(); i++) {
         std::cout << i << "\r";
@@ -1476,11 +1476,11 @@ int inspect_acf_gp(int argc, char** argv) {
 
 int main(int argc, char** argv) {
     //return mesh_convert_2d(argc, argv);
-    //return mesh_convert(argc, argv);
+    return mesh_convert(argc, argv);
     //return gen3d(argc, argv);
     //return test2d(argc, argv);
 
     //return estimate_acf(argc, argv);
-    estimate_acf_mesh(argc, argv);
-    return inspect_acf_gp(argc, argv);
+    //estimate_acf_mesh(argc, argv);
+    //return inspect_acf_gp(argc, argv);
 }

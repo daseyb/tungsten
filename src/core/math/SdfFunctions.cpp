@@ -190,7 +190,8 @@ namespace Tungsten {
         return v - floor(v);
     }
 
-    auto dot(auto a, auto b) {
+    template<typename Vec>
+    auto dot(Vec a, Vec b) {
         return a.dot(b);
     }
 
