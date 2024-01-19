@@ -79,15 +79,15 @@ namespace Tungsten {
         case NoiseType::Sandstone:
         {
             p *= 0.3;
-            double f = fbm(p + fbm(p + fbm(p)));
+            double f = fbm(p + fbm(p + fbm(p, 2), 2), 2);
             Vec3d col = Vec3d(f * 1.9, f * 0.7, f * 0.25);
             col = std::sqrt(col*1.2) - 0.35;
             return lerp(_min, _max, clamp(col.x(), 0., 1.));
         }
         case NoiseType::Rust:
         {
-            p *= 0.3;
-            double f = smoothStep(0.4, 0.6, fbm(p + fbm(p*.1)*0.4) + fbm(p*25.)*0.1);
+            p *= 2;
+            double f = smoothStep(0.4, 0.6, fbm(p + fbm(p*.1, 2)*0.4, 2) - fbm(p*25., 2)*0.1);
             return lerp(_min, _max, clamp(f, 0., 1.));
         }
         }
@@ -102,16 +102,16 @@ namespace Tungsten {
         case NoiseType::Sandstone:
         {
             p *= 0.3;
-            double f = fbm(p + fbm(p + fbm(p)));
+            double f = fbm(p + fbm(p + fbm(p, 10), 10), 10);
             Vec3d col = Vec3d(f * 1.9, f * 0.7, f * 0.25);
             col = std::sqrt(col*1.2) - 0.35;
             return  clamp(col * 0.2, Vec3d(0.), Vec3d(1.));
         }
         case NoiseType::Rust:
         {
-            p *= 0.3;
-            double f = smoothStep(0.4, 0.6, fbm(p + fbm(p*.1)*0.4) + fbm(p*25.)*0.1);
-            return lerp(Vec3d(0.278,0.212,0.141), Vec3d(0.5), f);
+            p *= 2;
+            double f = smoothStep(0.4, 0.6, fbm(p + fbm(p*.1, 10)*0.4, 10) + fbm(p*25., 10)*0.1);
+            return lerp(Vec3d(0.278,0.212,0.141), Vec3d(1.), f);
         }
         }
     }
@@ -428,6 +428,7 @@ namespace Tungsten {
 
         value.getField("offset", _offset);
         value.getField("scale", _scale);
+        value.getField("volume", _isVolume);
     }
 
     rapidjson::Value TabulatedMean::toJson(Allocator& allocator) const {
@@ -435,14 +436,24 @@ namespace Tungsten {
             "type", "tabulated",
             "grid", *_grid,
             "offset", _offset,
-            "scale", _scale
+            "scale", _scale,
+            "volume", _isVolume
         };
     }
 
 
     double TabulatedMean::mean(Vec3d a) const {
         Vec3f p = _grid->invNaturalTransform() * vec_conv<Vec3f>(a);
-        return (_grid->density(p) + _offset) * _scale;
+        double res = _grid->density(p);
+        if(_isVolume) {
+            res = -log(max(0.0001, res));
+        }
+        return (res + _offset) * _scale;
+    }
+
+    Vec3d TabulatedMean::emission(Vec3d a) const {
+        Vec3f p = _grid->invNaturalTransform() * vec_conv<Vec3f>(a);
+        return Vec3d(_grid->emission(p));
     }
 
     Vec3d TabulatedMean::dmean_da(Vec3d a) const {

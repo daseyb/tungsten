@@ -55,6 +55,7 @@ class VdbGrid : public Grid
     openvdb::tools::MultiResGrid<openvdb::FloatTree>::Ptr _mResSDF;
 
     openvdb::Vec3fGrid::Ptr _emissionGrid;
+    openvdb::FloatGrid::Ptr _tempGrid;
     openvdb::Vec3fGrid::Ptr _gradientGrid;
     Vec2fGrid::Ptr _superGrid;
     Mat4f _transform;

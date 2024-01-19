@@ -217,6 +217,19 @@ void VdbGrid::loadResources()
     } catch(const std::exception &) {
         emissionPtr = nullptr;
     };
+    if (!emissionPtr && _emissionName != "")
+        std::cout << "Failed to read emission grid '" << _emissionName << "' from vdb file '" << *_path << "'\n";
+
+    openvdb::GridBase::Ptr tempPtr;
+    try {
+        tempPtr = file.readGrid("temperature");
+    } catch(const std::exception &) {
+        tempPtr = nullptr;
+    };
+
+    if(tempPtr) {
+        std::cout << "Read temperature grid.\n";
+    }
 
     file.close();
 
@@ -242,11 +255,31 @@ void VdbGrid::loadResources()
         emissionSpacing = Vec3d(emissionPtr->transform().indexToWorld(openvdb::Vec3d(1, 1, 1)).asPointer());
         emissionSpacing -= emissionCenter;
         _emissionGrid = openvdb::gridPtrCast<openvdb::Vec3fGrid>(emissionPtr);
+        if(!_emissionGrid) {
+            auto emissionGridFloat = openvdb::gridPtrCast<openvdb::FloatGrid>(emissionPtr);
+            if(emissionGridFloat) {
+                _emissionGrid = openvdb::Vec3fGrid::create(openvdb::Vec3f(0, 0, 0));
+                _emissionGrid->setTransform(emissionGridFloat->transform().copy());
+
+                for (openvdb::FloatGrid::ValueOnIter iter = emissionGridFloat->beginValueOn(); iter.test(); ++iter) {
+                    float value = iter.getValue();
+                    _emissionGrid->tree().setValue(iter.getCoord(), openvdb::Vec3f(value, value, value));
+                }
+            }
+        }
     } else {
         emissionCenter = densityCenter;
         emissionSpacing = densitySpacing;
         _emissionGrid = nullptr;
     }
+
+    if(emissionPtr && !_emissionGrid)
+        std::cout << "Failed to convert emission pointer to emission grid\n";
+
+    if(tempPtr) {
+        _tempGrid = openvdb::gridPtrCast<openvdb::FloatGrid>(tempPtr);
+    }
+
     _emissionIndexOffset = Vec3f((densityCenter - emissionCenter)/emissionSpacing);
 
     openvdb::CoordBBox bbox = _densityGrid->evalActiveVoxelBoundingBox();
@@ -413,6 +446,12 @@ Vec3f VdbGrid::emission(Vec3f p) const
         Vec3f result = _emissionScale*Vec3f(openvdb::tools::BoxSampler::sample(_emissionGrid->tree(), openvdb::Vec3R(op.x(), op.y(), op.z())).asPointer());
         if (_scaleEmissionByDensity)
             result *= density(p);
+        
+        if(_tempGrid) {
+            float temp = openvdb::tools::BoxSampler::sample(_tempGrid->tree(), openvdb::Vec3R(op.x(), op.y(), op.z()));
+            result *= blackbody_color_rec709(temp * (8000 - 800) + 800) * temp;
+        }
+
         return result;
     } else {
         return Vec3f(0.0f);

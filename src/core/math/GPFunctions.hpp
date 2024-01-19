@@ -1400,12 +1400,17 @@ namespace Tungsten {
     class MeanFunction : public JsonSerializable {
     public:
         std::shared_ptr<ProceduralVector> _col = nullptr;
+        std::shared_ptr<ProceduralVector> _emission = nullptr;
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override {
             JsonSerializable::fromJson(value, scene);
 
             if (auto c = value["color"]) {
                 _col = scene.fetchProceduralVector(c);
+            }
+
+            if (auto e = value["emission"]) {
+                _emission = scene.fetchProceduralVector(e);
             }
         }
 
@@ -1418,6 +1423,11 @@ namespace Tungsten {
             if (_col) {
                 obj.add("color", *_col);
             }
+
+            if (_emission) {
+                obj.add("emission", *_emission);
+            }
+
             return obj;
         }
 
@@ -1444,6 +1454,11 @@ namespace Tungsten {
         virtual Vec3d color(Vec3d a) const {
             if (!_col) { return Vec3d(1.); }
             return (*_col)(a);
+        }
+
+        virtual Vec3d emission(Vec3d a) const {
+            if (!_emission) { return Vec3d(0.); }
+            return (*_emission)(a);
         }
 
         virtual Vec3d shell_embedding(Vec3d a) const {
@@ -1598,7 +1613,7 @@ namespace Tungsten {
     class TabulatedMean : public MeanFunction {
     public:
 
-        TabulatedMean(std::shared_ptr<Grid> grid = nullptr, float offset = 0, float scale = 1) : _grid(grid), _offset(offset), _scale(scale) {}
+        TabulatedMean(std::shared_ptr<Grid> grid = nullptr, float offset = 0, float scale = 1, bool isVolume = false) : _grid(grid), _offset(offset), _scale(scale), _isVolume(isVolume) {}
 
         virtual void fromJson(JsonPtr value, const Scene& scene) override;
         virtual rapidjson::Value toJson(Allocator& allocator) const override;
@@ -1608,8 +1623,10 @@ namespace Tungsten {
         std::shared_ptr<Grid> _grid;
         float _offset = 0;
         float _scale = 1;
+        bool _isVolume = false;
 
         virtual double mean(Vec3d a) const override;
+        virtual Vec3d emission(Vec3d a) const override;
         virtual Vec3d dmean_da(Vec3d a) const override;
     };
 
