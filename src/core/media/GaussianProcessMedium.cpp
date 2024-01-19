@@ -306,6 +306,7 @@ namespace Tungsten {
                 }
 
                 sample.weight = sample.continuedWeight = vec_conv<Vec3f>(_gp->color(ro + rd * t));
+                sample.emission = vec_conv<Vec3f>(_gp->emission(ro + rd * t));
             } else {
                 sample.weight = sample.continuedWeight = Vec3f(1.f);
             }

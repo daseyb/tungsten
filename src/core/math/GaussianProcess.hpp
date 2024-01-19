@@ -123,6 +123,7 @@ namespace Tungsten {
             Vec3d deriv_dir, size_t numPts) const = 0;
 
         virtual Vec3d color(Vec3d p) const = 0;
+        virtual Vec3d emission(Vec3d p) const = 0;
 
         virtual std::shared_ptr<GPRealNode> sample_start_value(Vec3d p, PathSampleGenerator& sampler) const = 0;
         virtual std::shared_ptr<GPRealNode> sample(
@@ -161,6 +162,9 @@ namespace Tungsten {
             return _left->color(p);
         }
 
+        virtual Vec3d emission(Vec3d p) const override {
+            return _left->emission(p);
+        }
 
         virtual std::shared_ptr<GPRealNode> sample_start_value(Vec3d p, PathSampleGenerator& sampler) const override {
             return std::make_shared<GPRealNodeCsg>(_left->sample_start_value(p, sampler), _right->sample_start_value(p, sampler));
@@ -238,6 +242,10 @@ namespace Tungsten {
 
         virtual Vec3d color(Vec3d p) const override {
             return _mean->color(p);
+        }
+
+        virtual Vec3d emission(Vec3d p) const override {
+            return _mean->emission(p);
         }
 
         Vec3d shell_embedding(Vec3d p) const {

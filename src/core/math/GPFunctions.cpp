@@ -451,6 +451,11 @@ namespace Tungsten {
         return (res + _offset) * _scale;
     }
 
+    Vec3d TabulatedMean::emission(Vec3d a) const {
+        Vec3f p = _grid->invNaturalTransform() * vec_conv<Vec3f>(a);
+        return Vec3d(_grid->emission(p));
+    }
+
     Vec3d TabulatedMean::dmean_da(Vec3d a) const {
         double eps = 0.001;
         double vals[] = {
