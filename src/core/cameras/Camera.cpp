@@ -23,6 +23,8 @@ Camera::Camera(const Mat4f &transform, const Vec2u &res)
   _transform(transform),
   _res(res)
 {
+    _rect = Box2u({ 0,0 }, _res);
+
     _colorBufferSettings.setType(OutputColor);
 
     _pos    = _transform*Vec3f(0.0f, 0.0f, 2.0f);

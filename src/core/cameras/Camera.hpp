@@ -219,7 +219,10 @@ public:
 
     const Box2u& rect() const
     {
-        return _rect;
+        auto res = _rect;
+        res.intersect(Box2u({ 0,0 }, _res));
+
+        return res;
     }
 
     void setResolution(Vec2u res)
