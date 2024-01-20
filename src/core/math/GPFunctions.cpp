@@ -74,6 +74,8 @@ namespace Tungsten {
         switch (type) {
         case NoiseType::BottomTop:
             return sqrt(exp(lerp(log(_max),  log(_min), clamp(p.y() * .75, 0., 1.))));
+        case NoiseType::BottomTop2:
+            return sqrt(exp(lerp(log(_max),  log(_min), clamp(p.y() * 2.0 - 0.25, 0., 1.))));
         case NoiseType::LeftRight:
             return sqrt(exp(lerp(log(_max), log(_min), clamp(p.x()*2 + 1, 0., 1.))));
         case NoiseType::Sandstone:
@@ -97,6 +99,8 @@ namespace Tungsten {
         switch (type) {
         case NoiseType::BottomTop:
             return Vec3d(sqrt(exp(lerp(log(_max),  log(_min), clamp(p.y() * .75, 0., 1.)))));
+        case NoiseType::BottomTop2:
+            return Vec3d(sqrt(exp(lerp(log(_max),  log(_min), clamp(p.y() * 2.0 - 0.25, 0., 1.)))));
         case NoiseType::LeftRight:
             return Vec3d(sqrt(exp(lerp(log(_max), log(_min), clamp(p.x()*2 + 1, 0., 1.)))));
         case NoiseType::Sandstone:

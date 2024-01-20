@@ -678,6 +678,7 @@ namespace Tungsten {
         double _min = 1., _max = 500.;
         enum class NoiseType {
             BottomTop,
+            BottomTop2,
             LeftRight,
             Sandstone,
             Rust
@@ -688,6 +689,7 @@ namespace Tungsten {
         static std::string noiseTypeToString(NoiseType v) {
             switch (v) {
             case NoiseType::BottomTop: return "bottom_top";
+            case NoiseType::BottomTop2: return "bottom_top_2";
             case NoiseType::LeftRight: return "left_right";
             case NoiseType::Sandstone: return "sandstone";
             case NoiseType::Rust: return "rust";
@@ -697,6 +699,8 @@ namespace Tungsten {
         static NoiseType stringToNoiseType(std::string v) {
             if (v == "bottom_top")
                 return NoiseType::BottomTop;
+            else if (v == "bottom_top_2")
+                return NoiseType::BottomTop2;
             else if (v == "left_right")
                 return NoiseType::LeftRight;
             else if (v == "sandstone")
@@ -733,8 +737,10 @@ namespace Tungsten {
 
     class ProceduralNoiseVec: public ProceduralVector {
         double _min = 1., _max = 500.;
+        
         enum class NoiseType {
             BottomTop,
+            BottomTop2,
             LeftRight,
             Sandstone,
             Rust
@@ -745,6 +751,7 @@ namespace Tungsten {
         static std::string noiseTypeToString(NoiseType v) {
             switch (v) {
             case NoiseType::BottomTop: return "bottom_top";
+            case NoiseType::BottomTop2: return "bottom_top_2";
             case NoiseType::LeftRight: return "left_right";
             case NoiseType::Sandstone: return "sandstone";
             case NoiseType::Rust: return "rust";
@@ -754,6 +761,8 @@ namespace Tungsten {
         static NoiseType stringToNoiseType(std::string v) {
             if (v == "bottom_top")
                 return NoiseType::BottomTop;
+            else if (v == "bottom_top_2")
+                return NoiseType::BottomTop2;
             else if (v == "left_right")
                 return NoiseType::LeftRight;
             else if (v == "sandstone")
