@@ -1,1 +1,0 @@
-convert /dartfs-hpc/rc/lab/J/JaroszLab/dseyb/stimp/$1/*/*.pfm -evaluate-sequence mean /dartfs-hpc/rc/lab/J/JaroszLab/dseyb/stimp/$1.pfm

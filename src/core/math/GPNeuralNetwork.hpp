@@ -61,16 +61,6 @@ class GPNeuralNetwork : public JsonSerializable {
 			outputLayer.read(file, layerDescs[i][0u].cast<int>(), (int)layerDescs[i][1u].cast<int>());
 		}
 		
-		//template<typename VecT>
-		//VecT infer(const VecT& in) const {
-		//	VecT v = inputLayer.infer(in);
-		//	for (size_t i = 0; i < layers.size(); i++) {
-		//		v = layers[i].infer(v);
-		//		v = v.array().sin().matrix();
-		//	}
-		//	return outputLayer.infer(v);
-		//}
-
 		template<typename Scalar>
 		Eigen::Vector<Scalar,-1> infer(const Eigen::Vector<Scalar, -1>& in) const {
 			Eigen::Vector<Scalar, -1> v = inputLayer.infer(in);

@@ -314,7 +314,7 @@ int main(int argc, const char** argv) {
             if (cov->hasAnalyticSpectralDensity()) {
                 realization_ws(cov, 3000);
             }
-            //conditioned_realization(cov, cov->id().find("tp") == std::string::npos);
+
             conditioned_realization(cov, true);
         }
         catch (std::exception& e) {

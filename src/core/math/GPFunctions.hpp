@@ -301,31 +301,15 @@ namespace Tungsten {
             return static_cast<ElemType>(temp);
         };
     
-        /// @todo For vector types, interpolate over each component independently.
         ElemType vx[3];
         for (int dx = 0; dx < 3; ++dx) {
             ElemType vy[3];
             for (int dy = 0; dy < 3; ++dy) {
-                // Fit a parabola to three contiguous samples in z
-                // (at z=-1, z=0 and z=1), then evaluate the parabola at z',
-                // where z' is the fractional part of inCoord.z, i.e.,
-                // inCoord.z - inIdx.z.  The coefficients come from solving
-                //
-                // | (-1)^2  -1   1 || a |   | v0 |
-                // |    0     0   1 || b | = | v1 |
-                // |   1^2    1   1 || c |   | v2 |
-                //
-                // for a, b and c.
                 const ElemType* vz = &data[dx][dy][0];
                 vy[dy] = _interpolate(vz, uvw.z());
-            }//loop over y
-            // Fit a parabola to three interpolated samples in y, then
-            // evaluate the parabola at y', where y' is the fractional
-            // part of inCoord.y.
+            }
             vx[dx] = _interpolate(vy, uvw.y());
-        }//loop over x
-        // Fit a parabola to three interpolated samples in x, then
-        // evaluate the parabola at the fractional part of inCoord.x.
+        }
         return _interpolate(vx, uvw.x());
     }
 
